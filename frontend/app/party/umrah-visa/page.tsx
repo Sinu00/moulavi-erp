@@ -75,7 +75,7 @@ export default function UmrahVisaPage() {
         toast.error('Party information not found');
       }
     } catch (error) {
-      console.error('Error loading party info:', error);
+      // Error handling is done by the API interceptor
       toast.error('Failed to load party information');
     }
   };
@@ -110,7 +110,7 @@ export default function UmrahVisaPage() {
           try {
             await uploadAPI.uploadDocument(serviceId, file, 'passport');
           } catch (uploadError) {
-            console.error('Error uploading document:', uploadError);
+            // Error handling is done by the API interceptor
             toast.warning(`Failed to upload ${file.name}`);
           }
         }
@@ -119,7 +119,7 @@ export default function UmrahVisaPage() {
       toast.success('Umrah visa request submitted successfully!');
       router.push('/party/dashboard');
     } catch (error: any) {
-      console.error('Error submitting request:', error);
+      // Error handling is done by the API interceptor
       toast.error(error.response?.data?.error || 'Failed to submit request');
     } finally {
       setIsLoading(false);

@@ -18,7 +18,8 @@ export default function Navbar() {
         await authAPI.logout(refreshToken);
       }
     } catch (error) {
-      console.error('Logout error:', error);
+      // Logout should continue even if API call fails
+      // Error handling is done by the API interceptor
     } finally {
       removeUser();
       toast.success('Logged out successfully');
@@ -31,7 +32,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center">
-            <h1 className="text-xl font-bold text-indigo-600">Moulavi ERP</h1>
+            <h1 className="text-xl font-bold text-indigo-600">ERP</h1>
           </div>
 
           {user && (

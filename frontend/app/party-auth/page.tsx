@@ -54,8 +54,8 @@ export default function PartyAuthPage() {
       toast.success(`Welcome, ${user.name}!`);
       router.push('/party/dashboard');
     } catch (error: any) {
-      console.error('Login error:', error);
-      toast.error(error.response?.data?.error || 'Login failed. Please check your credentials.');
+      // Error handling is done by the API interceptor
+      // toast.error is handled by the error interceptor
     } finally {
       setIsLoading(false);
     }

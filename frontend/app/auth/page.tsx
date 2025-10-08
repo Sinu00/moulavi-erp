@@ -54,8 +54,8 @@ export default function AuthPage() {
       toast.success(`Welcome back, ${user.name}!`);
       router.push('/dashboard');
     } catch (error: any) {
-      console.error('Login error:', error);
-      toast.error(error.response?.data?.error || 'Login failed. Please try again.');
+      // Error handling is done by the API interceptor
+      // toast.error is handled by the error interceptor
     } finally {
       setIsLoading(false);
     }

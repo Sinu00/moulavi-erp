@@ -81,8 +81,8 @@ export default function CreatePartyDialog({ open, onClose, onSuccess }: CreatePa
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error('Error creating party:', error);
-      toast.error(error.response?.data?.error || 'Failed to create party');
+      // Error handling is done by the API interceptor
+      // toast.error is handled by the error interceptor
     } finally {
       setIsLoading(false);
     }
@@ -91,10 +91,10 @@ export default function CreatePartyDialog({ open, onClose, onSuccess }: CreatePa
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <h2 className="text-2xl font-bold mb-6">Create New Party</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Create New Party</h2>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -207,11 +207,11 @@ export default function CreatePartyDialog({ open, onClose, onSuccess }: CreatePa
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:space-x-3 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="w-full sm:w-auto">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                 {isLoading ? 'Creating...' : 'Create Party'}
               </Button>
             </div>

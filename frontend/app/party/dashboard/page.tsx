@@ -10,11 +10,12 @@ import { serviceAPI } from '@/lib/api';
 import Navbar from '@/components/Navbar';
 import { Plus, FileText, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { Service } from '@/types';
 
 export default function PartyDashboardPage() {
   const router = useRouter();
   const user = getUser();
-  const [services, setServices] = useState<any[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     total: 0,
@@ -47,8 +48,8 @@ export default function PartyDashboardPage() {
         completed: servicesData.filter((s: any) => s.status === 'completed').length,
       });
     } catch (error) {
-      console.error('Error loading services:', error);
-      toast.error('Failed to load services');
+      // Error handling is done by the API interceptor
+      setServices([]);
     } finally {
       setLoading(false);
     }
