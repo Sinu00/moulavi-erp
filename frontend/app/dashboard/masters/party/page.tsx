@@ -7,11 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
-import { partyAPI } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
-import { Plus, Menu } from 'lucide-react';
+import PartyStatsCards from '@/components/PartyStatsCards';
+import PartyTable from '@/components/PartyTable';
 import CreatePartyDialog from '@/components/CreatePartyDialog';
-import PartyList from '@/components/PartyList';
+import { useParties } from '@/hooks/useParties';
+import { Plus, Menu, Trash2, Download } from 'lucide-react';
 
 export default function PartyMasterPage() {
   const router = useRouter();
@@ -19,7 +20,25 @@ export default function PartyMasterPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Use custom hook for party management
+  const {
+    parties,
+    loading,
+    search,
+    page,
+    pagination,
+    selectedParties,
+    filterType,
+    handleSearchChange,
+    handleFilterChange,
+    handlePageChange,
+    handleSelectParty,
+    handleSelectAll,
+    handleBulkDelete,
+    handlePartyDeleted,
+    refreshParties,
+  } = useParties();
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -29,9 +48,25 @@ export default function PartyMasterPage() {
   }, [user, router]);
 
   const handlePartyCreated = () => {
-    setRefreshKey(prev => prev + 1);
     setShowCreateDialog(false);
+    refreshParties();
     toast.success('Party created successfully!');
+  };
+
+  const handleBulkDeleteClick = async () => {
+    if (selectedParties.length === 0) {
+      toast.error('Please select parties to delete');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedParties.length} party(ies)? This action cannot be undone.`)) {
+      return;
+    }
+
+    const success = await handleBulkDelete();
+    if (success) {
+      toast.success(`${selectedParties.length} party(ies) deleted successfully!`);
+    }
   };
 
   if (!user) {
@@ -89,14 +124,62 @@ export default function PartyMasterPage() {
           </div>
         </div>
 
-        <div className="p-4 lg:p-8">
-          {/* Party List */}
+        <div className="p-4 lg:p-8 space-y-6">
+          {/* Stats Cards */}
+          <PartyStatsCards 
+            parties={parties}
+            pagination={pagination}
+            loading={loading}
+          />
+
+          {/* Party Management */}
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">All Parties</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-semibold">Party Management</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Manage all your clients and business partners
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedParties.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBulkDeleteClick}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedParties.length})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toast.info('Export functionality coming soon')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <PartyList key={refreshKey} />
+              <PartyTable
+                parties={parties}
+                loading={loading}
+                pagination={pagination}
+                search={search}
+                filterType={filterType}
+                selectedParties={selectedParties}
+                onSearchChange={handleSearchChange}
+                onFilterChange={handleFilterChange}
+                onSelectParty={handleSelectParty}
+                onSelectAll={handleSelectAll}
+                onBulkDelete={handleBulkDeleteClick}
+                onPartyDeleted={handlePartyDeleted}
+                onPageChange={handlePageChange}
+              />
             </CardContent>
           </Card>
         </div>
