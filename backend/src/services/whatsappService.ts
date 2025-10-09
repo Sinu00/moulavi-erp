@@ -5,9 +5,9 @@ dotenv.config();
 
 // WhatsApp configuration constants
 const WHATSAPP_CONFIG = {
-  apiUrl: 'https://wa.smsidea.com/api/v1/SendUserInitiatedmsg',
-  apiKey: 'da568fa8f9a04c55a7c0338be5fee29f',
-  instanceId: process.env.WHATSAPP_INSTANCE_ID || '343551-49824',
+  apiUrl: 'https://wa.smsidea.com/api/v1/sendMessage',
+  apiKey: process.env.WHATSAPP_API_KEY,
+  instanceId: process.env.WHATSAPP_INSTANCE_ID,
 } as const;
 
 // WhatsApp message templates
@@ -93,16 +93,17 @@ const sendWhatsAppMessage = async (to: string, message: string): Promise<void> =
   const payload = {
     key: WHATSAPP_CONFIG.apiKey,
     to: formattedNumber,
-    type: 'text',
-    text: {
-      preview_url: 'false',
-      body: message
-    }
+    message: message,
+    IsUrgent: false,
+    isGroupMsg: false,
+    IsFailMessage: false,
+    SendingMessageType: '1' // 1 for WhatsApp
   };
 
   try {
     console.log('Sending WhatsApp message to:', formattedNumber);
     console.log('Message preview:', message.substring(0, 100) + '...');
+    console.log('API Key being used:', WHATSAPP_CONFIG.apiKey);
     console.log('Payload:', payload);
 
     const response = await axios.post(WHATSAPP_CONFIG.apiUrl, payload, {

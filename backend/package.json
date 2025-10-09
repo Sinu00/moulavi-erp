@@ -7,7 +7,7 @@
     "dev": "nodemon src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate": "node -r ts-node/register src/database/migration_add_status_party_name.ts"
+    "migrate": "node -r ts-node/register src/database/migrate.ts"
   },
   "keywords": [
     "erp",

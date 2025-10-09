@@ -56,4 +56,3 @@ process.on('unhandledRejection', (err: Error) => {
   console.error(err.name, err.message);
   process.exit(1);
 });
-

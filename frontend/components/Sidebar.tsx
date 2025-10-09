@@ -89,9 +89,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
 
   const serviceItems = [
     { name: 'Umrah Visa', icon: Award, path: '/dashboard/services/umrah-visa' },
-    { name: 'Hajj Visa', icon: Award, path: '/dashboard/services/hajj-visa' },
-    { name: 'Tourist Visa', icon: Award, path: '/dashboard/services/tourist-visa' },
-    { name: 'Business Visa', icon: Award, path: '/dashboard/services/business-visa' },
+    { name: 'Bus Booking', icon: Award, path: '/dashboard/services/bus-booking' },
   ];
 
   const menuItems = [
