@@ -80,6 +80,8 @@ export const partyAPI = {
   
   getById: (id: string) => api.get(`/parties/${id}`),
   
+  getMyParty: () => api.get('/parties/my-party'),
+  
   update: (id: string, data: any) => api.put(`/parties/${id}`, data),
   
   delete: (id: string) => api.delete(`/parties/${id}`),
@@ -95,6 +97,12 @@ export const serviceAPI = {
   
   updateStatus: (id: string, status: string) =>
     api.patch(`/services/${id}/status`, { status }),
+  
+  // Umrah Visa specific endpoints
+  getUmrahVisas: (params?: any) => api.get('/services/umrah-visa', { params }),
+  
+  updateUmrahVisaStatus: (id: string, status: string) =>
+    api.patch(`/services/umrah-visa/${id}/status`, { status }),
 };
 
 // Upload API

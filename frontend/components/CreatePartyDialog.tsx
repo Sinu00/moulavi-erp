@@ -81,8 +81,9 @@ export default function CreatePartyDialog({ open, onClose, onSuccess }: CreatePa
       onSuccess();
       onClose();
     } catch (error: any) {
-      // Error handling is done by the API interceptor
-      // toast.error is handled by the error interceptor
+      console.error('Error creating party:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to create party';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

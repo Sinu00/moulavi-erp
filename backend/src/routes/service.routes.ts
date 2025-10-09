@@ -83,8 +83,8 @@ router.post(
       `INSERT INTO umrah_visa_details (
         service_id, full_name, passport_number, nationality,
         travel_date_from, travel_date_to, passport_expiry,
-        date_of_birth, gender, phone_number
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        date_of_birth, gender, phone_number, status, party_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         service.id,
@@ -97,6 +97,8 @@ router.post(
         date_of_birth,
         gender,
         phone_number,
+        'pending', // Default status
+        party.party_name, // Party name from the party record
       ]
     );
     
@@ -116,6 +118,76 @@ router.post(
       service,
       details: visaDetailsResult.rows[0],
       message: 'Umrah visa service created successfully',
+    });
+  })
+);
+
+// Get all Umrah visa requests with party information (admin/staff only) - MUST come before /:id route
+router.get(
+  '/umrah-visa',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { status, page = '1', limit = '10' } = req.query;
+    
+    let queryText = `
+      SELECT 
+        uvd.*,
+        s.id as service_id,
+        s.status as service_status,
+        s.submitted_at,
+        s.created_at as service_created_at,
+        p.email as party_email,
+        p.contact_number,
+        p.whatsapp_number
+      FROM umrah_visa_details uvd
+      JOIN services s ON uvd.service_id = s.id
+      JOIN parties p ON s.party_id = p.id
+      WHERE s.service_type = 'umrah_visa'
+    `;
+    const queryParams: any[] = [];
+    let paramIndex = 1;
+    
+    if (status) {
+      queryText += ` AND uvd.status = $${paramIndex}`;
+      queryParams.push(status);
+      paramIndex++;
+    }
+    
+    queryText += ' ORDER BY uvd.created_at DESC';
+    
+    const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
+    queryText += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(parseInt(limit as string), offset);
+    
+    const result = await query(queryText, queryParams);
+    
+    // Get total count
+    let countQuery = `
+      SELECT COUNT(*) 
+      FROM umrah_visa_details uvd
+      JOIN services s ON uvd.service_id = s.id
+      WHERE s.service_type = 'umrah_visa'
+    `;
+    const countParams: any[] = [];
+    let countIndex = 1;
+    
+    if (status) {
+      countQuery += ` AND uvd.status = $${countIndex}`;
+      countParams.push(status);
+    }
+    
+    const countResult = await query(countQuery, countParams);
+    const total = parseInt(countResult.rows[0].count);
+    
+    res.json({
+      umrahVisas: result.rows,
+      pagination: {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit as string)),
+      },
     });
   })
 );
@@ -274,6 +346,32 @@ router.get(
       details,
       documents: documentsResult.rows,
     });
+  })
+);
+
+// Update Umrah visa status (admin/staff only)
+router.patch(
+  '/umrah-visa/:id/status',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!['pending', 'processing', 'approved', 'rejected', 'completed'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    
+    const result = await query(
+      'UPDATE umrah_visa_details SET status = $1 WHERE id = $2 RETURNING *',
+      [status, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Umrah visa request not found' });
+    }
+    
+    res.json({ umrahVisa: result.rows[0] });
   })
 );
 

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { body } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { query } from '../config/database';
 import { comparePassword } from '../utils/password';
@@ -129,6 +129,55 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthRequest, res: Respo
   
   res.json({ user: userResult.rows[0] });
 }));
+
+// Test email endpoint (for debugging)
+router.post(
+  '/test-email',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { to } = req.body;
+    
+    if (!to) {
+      return res.status(400).json({ error: 'Email address is required' });
+    }
+    
+    try {
+      const { sendCredentialsEmail } = await import('../services/emailService');
+      await sendCredentialsEmail(to, 'Test User', to, 'TestPassword123');
+      
+      res.json({ message: 'Test email sent successfully' });
+    } catch (error) {
+      console.error('Test email error:', error);
+      res.status(500).json({ error: 'Failed to send test email' });
+    }
+  })
+);
+
+// Test WhatsApp endpoint (for debugging)
+router.post(
+  '/test-whatsapp',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { phoneNumber, message } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+    
+    try {
+      const { sendCustomWhatsApp } = await import('../services/whatsappService');
+      const testMessage = message || 'Test message from Moulavi ERP system';
+      await sendCustomWhatsApp(phoneNumber, testMessage);
+      
+      res.json({ message: 'Test WhatsApp message sent successfully' });
+    } catch (error) {
+      console.error('Test WhatsApp error:', error);
+      res.status(500).json({ error: 'Failed to send test WhatsApp message' });
+    }
+  })
+);
 
 export default router;
 

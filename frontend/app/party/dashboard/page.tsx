@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
 import { serviceAPI } from '@/lib/api';
@@ -17,6 +18,7 @@ export default function PartyDashboardPage() {
   const user = getUser();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingServices, setLoadingServices] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -30,14 +32,29 @@ export default function PartyDashboardPage() {
       return;
     }
 
+    // Only load services once when component mounts
     loadServices();
-  }, [user, router]);
+  }, []); // Empty dependency array to run only once
 
   const loadServices = async () => {
+    // Prevent multiple simultaneous calls
+    if (loadingServices) {
+      return;
+    }
+    
+    setLoadingServices(true);
     setLoading(true);
+    
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('Services loading timeout - forcing loading to false');
+      setLoading(false);
+      setLoadingServices(false);
+    }, 10000); // 10 second timeout
+    
     try {
       const response = await serviceAPI.getAll({ page: 1, limit: 50 });
-      const servicesData = response.data.services;
+      const servicesData = response.data.services || [];
       setServices(servicesData);
 
       // Calculate stats
@@ -48,10 +65,18 @@ export default function PartyDashboardPage() {
         completed: servicesData.filter((s: any) => s.status === 'completed').length,
       });
     } catch (error) {
-      // Error handling is done by the API interceptor
+      console.error('Error loading services:', error);
       setServices([]);
+      setStats({
+        total: 0,
+        pending: 0,
+        processing: 0,
+        completed: 0,
+      });
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
+      setLoadingServices(false);
     }
   };
 
@@ -103,45 +128,88 @@ export default function PartyDashboardPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
+          {loading ? (
+            <>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-12" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-8" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-8" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-18" />
+                  <Skeleton className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-8" />
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats.total}</div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Pending</CardTitle>
+                  <Clock className="h-4 w-4 text-yellow-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Processing</CardTitle>
-              <FileText className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.processing}</div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Processing</CardTitle>
+                  <FileText className="h-4 w-4 text-blue-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">{stats.processing}</div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Completed</CardTitle>
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         {/* Available Services */}
@@ -187,8 +255,22 @@ export default function PartyDashboardPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">Loading...</p>
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Skeleton className="h-4 w-4" />
+                          <Skeleton className="h-5 w-32" />
+                        </div>
+                        <Skeleton className="h-4 w-48 mb-1" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : services.length === 0 ? (
               <div className="text-center py-8">

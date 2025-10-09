@@ -112,7 +112,7 @@ router.post(
     // Send credentials email if login is required
     if (login_required && generatedPassword) {
       try {
-        await sendCredentialsEmail(email, party_name, email, generatedPassword);
+        await sendCredentialsEmail(email, party_name, email, generatedPassword, whatsapp_number);
       } catch (error) {
         console.error('Failed to send credentials email:', error);
         // Don't fail the request if email fails
@@ -223,6 +223,29 @@ router.get(
   })
 );
 
+// Get current user's party (for party role) - MUST come before /:id route
+router.get(
+  '/my-party',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Only party role can access this endpoint
+    if (req.user!.role !== 'party') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    const result = await query(
+      'SELECT * FROM parties WHERE user_id = $1',
+      [req.user!.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    
+    res.json({ party: result.rows[0] });
+  })
+);
+
 // Get party by ID
 router.get(
   '/:id',
@@ -303,10 +326,21 @@ router.delete(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     
+    // First get the party to check if it has a user_id
+    const partyResult = await query('SELECT user_id FROM parties WHERE id = $1', [id]);
+    
+    if (partyResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    
+    const userId = partyResult.rows[0].user_id;
+    
+    // Delete the party
     const result = await query('DELETE FROM parties WHERE id = $1 RETURNING id', [id]);
     
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Party not found' });
+    // If the party had a user account, delete it too
+    if (userId) {
+      await query('DELETE FROM users WHERE id = $1', [userId]);
     }
     
     res.json({ message: 'Party deleted successfully' });

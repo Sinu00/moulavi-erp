@@ -70,11 +70,15 @@ CREATE TABLE IF NOT EXISTS umrah_visa_details (
   date_of_birth DATE NOT NULL,
   gender VARCHAR(10) CHECK (gender IN ('male', 'female')),
   phone_number VARCHAR(20),
+  status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'approved', 'rejected', 'completed')),
+  party_name VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_umrah_visa_service_id ON umrah_visa_details(service_id);
+CREATE INDEX IF NOT EXISTS idx_umrah_visa_status ON umrah_visa_details(status);
+CREATE INDEX IF NOT EXISTS idx_umrah_visa_party_name ON umrah_visa_details(party_name);
 
 -- Create Documents table for file uploads
 CREATE TABLE IF NOT EXISTS documents (

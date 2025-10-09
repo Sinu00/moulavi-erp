@@ -55,6 +55,8 @@ export interface UmrahVisaDetails {
   date_of_birth: Date;
   gender: 'male' | 'female';
   phone_number?: string;
+  status: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  party_name?: string;
   created_at: Date;
   updated_at: Date;
 }

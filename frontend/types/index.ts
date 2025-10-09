@@ -69,6 +69,8 @@ export interface Service {
 }
 
 export interface UmrahVisaDetails {
+  id?: string;
+  service_id?: string;
   full_name: string;
   passport_number: string;
   nationality: string;
@@ -78,6 +80,10 @@ export interface UmrahVisaDetails {
   date_of_birth: string;
   gender: 'male' | 'female';
   phone_number?: string;
+  status?: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  party_name?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // Document Types
