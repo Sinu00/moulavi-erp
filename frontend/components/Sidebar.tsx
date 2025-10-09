@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { 
@@ -40,6 +40,13 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   const router = useRouter();
   const user = getUser();
   const [mastersOpen, setMastersOpen] = useState(false);
+
+  // Auto-expand Masters tab when on any masters page
+  useEffect(() => {
+    if (pathname.startsWith('/dashboard/masters/')) {
+      setMastersOpen(true);
+    }
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -164,9 +171,13 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                 }
               }}
               className={cn(
-                "flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200",
+                "flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 collapsed ? 'justify-center' : 'justify-between',
-                mastersOpen && !collapsed && 'bg-gray-50'
+                // Highlight Masters tab when any sub-tab is active
+                pathname.startsWith('/dashboard/masters/')
+                  ? 'bg-indigo-50 text-indigo-600 shadow-sm border-l-2 border-indigo-600'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900',
+                mastersOpen && !collapsed && !pathname.startsWith('/dashboard/masters/') && 'bg-gray-50'
               )}
               title={collapsed ? "Masters" : undefined}
             >
@@ -182,7 +193,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
             </button>
 
             {/* Masters Submenu */}
-            {mastersOpen && !collapsed && (
+            {(mastersOpen || pathname.startsWith('/dashboard/masters/')) && !collapsed && (
               <div className="ml-4 mt-1 space-y-1 border-l-2 border-indigo-200 pl-2 animate-in slide-in-from-top-2 duration-200">
                 {masterItems.map((item) => {
                   const Icon = item.icon;
@@ -201,7 +212,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                       className={cn(
                         'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
                         isActive
-                          ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600'
+                          ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600 shadow-sm'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-2 hover:border-gray-300'
                       )}
                     >

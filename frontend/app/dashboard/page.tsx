@@ -110,14 +110,6 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button 
-                onClick={() => setShowCreateDialog(true)}
-                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
-                size="sm"
-              >
-                <Users className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Create Party</span>
-              </Button>
               <div className="hidden sm:flex items-center space-x-3">
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">
