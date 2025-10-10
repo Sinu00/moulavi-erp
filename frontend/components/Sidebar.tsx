@@ -73,6 +73,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   };
 
   const masterItems = [
+    { name: 'User Master', icon: User, path: '/dashboard/masters/user' },
     { name: 'Country Master', icon: MapPin, path: '/dashboard/masters/country' },
     { name: 'Wakala Master', icon: Building2, path: '/dashboard/masters/wakala' },
     { name: 'Doc Types Master', icon: FileType, path: '/dashboard/masters/doc-types' },
@@ -276,7 +277,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                     <button
                       key={item.name}
                       onClick={() => {
-                        if (item.path === '/dashboard/masters/party') {
+                        if (item.path === '/dashboard/masters/user' || item.path === '/dashboard/masters/party') {
                           router.push(item.path);
                         } else {
                           toast.info(`${item.name} coming soon`);

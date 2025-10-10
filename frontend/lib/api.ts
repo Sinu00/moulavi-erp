@@ -103,6 +103,9 @@ export const serviceAPI = {
   
   updateUmrahVisaStatus: (id: string, status: string) =>
     api.patch(`/services/umrah-visa/${id}/status`, { status }),
+  
+  // Party-specific endpoints
+  getPartyServices: (params?: any) => api.get('/services/party-services', { params }),
 };
 
 // Upload API
@@ -120,5 +123,18 @@ export const uploadAPI = {
   },
   
   deleteDocument: (documentId: string) => api.delete(`/upload/${documentId}`),
+};
+
+// User Management API
+export const userAPI = {
+  create: (data: any) => api.post('/users', data),
+  
+  getAll: (params?: any) => api.get('/users', { params }),
+  
+  getById: (id: string) => api.get(`/users/${id}`),
+  
+  update: (id: string, data: any) => api.put(`/users/${id}`, data),
+  
+  delete: (id: string) => api.delete(`/users/${id}`),
 };
 

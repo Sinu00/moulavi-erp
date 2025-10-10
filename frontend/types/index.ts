@@ -17,29 +17,46 @@ export interface User {
   name: string;
   email: string;
   role: 'admin' | 'staff' | 'party';
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// User Management Types (using existing User model)
+export interface CreateUserRequest {
+  name: string;
+  email: string;
+  password: string;
+  role: 'admin' | 'staff' | 'party';
   is_active?: boolean;
-  created_at?: string;
-  updated_at?: string;
+}
+
+export interface UpdateUserRequest {
+  name?: string;
+  email?: string;
+  password?: string;
+  role?: 'admin' | 'staff' | 'party';
+  is_active?: boolean;
 }
 
 // Party Types
 export interface Party {
   id: string;
-  party_name: string;
+  partyName: string;
   email: string;
-  contact_number?: string;
-  whatsapp_number?: string;
+  contactNumber?: string;
+  whatsappNumber?: string;
   address?: string;
-  gst_number?: string;
-  customer_type: 'direct' | 'b2b';
-  account_currency: 'SAR' | 'INR' | 'AED';
-  is_supplier: boolean;
-  is_customer: boolean;
-  login_required: boolean;
-  user_id?: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
+  gstNumber?: string;
+  customerType: 'direct' | 'b2b';
+  accountCurrency: 'SAR' | 'INR' | 'AED';
+  isSupplier: boolean;
+  isCustomer: boolean;
+  loginRequired: boolean;
+  userId?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreatePartyRequest {
@@ -59,43 +76,47 @@ export interface CreatePartyRequest {
 // Service Types
 export interface Service {
   id: string;
-  service_type: string;
-  party_id: string;
+  serviceType: string;
+  partyId: string;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
-  submitted_at: string;
+  submittedAt: string;
   details: Record<string, any>;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
+  // Additional fields for party services
+  umrahVisaStatus?: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  umrahVisaDetail?: UmrahVisaDetails | null;
+  documents?: Document[];
 }
 
 export interface UmrahVisaDetails {
   id?: string;
-  service_id?: string;
-  full_name: string;
-  passport_number: string;
+  serviceId?: string;
+  fullName: string;
+  passportNumber: string;
   nationality: string;
-  travel_date_from: string;
-  travel_date_to: string;
-  passport_expiry: string;
-  date_of_birth: string;
+  travelDateFrom: string;
+  travelDateTo: string;
+  passportExpiry: string;
+  dateOfBirth: string;
   gender: 'male' | 'female';
-  phone_number?: string;
+  phoneNumber?: string;
   status?: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
-  party_name?: string;
-  created_at?: string;
-  updated_at?: string;
+  partyName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Document Types
 export interface Document {
   id: string;
-  service_id: string;
-  document_type: string;
-  file_name: string;
-  file_path: string;
-  file_size: number;
-  mime_type: string;
-  uploaded_at: string;
+  serviceId: string;
+  documentType: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedAt: string;
 }
 
 // Auth Types

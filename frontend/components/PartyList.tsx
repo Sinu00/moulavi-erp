@@ -78,16 +78,16 @@ export default function PartyList() {
               >
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-base lg:text-lg truncate">{party.party_name}</h3>
+                    <h3 className="font-semibold text-base lg:text-lg truncate">{party.partyName}</h3>
                     <div className="mt-2 space-y-1 text-xs lg:text-sm text-gray-600">
                       <div className="flex items-center">
                         <Mail className="h-3 w-3 mr-2 flex-shrink-0" />
                         <span className="truncate">{party.email}</span>
                       </div>
-                      {party.contact_number && (
+                      {party.contactNumber && (
                         <div className="flex items-center">
                           <Phone className="h-3 w-3 mr-2 flex-shrink-0" />
-                          <span>{party.contact_number}</span>
+                          <span>{party.contactNumber}</span>
                         </div>
                       )}
                       {party.address && (
@@ -100,17 +100,17 @@ export default function PartyList() {
                   </div>
                   <div className="flex sm:flex-col gap-2 sm:text-right">
                     <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                      party.customer_type === 'b2b' 
+                      party.customerType === 'b2b' 
                         ? 'bg-blue-100 text-blue-800' 
                         : 'bg-green-100 text-green-800'
                     }`}>
-                      {party.customer_type.toUpperCase()}
+                      {party.customerType.toUpperCase()}
                     </span>
                     <div className="flex items-center sm:justify-end gap-2">
                       <div className="text-xs text-gray-500">
-                        {party.account_currency}
+                        {party.accountCurrency}
                       </div>
-                      {party.login_required && (
+                      {party.loginRequired && (
                         <div className="text-xs text-indigo-600">
                           ✓ Login
                         </div>

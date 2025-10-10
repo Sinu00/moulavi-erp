@@ -7,7 +7,9 @@
     "dev": "nodemon src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate": "node -r ts-node/register src/database/migrate.ts"
+    "migrate": "node -r ts-node/register src/database/migrate.ts",
+    "create-admin": "node scripts/create-admin.js",
+    "postinstall": "prisma generate"
   },
   "keywords": [
     "erp",
@@ -17,6 +19,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@prisma/client": "^6.17.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "axios": "^1.12.2",
     "bcrypt": "^5.1.1",
@@ -44,6 +47,7 @@
     "@types/pg": "^8.10.9",
     "@types/uuid": "^9.0.7",
     "nodemon": "^3.0.2",
+    "prisma": "^6.17.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
-import { getUser, hasRole } from '@/lib/auth';
-import { serviceAPI } from '@/lib/api';
-import Navbar from '@/components/Navbar';
-import { Plus, FileText, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { getUser, hasRole, removeUser } from '@/lib/auth';
+import { serviceAPI, authAPI } from '@/lib/api';
+import { Plus, FileText, Clock, CheckCircle, XCircle, LogOut, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { Service } from '@/types';
 
@@ -53,16 +52,16 @@ export default function PartyDashboardPage() {
     }, 10000); // 10 second timeout
     
     try {
-      const response = await serviceAPI.getAll({ page: 1, limit: 50 });
+      const response = await serviceAPI.getPartyServices({ page: 1, limit: 50 });
       const servicesData = response.data.services || [];
       setServices(servicesData);
 
-      // Calculate stats
+      // Calculate stats using Umrah visa status when available
       setStats({
         total: servicesData.length,
-        pending: servicesData.filter((s: any) => s.status === 'pending').length,
-        processing: servicesData.filter((s: any) => s.status === 'processing').length,
-        completed: servicesData.filter((s: any) => s.status === 'completed').length,
+        pending: servicesData.filter((s: any) => (s.umrahVisaStatus || s.status) === 'pending').length,
+        processing: servicesData.filter((s: any) => (s.umrahVisaStatus || s.status) === 'processing').length,
+        completed: servicesData.filter((s: any) => (s.umrahVisaStatus || s.status) === 'completed').length,
       });
     } catch (error) {
       console.error('Error loading services:', error);
@@ -110,20 +109,48 @@ export default function PartyDashboardPage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        await authAPI.logout(refreshToken);
+      }
+    } catch (error) {
+      // Logout should continue even if API call fails
+    } finally {
+      removeUser();
+      toast.success('Logged out successfully');
+      router.push('/');
+    }
+  };
+
   if (!user) {
     return null;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Party Dashboard</h1>
-          <p className="text-gray-600 mt-2">
-            Welcome, {user.name}! Manage your service requests here.
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Party Dashboard</h1>
+              <p className="text-gray-600 mt-2">
+                Welcome, {user.name}! Manage your service requests here.
+              </p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm">
+                <User className="h-4 w-4 text-gray-500" />
+                <span className="font-medium">{user.name}</span>
+                <span className="text-gray-500">({user.role})</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -289,20 +316,20 @@ export default function PartyDashboardPage() {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          {getStatusIcon(service.status)}
+                          {getStatusIcon(service.umrahVisaStatus || service.status)}
                           <h3 className="font-semibold">
-                            {service.service_type.replace('_', ' ').toUpperCase()}
+                            {service.serviceType.replace('_', ' ').toUpperCase()}
                           </h3>
                         </div>
                         <p className="text-sm text-gray-600 mt-1">
-                          Submitted: {format(new Date(service.submitted_at), 'PPp')}
+                          Submitted: {format(new Date(service.submittedAt), 'PPp')}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
                           Request ID: {service.id.substring(0, 8)}
                         </p>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(service.status)}`}>
-                        {service.status.toUpperCase()}
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(service.umrahVisaStatus || service.status)}`}>
+                        {(service.umrahVisaStatus || service.status).toUpperCase()}
                       </span>
                     </div>
                   </div>

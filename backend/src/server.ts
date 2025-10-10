@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes';
 import partyRoutes from './routes/party.routes';
 import serviceRoutes from './routes/service.routes';
 import uploadRoutes from './routes/upload.routes';
+import userMasterRoutes from './routes/userMaster.routes';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/parties', partyRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/users', userMasterRoutes);
 
 // Error handlers
 app.use(notFoundHandler);

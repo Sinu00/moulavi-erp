@@ -5,7 +5,7 @@ import fs from 'fs';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { query } from '../config/database';
+import { prisma } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -62,30 +62,25 @@ router.post(
     }
     
     // Verify service exists and user has access
-    const serviceResult = await query(
-      'SELECT party_id FROM services WHERE id = $1',
-      [serviceId]
-    );
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { partyId: true }
+    });
     
-    if (serviceResult.rows.length === 0) {
+    if (!service) {
       // Delete uploaded file
       fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Service not found' });
     }
     
-    const service = serviceResult.rows[0];
-    
     // Check authorization for party role
     if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
+      const userParty = await prisma.party.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
       
-      if (
-        userPartyResult.rows.length === 0 ||
-        userPartyResult.rows[0].id !== service.party_id
-      ) {
+      if (!userParty || userParty.id !== service.partyId) {
         // Delete uploaded file
         fs.unlinkSync(req.file.path);
         return res.status(403).json({ error: 'Access denied' });
@@ -93,23 +88,19 @@ router.post(
     }
     
     // Save document record
-    const documentResult = await query(
-      `INSERT INTO documents (
-        service_id, document_type, file_name, file_path, file_size, mime_type
-      ) VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *`,
-      [
+    const document = await prisma.document.create({
+      data: {
         serviceId,
-        document_type || 'general',
-        req.file.originalname,
-        req.file.path,
-        req.file.size,
-        req.file.mimetype,
-      ]
-    );
+        documentType: document_type || 'general',
+        fileName: req.file.originalname,
+        filePath: req.file.path,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype
+      }
+    });
     
     res.status(201).json({
-      document: documentResult.rows[0],
+      document,
       message: 'Document uploaded successfully',
     });
   })
@@ -122,37 +113,33 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { documentId } = req.params;
     
-    const documentResult = await query(
-      `SELECT d.*, s.party_id 
-       FROM documents d 
-       JOIN services s ON d.service_id = s.id 
-       WHERE d.id = $1`,
-      [documentId]
-    );
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      include: {
+        service: {
+          select: { partyId: true }
+        }
+      }
+    });
     
-    if (documentResult.rows.length === 0) {
+    if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    const document = documentResult.rows[0];
-    
     // Check authorization for party role
     if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
+      const userParty = await prisma.party.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
       
-      if (
-        userPartyResult.rows.length === 0 ||
-        userPartyResult.rows[0].id !== document.party_id
-      ) {
+      if (!userParty || userParty.id !== document.service.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
     
     // Send file
-    res.download(document.file_path, document.file_name);
+    res.download(document.filePath, document.fileName);
   })
 );
 
@@ -163,42 +150,40 @@ router.delete(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { documentId } = req.params;
     
-    const documentResult = await query(
-      `SELECT d.*, s.party_id 
-       FROM documents d 
-       JOIN services s ON d.service_id = s.id 
-       WHERE d.id = $1`,
-      [documentId]
-    );
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      include: {
+        service: {
+          select: { partyId: true }
+        }
+      }
+    });
     
-    if (documentResult.rows.length === 0) {
+    if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
     
-    const document = documentResult.rows[0];
-    
     // Check authorization
     if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
+      const userParty = await prisma.party.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
       
-      if (
-        userPartyResult.rows.length === 0 ||
-        userPartyResult.rows[0].id !== document.party_id
-      ) {
+      if (!userParty || userParty.id !== document.service.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
     
     // Delete file from filesystem
-    if (fs.existsSync(document.file_path)) {
-      fs.unlinkSync(document.file_path);
+    if (fs.existsSync(document.filePath)) {
+      fs.unlinkSync(document.filePath);
     }
     
     // Delete database record
-    await query('DELETE FROM documents WHERE id = $1', [documentId]);
+    await prisma.document.delete({
+      where: { id: documentId }
+    });
     
     res.json({ message: 'Document deleted successfully' });
   })

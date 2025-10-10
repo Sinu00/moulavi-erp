@@ -79,12 +79,8 @@ Before starting, ensure you have:
    PORT=5000
    NODE_ENV=development
    
-   # PostgreSQL Configuration
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=moulavi_erp
-   DB_USER=postgres
-   DB_PASSWORD=your_postgres_password
+   # Database Configuration (Prisma)
+   DATABASE_URL="postgresql://postgres:your_password@localhost:5432/moulavi_erp?schema=public"
    
    # JWT Secrets (generate random strings)
    JWT_SECRET=generate_a_long_random_string_here_min_32_chars
@@ -123,20 +119,39 @@ Before starting, ensure you have:
    - Copy the 16-character password
    - Use it in `SMTP_PASSWORD`
 
-7. **Run database migrations**
+7. **Set up Prisma ORM**
    ```bash
-   npm run migrate
+   # Generate Prisma client
+   npx prisma generate
+   
+   # Run database migrations (creates all tables)
+   npx prisma migrate dev --name init
+   
+   # Optional: Open Prisma Studio to view database
+   npx prisma studio
    ```
    
    You should see:
    ```
-   ✅ Database migration completed successfully!
-   Default admin credentials:
+   ✔ Generated Prisma Client (v6.17.0)
+   Applying migration `20250109143950_init`
+   Your database is now in sync with your schema.
+   ```
+
+8. **Create initial admin user**
+   ```bash
+   # Run the admin creation script
+   npm run create-admin
+   ```
+   
+   You should see:
+   ```
+   ✅ Admin user created successfully!
    Email: admin@moulavi.com
    Password: Admin@123
    ```
 
-8. **Start the backend server**
+9. **Start the backend server**
    ```bash
    npm run dev
    ```
@@ -148,7 +163,7 @@ Before starting, ensure you have:
    🌐 Frontend URL: http://localhost:3000
    ```
 
-9. **Test the backend**
+10. **Test the backend**
    - Open a new terminal
    - Test health endpoint:
      ```bash
@@ -242,8 +257,14 @@ Before starting, ensure you have:
 
 **"Cannot connect to database"**
 - Ensure PostgreSQL is running
-- Check database credentials in `.env`
+- Check `DATABASE_URL` in `.env` file
 - Verify database exists: `psql -U postgres -l`
+- Make sure there are no leading spaces in `.env` file
+
+**"Prisma migration failed"**
+- Ensure `DATABASE_URL` is correctly formatted
+- Check if database exists: `psql -U postgres -c "SELECT 1"`
+- If database exists but migration fails, try: `npx prisma migrate reset --force`
 
 **"Port 5000 already in use"**
 - Change `PORT` in `.env` to another port (e.g., 5001)

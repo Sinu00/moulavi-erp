@@ -3,7 +3,7 @@ import { body, query as validateQuery } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { query } from '../config/database';
+import { prisma } from '../config/database';
 import { hashPassword, generateRandomPassword } from '../utils/password';
 import { sendCredentialsEmail } from '../services/emailService';
 
@@ -46,12 +46,11 @@ router.post(
     } = req.body;
     
     // Check if party email already exists
-    const existingParty = await query(
-      'SELECT id FROM parties WHERE email = $1',
-      [email]
-    );
+    const existingParty = await prisma.party.findUnique({
+      where: { email }
+    });
     
-    if (existingParty.rows.length > 0) {
+    if (existingParty) {
       return res.status(400).json({ error: 'Party with this email already exists' });
     }
     
@@ -60,54 +59,47 @@ router.post(
     
     // Create user account if login is required
     if (login_required) {
-      const existingUser = await query(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
-      );
+      const existingUser = await prisma.user.findUnique({
+        where: { email }
+      });
       
-      if (existingUser.rows.length > 0) {
+      if (existingUser) {
         return res.status(400).json({ error: 'User with this email already exists' });
       }
       
       generatedPassword = generateRandomPassword();
       const hashedPassword = await hashPassword(generatedPassword);
       
-      const userResult = await query(
-        `INSERT INTO users (name, email, password, role) 
-         VALUES ($1, $2, $3, 'party') 
-         RETURNING id`,
-        [party_name, email, hashedPassword]
-      );
+      const user = await prisma.user.create({
+        data: {
+          name: party_name,
+          email,
+          password: hashedPassword,
+          role: 'party'
+        }
+      });
       
-      userId = userResult.rows[0].id;
+      userId = user.id;
     }
     
     // Create party
-    const partyResult = await query(
-      `INSERT INTO parties (
-        party_name, email, contact_number, whatsapp_number, address, 
-        gst_number, customer_type, account_currency, is_supplier, 
-        is_customer, login_required, user_id, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-      RETURNING *`,
-      [
-        party_name,
+    const party = await prisma.party.create({
+      data: {
+        partyName: party_name,
         email,
-        contact_number,
-        whatsapp_number,
+        contactNumber: contact_number,
+        whatsappNumber: whatsapp_number,
         address,
-        gst_number,
-        customer_type,
-        account_currency,
-        is_supplier,
-        is_customer,
-        login_required,
+        gstNumber: gst_number,
+        customerType: customer_type,
+        accountCurrency: account_currency,
+        isSupplier: is_supplier,
+        isCustomer: is_customer,
+        loginRequired: login_required,
         userId,
-        req.user!.id,
-      ]
-    );
-    
-    const party = partyResult.rows[0];
+        createdBy: req.user!.id
+      }
+    });
     
     // Send credentials email if login is required
     if (login_required && generatedPassword) {
@@ -143,81 +135,50 @@ router.get(
       limit = '10'
     } = req.query;
     
-    let queryText = 'SELECT * FROM parties WHERE 1=1';
-    const queryParams: any[] = [];
-    let paramIndex = 1;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+    
+    // Build where clause
+    const where: any = {};
     
     if (customer_type) {
-      queryText += ` AND customer_type = $${paramIndex}`;
-      queryParams.push(customer_type);
-      paramIndex++;
+      where.customerType = customer_type;
     }
     
     if (is_supplier !== undefined) {
-      queryText += ` AND is_supplier = $${paramIndex}`;
-      queryParams.push(is_supplier === 'true');
-      paramIndex++;
+      where.isSupplier = is_supplier === 'true';
     }
     
     if (is_customer !== undefined) {
-      queryText += ` AND is_customer = $${paramIndex}`;
-      queryParams.push(is_customer === 'true');
-      paramIndex++;
+      where.isCustomer = is_customer === 'true';
     }
     
     if (search) {
-      queryText += ` AND (party_name ILIKE $${paramIndex} OR email ILIKE $${paramIndex})`;
-      queryParams.push(`%${search}%`);
-      paramIndex++;
+      where.OR = [
+        { partyName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
+      ];
     }
     
-    // Add pagination
-    queryText += ' ORDER BY created_at DESC';
-    
-    const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
-    queryText += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(parseInt(limit as string), offset);
-    
-    const result = await query(queryText, queryParams);
-    
-    // Get total count
-    let countQuery = 'SELECT COUNT(*) FROM parties WHERE 1=1';
-    const countParams: any[] = [];
-    let countIndex = 1;
-    
-    if (customer_type) {
-      countQuery += ` AND customer_type = $${countIndex}`;
-      countParams.push(customer_type);
-      countIndex++;
-    }
-    
-    if (is_supplier !== undefined) {
-      countQuery += ` AND is_supplier = $${countIndex}`;
-      countParams.push(is_supplier === 'true');
-      countIndex++;
-    }
-    
-    if (is_customer !== undefined) {
-      countQuery += ` AND is_customer = $${countIndex}`;
-      countParams.push(is_customer === 'true');
-      countIndex++;
-    }
-    
-    if (search) {
-      countQuery += ` AND (party_name ILIKE $${countIndex} OR email ILIKE $${countIndex})`;
-      countParams.push(`%${search}%`);
-    }
-    
-    const countResult = await query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    // Get parties with pagination
+    const [parties, total] = await Promise.all([
+      prisma.party.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.party.count({ where })
+    ]);
     
     res.json({
-      parties: result.rows,
+      parties,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / parseInt(limit as string)),
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   })
@@ -233,16 +194,15 @@ router.get(
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    const result = await query(
-      'SELECT * FROM parties WHERE user_id = $1',
-      [req.user!.id]
-    );
+    const party = await prisma.party.findUnique({
+      where: { userId: req.user!.id }
+    });
     
-    if (result.rows.length === 0) {
+    if (!party) {
       return res.status(404).json({ error: 'Party not found' });
     }
     
-    res.json({ party: result.rows[0] });
+    res.json({ party });
   })
 );
 
@@ -254,13 +214,15 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     
-    const result = await query('SELECT * FROM parties WHERE id = $1', [id]);
+    const party = await prisma.party.findUnique({
+      where: { id }
+    });
     
-    if (result.rows.length === 0) {
+    if (!party) {
       return res.status(404).json({ error: 'Party not found' });
     }
     
-    res.json({ party: result.rows[0] });
+    res.json({ party });
   })
 );
 
@@ -283,38 +245,24 @@ router.put(
       is_customer,
     } = req.body;
     
-    const result = await query(
-      `UPDATE parties SET 
-        party_name = COALESCE($1, party_name),
-        contact_number = COALESCE($2, contact_number),
-        whatsapp_number = COALESCE($3, whatsapp_number),
-        address = COALESCE($4, address),
-        gst_number = COALESCE($5, gst_number),
-        customer_type = COALESCE($6, customer_type),
-        account_currency = COALESCE($7, account_currency),
-        is_supplier = COALESCE($8, is_supplier),
-        is_customer = COALESCE($9, is_customer)
-      WHERE id = $10
-      RETURNING *`,
-      [
-        party_name,
-        contact_number,
-        whatsapp_number,
-        address,
-        gst_number,
-        customer_type,
-        account_currency,
-        is_supplier,
-        is_customer,
-        id,
-      ]
-    );
+    const updateData: any = {};
     
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Party not found' });
-    }
+    if (party_name !== undefined) updateData.partyName = party_name;
+    if (contact_number !== undefined) updateData.contactNumber = contact_number;
+    if (whatsapp_number !== undefined) updateData.whatsappNumber = whatsapp_number;
+    if (address !== undefined) updateData.address = address;
+    if (gst_number !== undefined) updateData.gstNumber = gst_number;
+    if (customer_type !== undefined) updateData.customerType = customer_type;
+    if (account_currency !== undefined) updateData.accountCurrency = account_currency;
+    if (is_supplier !== undefined) updateData.isSupplier = is_supplier;
+    if (is_customer !== undefined) updateData.isCustomer = is_customer;
     
-    res.json({ party: result.rows[0] });
+    const party = await prisma.party.update({
+      where: { id },
+      data: updateData
+    });
+    
+    res.json({ party });
   })
 );
 
@@ -327,20 +275,25 @@ router.delete(
     const { id } = req.params;
     
     // First get the party to check if it has a user_id
-    const partyResult = await query('SELECT user_id FROM parties WHERE id = $1', [id]);
+    const party = await prisma.party.findUnique({
+      where: { id },
+      select: { userId: true }
+    });
     
-    if (partyResult.rows.length === 0) {
+    if (!party) {
       return res.status(404).json({ error: 'Party not found' });
     }
     
-    const userId = partyResult.rows[0].user_id;
-    
-    // Delete the party
-    const result = await query('DELETE FROM parties WHERE id = $1 RETURNING id', [id]);
+    // Delete the party (this will cascade to related records)
+    await prisma.party.delete({
+      where: { id }
+    });
     
     // If the party had a user account, delete it too
-    if (userId) {
-      await query('DELETE FROM users WHERE id = $1', [userId]);
+    if (party.userId) {
+      await prisma.user.delete({
+        where: { id: party.userId }
+      });
     }
     
     res.json({ message: 'Party deleted successfully' });

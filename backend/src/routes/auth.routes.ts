@@ -3,7 +3,7 @@ import { body } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { query } from '../config/database';
+import { prisma } from '../config/database';
 import { comparePassword } from '../utils/password';
 import {
   generateAccessToken,
@@ -25,19 +25,16 @@ router.post('/login', loginValidation, asyncHandler(async (req: AuthRequest, res
   const { email, password } = req.body;
   
   // Find user
-  const userResult = await query(
-    'SELECT * FROM users WHERE email = $1',
-    [email]
-  );
+  const user = await prisma.user.findUnique({
+    where: { email }
+  });
   
-  if (userResult.rows.length === 0) {
+  if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   
-  const user = userResult.rows[0];
-  
   // Check if user is active
-  if (!user.is_active) {
+  if (!user.isActive) {
     return res.status(403).json({ error: 'Account is deactivated' });
   }
   
@@ -53,10 +50,13 @@ router.post('/login', loginValidation, asyncHandler(async (req: AuthRequest, res
   const refreshToken = generateRefreshToken(payload);
   
   // Store refresh token
-  await query(
-    'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-    [user.id, refreshToken, getRefreshTokenExpiry()]
-  );
+  await prisma.refreshToken.create({
+    data: {
+      userId: user.id,
+      token: refreshToken,
+      expiresAt: getRefreshTokenExpiry()
+    }
+  });
   
   res.json({
     user: {
@@ -83,12 +83,16 @@ router.post('/refresh', asyncHandler(async (req: AuthRequest, res: Response) => 
     const payload = verifyRefreshToken(refreshToken);
     
     // Check if refresh token exists in database
-    const tokenResult = await query(
-      'SELECT * FROM refresh_tokens WHERE token = $1 AND expires_at > NOW()',
-      [refreshToken]
-    );
+    const token = await prisma.refreshToken.findFirst({
+      where: {
+        token: refreshToken,
+        expiresAt: {
+          gt: new Date()
+        }
+      }
+    });
     
-    if (tokenResult.rows.length === 0) {
+    if (!token) {
       return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
     
@@ -110,7 +114,9 @@ router.post('/logout', authenticate, asyncHandler(async (req: AuthRequest, res: 
   const { refreshToken } = req.body;
   
   if (refreshToken) {
-    await query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+    await prisma.refreshToken.deleteMany({
+      where: { token: refreshToken }
+    });
   }
   
   res.json({ message: 'Logged out successfully' });
@@ -118,16 +124,23 @@ router.post('/logout', authenticate, asyncHandler(async (req: AuthRequest, res: 
 
 // Get current user
 router.get('/me', authenticate, asyncHandler(async (req: AuthRequest, res: Response) => {
-  const userResult = await query(
-    'SELECT id, name, email, role, is_active, created_at FROM users WHERE id = $1',
-    [req.user!.id]
-  );
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isActive: true,
+      createdAt: true
+    }
+  });
   
-  if (userResult.rows.length === 0) {
+  if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
   
-  res.json({ user: userResult.rows[0] });
+  res.json({ user });
 }));
 
 // Test email endpoint (for debugging)

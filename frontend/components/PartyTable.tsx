@@ -243,32 +243,32 @@ export default function PartyTable({
               />
             </div>
             <div className="col-span-3">
-              <div className="font-medium text-gray-900">{party.party_name}</div>
+              <div className="font-medium text-gray-900">{party.partyName}</div>
               <div className="text-sm text-gray-500">{party.email}</div>
             </div>
             <div className="col-span-2">
               <div className="text-sm text-gray-900">
-                {party.contact_number || 'N/A'}
+                {party.contactNumber || 'N/A'}
               </div>
-              {party.whatsapp_number && (
+              {party.whatsappNumber && (
                 <div className="text-xs text-gray-500">
-                  WA: {party.whatsapp_number}
+                  WA: {party.whatsappNumber}
                 </div>
               )}
             </div>
             <div className="col-span-2">
               <Badge 
-                variant={party.customer_type === 'b2b' ? 'info' : 'success'}
+                variant={party.customerType === 'b2b' ? 'info' : 'success'}
               >
-                {party.customer_type.toUpperCase()}
+                {party.customerType.toUpperCase()}
               </Badge>
-              {party.login_required && (
+              {party.loginRequired && (
                 <div className="text-xs text-indigo-600 mt-1">✓ Login enabled</div>
               )}
             </div>
             <div className="col-span-2">
               <Badge variant="outline">
-                {party.account_currency}
+                {party.accountCurrency}
               </Badge>
             </div>
             <div className="col-span-2">
@@ -341,7 +341,7 @@ export default function PartyTable({
                   />
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900 text-base">
-                      {party.party_name}
+                      {party.partyName}
                     </h3>
                     <p className="text-sm text-gray-500 mt-0.5">
                       {party.email}
@@ -383,12 +383,12 @@ export default function PartyTable({
                   <div className="text-sm">
                     <span className="text-gray-500">Contact:</span>
                     <span className="ml-2 text-gray-900">
-                      {party.contact_number || 'N/A'}
+                      {party.contactNumber || 'N/A'}
                     </span>
                   </div>
-                  {party.whatsapp_number && (
+                  {party.whatsappNumber && (
                     <div className="text-xs text-gray-500">
-                      WA: {party.whatsapp_number}
+                      WA: {party.whatsappNumber}
                     </div>
                   )}
                 </div>
@@ -397,16 +397,16 @@ export default function PartyTable({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge 
-                      variant={party.customer_type === 'b2b' ? 'info' : 'success'}
+                      variant={party.customerType === 'b2b' ? 'info' : 'success'}
                       className="text-xs"
                     >
-                      {party.customer_type.toUpperCase()}
+                      {party.customerType.toUpperCase()}
                     </Badge>
                     <Badge variant="outline" className="text-xs">
-                      {party.account_currency}
+                      {party.accountCurrency}
                     </Badge>
                   </div>
-                  {party.login_required && (
+                  {party.loginRequired && (
                     <div className="text-xs text-indigo-600 font-medium">
                       ✓ Login enabled
                     </div>

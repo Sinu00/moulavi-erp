@@ -3,7 +3,7 @@ import { body } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { query } from '../config/database';
+import { prisma } from '../config/database';
 import { sendServiceConfirmationEmail } from '../services/emailService';
 
 const router = Router();
@@ -42,81 +42,74 @@ router.post(
     } = req.body;
     
     // Verify party exists
-    const partyResult = await query(
-      'SELECT id, party_name, email FROM parties WHERE id = $1',
-      [party_id]
-    );
+    const party = await prisma.party.findUnique({
+      where: { id: party_id },
+      select: { id: true, partyName: true, email: true }
+    });
     
-    if (partyResult.rows.length === 0) {
+    if (!party) {
       return res.status(404).json({ error: 'Party not found' });
     }
     
-    const party = partyResult.rows[0];
-    
     // For party role, ensure they can only create services for themselves
     if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
+      const userParty = await prisma.party.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
       
-      if (
-        userPartyResult.rows.length === 0 ||
-        userPartyResult.rows[0].id !== party_id
-      ) {
+      if (!userParty || userParty.id !== party_id) {
         return res.status(403).json({ error: 'You can only create services for your own account' });
       }
     }
     
-    // Create service
-    const serviceResult = await query(
-      `INSERT INTO services (service_type, party_id, status) 
-       VALUES ('umrah_visa', $1, 'pending') 
-       RETURNING *`,
-      [party_id]
-    );
-    
-    const service = serviceResult.rows[0];
-    
-    // Create Umrah visa details
-    const visaDetailsResult = await query(
-      `INSERT INTO umrah_visa_details (
-        service_id, full_name, passport_number, nationality,
-        travel_date_from, travel_date_to, passport_expiry,
-        date_of_birth, gender, phone_number, status, party_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING *`,
-      [
-        service.id,
-        full_name,
-        passport_number,
-        nationality,
-        travel_date_from,
-        travel_date_to,
-        passport_expiry,
-        date_of_birth,
-        gender,
-        phone_number,
-        'pending', // Default status
-        party.party_name, // Party name from the party record
-      ]
-    );
+    // Create service and visa details in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create service
+      const service = await tx.service.create({
+        data: {
+          serviceType: 'umrah_visa',
+          partyId: party_id,
+          status: 'pending'
+        }
+      });
+      
+      // Create Umrah visa details
+      const visaDetails = await tx.umrahVisaDetail.create({
+        data: {
+          serviceId: service.id,
+          fullName: full_name,
+          passportNumber: passport_number,
+          nationality,
+          travelDateFrom: new Date(travel_date_from),
+          travelDateTo: new Date(travel_date_to),
+          passportExpiry: new Date(passport_expiry),
+          dateOfBirth: new Date(date_of_birth),
+          gender: gender as any,
+          phoneNumber: phone_number,
+          status: 'pending',
+          partyName: party.partyName
+        }
+      });
+      
+      return { service, visaDetails };
+    });
     
     // Send confirmation email
     try {
       await sendServiceConfirmationEmail(
         party.email,
-        party.party_name,
+        party.partyName,
         'Umrah Visa',
-        service.id
+        result.service.id
       );
     } catch (error) {
       console.error('Failed to send confirmation email:', error);
     }
     
     res.status(201).json({
-      service,
-      details: visaDetailsResult.rows[0],
+      service: result.service,
+      details: result.visaDetails,
       message: 'Umrah visa service created successfully',
     });
   })
@@ -130,63 +123,62 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { status, page = '1', limit = '10' } = req.query;
     
-    let queryText = `
-      SELECT 
-        uvd.*,
-        s.id as service_id,
-        s.status as service_status,
-        s.submitted_at,
-        s.created_at as service_created_at,
-        p.email as party_email,
-        p.contact_number,
-        p.whatsapp_number
-      FROM umrah_visa_details uvd
-      JOIN services s ON uvd.service_id = s.id
-      JOIN parties p ON s.party_id = p.id
-      WHERE s.service_type = 'umrah_visa'
-    `;
-    const queryParams: any[] = [];
-    let paramIndex = 1;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+    
+    const where: any = {
+      service: {
+        serviceType: 'umrah_visa'
+      }
+    };
     
     if (status) {
-      queryText += ` AND uvd.status = $${paramIndex}`;
-      queryParams.push(status);
-      paramIndex++;
+      where.status = status;
     }
     
-    queryText += ' ORDER BY uvd.created_at DESC';
+    const [umrahVisas, total] = await Promise.all([
+      prisma.umrahVisaDetail.findMany({
+        where,
+        include: {
+          service: {
+            include: {
+              party: {
+                select: {
+                  email: true,
+                  contactNumber: true,
+                  whatsappNumber: true
+                }
+              }
+            }
+          }
+        },
+        skip,
+        take: limitNum,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.umrahVisaDetail.count({ where })
+    ]);
     
-    const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
-    queryText += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(parseInt(limit as string), offset);
-    
-    const result = await query(queryText, queryParams);
-    
-    // Get total count
-    let countQuery = `
-      SELECT COUNT(*) 
-      FROM umrah_visa_details uvd
-      JOIN services s ON uvd.service_id = s.id
-      WHERE s.service_type = 'umrah_visa'
-    `;
-    const countParams: any[] = [];
-    let countIndex = 1;
-    
-    if (status) {
-      countQuery += ` AND uvd.status = $${countIndex}`;
-      countParams.push(status);
-    }
-    
-    const countResult = await query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    // Transform the data to match the expected format
+    const transformedVisas = umrahVisas.map(visa => ({
+      ...visa,
+      service_id: visa.service.id,
+      service_status: visa.service.status,
+      submitted_at: visa.service.submittedAt,
+      service_created_at: visa.service.createdAt,
+      party_email: visa.service.party.email,
+      contact_number: visa.service.party.contactNumber,
+      whatsapp_number: visa.service.party.whatsappNumber
+    }));
     
     res.json({
-      umrahVisas: result.rows,
+      umrahVisas: transformedVisas,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / parseInt(limit as string)),
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   })
@@ -199,90 +191,135 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { status, service_type, page = '1', limit = '10' } = req.query;
     
-    let queryText = `
-      SELECT s.*, p.party_name, p.email as party_email 
-      FROM services s 
-      JOIN parties p ON s.party_id = p.id 
-      WHERE 1=1
-    `;
-    const queryParams: any[] = [];
-    let paramIndex = 1;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+    
+    const where: any = {};
     
     // If party role, only show their services
     if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
+      const userParty = await prisma.party.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
       
-      if (userPartyResult.rows.length === 0) {
+      if (!userParty) {
         return res.json({ services: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } });
       }
       
-      queryText += ` AND s.party_id = $${paramIndex}`;
-      queryParams.push(userPartyResult.rows[0].id);
-      paramIndex++;
+      where.partyId = userParty.id;
     }
     
     if (status) {
-      queryText += ` AND s.status = $${paramIndex}`;
-      queryParams.push(status);
-      paramIndex++;
+      where.status = status;
     }
     
     if (service_type) {
-      queryText += ` AND s.service_type = $${paramIndex}`;
-      queryParams.push(service_type);
-      paramIndex++;
+      where.serviceType = service_type;
     }
     
-    queryText += ' ORDER BY s.submitted_at DESC';
+    const [services, total] = await Promise.all([
+      prisma.service.findMany({
+        where,
+        include: {
+          party: {
+            select: {
+              partyName: true,
+              email: true
+            }
+          }
+        },
+        skip,
+        take: limitNum,
+        orderBy: { submittedAt: 'desc' }
+      }),
+      prisma.service.count({ where })
+    ]);
     
-    const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
-    queryText += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    queryParams.push(parseInt(limit as string), offset);
-    
-    const result = await query(queryText, queryParams);
-    
-    // Get total count
-    let countQuery = 'SELECT COUNT(*) FROM services s WHERE 1=1';
-    const countParams: any[] = [];
-    let countIndex = 1;
-    
-    if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
-      
-      if (userPartyResult.rows.length > 0) {
-        countQuery += ` AND s.party_id = $${countIndex}`;
-        countParams.push(userPartyResult.rows[0].id);
-        countIndex++;
-      }
-    }
-    
-    if (status) {
-      countQuery += ` AND s.status = $${countIndex}`;
-      countParams.push(status);
-      countIndex++;
-    }
-    
-    if (service_type) {
-      countQuery += ` AND s.service_type = $${countIndex}`;
-      countParams.push(service_type);
-    }
-    
-    const countResult = await query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    // Transform the data to match the expected format
+    const transformedServices = services.map(service => ({
+      ...service,
+      party_name: service.party.partyName,
+      party_email: service.party.email
+    }));
     
     res.json({
-      services: result.rows,
+      services: transformedServices,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages: Math.ceil(total / parseInt(limit as string)),
+        totalPages: Math.ceil(total / limitNum),
+      },
+    });
+  })
+);
+
+// Get party's services with Umrah visa details (for party dashboard) - MUST come before /:id route
+router.get(
+  '/party-services',
+  authenticate,
+  authorize('party'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { page = '1', limit = '50' } = req.query;
+    
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+    
+    // Get the party for the current user
+    const userParty = await prisma.party.findUnique({
+      where: { userId: req.user!.id },
+      select: { id: true }
+    });
+    
+    if (!userParty) {
+      return res.json({ services: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } });
+    }
+    
+    // Get services with Umrah visa details
+    const [services, total] = await Promise.all([
+      prisma.service.findMany({
+        where: { partyId: userParty.id },
+        include: {
+          umrahVisaDetails: true,
+          documents: {
+            select: {
+              id: true,
+              documentType: true,
+              fileName: true,
+              uploadedAt: true
+            }
+          }
+        },
+        skip,
+        take: limitNum,
+        orderBy: { submittedAt: 'desc' }
+      }),
+      prisma.service.count({ where: { partyId: userParty.id } })
+    ]);
+    
+    // Transform the data to include Umrah visa status
+    const transformedServices = services.map(service => {
+      const umrahVisaDetail = service.umrahVisaDetails[0]; // Get first Umrah visa detail
+      
+      return {
+        ...service,
+        // Include Umrah visa status if available
+        umrahVisaStatus: umrahVisaDetail?.status || service.status,
+        umrahVisaDetail: umrahVisaDetail || null,
+        documents: service.documents
+      };
+    });
+    
+    res.json({
+      services: transformedServices,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
       },
     });
   })
@@ -295,56 +332,55 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     
-    const serviceResult = await query(
-      `SELECT s.*, p.party_name, p.email as party_email, p.contact_number 
-       FROM services s 
-       JOIN parties p ON s.party_id = p.id 
-       WHERE s.id = $1`,
-      [id]
-    );
+    const service = await prisma.service.findUnique({
+      where: { id },
+      include: {
+        party: {
+          select: {
+            partyName: true,
+            email: true,
+            contactNumber: true
+          }
+        },
+        umrahVisaDetails: true,
+        documents: true
+      }
+    });
     
-    if (serviceResult.rows.length === 0) {
+    if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
     
-    const service = serviceResult.rows[0];
-    
     // Check authorization for party role
     if (req.user!.role === 'party') {
-      const userPartyResult = await query(
-        'SELECT id FROM parties WHERE user_id = $1',
-        [req.user!.id]
-      );
+      const userParty = await prisma.party.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
       
-      if (
-        userPartyResult.rows.length === 0 ||
-        userPartyResult.rows[0].id !== service.party_id
-      ) {
+      if (!userParty || userParty.id !== service.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
     
+    // Transform the data to match the expected format
+    const transformedService = {
+      ...service,
+      party_name: service.party.partyName,
+      party_email: service.party.email,
+      contact_number: service.party.contactNumber
+    };
+    
     // Get service-specific details
     let details = null;
-    
-    if (service.service_type === 'umrah_visa') {
-      const visaResult = await query(
-        'SELECT * FROM umrah_visa_details WHERE service_id = $1',
-        [id]
-      );
-      details = visaResult.rows[0] || null;
+    if (service.serviceType === 'umrah_visa' && service.umrahVisaDetails.length > 0) {
+      details = service.umrahVisaDetails[0];
     }
     
-    // Get documents
-    const documentsResult = await query(
-      'SELECT * FROM documents WHERE service_id = $1',
-      [id]
-    );
-    
     res.json({
-      service,
+      service: transformedService,
       details,
-      documents: documentsResult.rows,
+      documents: service.documents,
     });
   })
 );
@@ -362,16 +398,12 @@ router.patch(
       return res.status(400).json({ error: 'Invalid status' });
     }
     
-    const result = await query(
-      'UPDATE umrah_visa_details SET status = $1 WHERE id = $2 RETURNING *',
-      [status, id]
-    );
+    const umrahVisa = await prisma.umrahVisaDetail.update({
+      where: { id },
+      data: { status: status as any }
+    });
     
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Umrah visa request not found' });
-    }
-    
-    res.json({ umrahVisa: result.rows[0] });
+    res.json({ umrahVisa });
   })
 );
 
@@ -388,16 +420,12 @@ router.patch(
       return res.status(400).json({ error: 'Invalid status' });
     }
     
-    const result = await query(
-      'UPDATE services SET status = $1 WHERE id = $2 RETURNING *',
-      [status, id]
-    );
+    const service = await prisma.service.update({
+      where: { id },
+      data: { status: status as any }
+    });
     
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
-    
-    res.json({ service: result.rows[0] });
+    res.json({ service });
   })
 );
 

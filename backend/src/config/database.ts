@@ -1,27 +1,16 @@
-import { Pool, PoolConfig } from 'pg';
-import dotenv from 'dotenv';
+import prisma from '../lib/prisma';
 
-dotenv.config();
+// Export prisma client for use throughout the application
+export { prisma };
 
-const poolConfig: PoolConfig = {
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'moulavi_erp',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-};
-
-export const pool = new Pool(poolConfig);
-
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
-
-export const query = (text: string, params?: any[]) => {
-  return pool.query(text, params);
+// Legacy query function for backward compatibility during migration
+// This will be removed once all routes are updated to use Prisma
+export const query = async (text: string, params?: any[]) => {
+  // This is a temporary compatibility layer
+  // In production, you should replace all query() calls with Prisma client calls
+  console.warn('Using legacy query function. Consider migrating to Prisma client.');
+  
+  // For now, we'll use raw queries with Prisma
+  return await prisma.$queryRawUnsafe(text, ...(params || []));
 };
 

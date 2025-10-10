@@ -1,0 +1,177 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  staff
+  party
+}
+
+enum CustomerType {
+  direct
+  b2b
+}
+
+enum AccountCurrency {
+  SAR
+  INR
+  AED
+}
+
+enum ServiceStatus {
+  pending
+  processing
+  completed
+  cancelled
+}
+
+enum UmrahVisaStatus {
+  pending
+  processing
+  approved
+  rejected
+  completed
+}
+
+enum Gender {
+  male
+  female
+}
+
+model User {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @db.VarChar(255)
+  email      String   @unique @db.VarChar(255)
+  password   String   @db.VarChar(255)
+  role       UserRole
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  // Relations
+  createdParties     Party[]        @relation("CreatedBy")
+  party              Party?         @relation("PartyUser")
+  refreshTokens      RefreshToken[]
+
+  @@map("users")
+  @@index([email])
+  @@index([role])
+}
+
+model Party {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partyName       String          @map("party_name") @db.VarChar(255)
+  email           String          @unique @db.VarChar(255)
+  contactNumber   String?         @map("contact_number") @db.VarChar(20)
+  whatsappNumber  String?         @map("whatsapp_number") @db.VarChar(20)
+  address         String?         @db.Text
+  gstNumber       String?         @map("gst_number") @db.VarChar(50)
+  customerType    CustomerType    @map("customer_type")
+  accountCurrency AccountCurrency @map("account_currency")
+  isSupplier      Boolean         @default(false) @map("is_supplier")
+  isCustomer      Boolean         @default(true) @map("is_customer")
+  loginRequired   Boolean         @default(false) @map("login_required")
+  userId          String?         @unique @map("user_id") @db.Uuid
+  createdBy       String          @map("created_by") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  // Relations
+  user            User?           @relation("PartyUser", fields: [userId], references: [id], onDelete: SetNull)
+  creator         User            @relation("CreatedBy", fields: [createdBy], references: [id])
+  services        Service[]
+
+  @@map("parties")
+  @@index([email])
+  @@index([partyName])
+  @@index([customerType])
+  @@index([userId])
+}
+
+model Service {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceType String        @map("service_type") @db.VarChar(50)
+  partyId     String        @map("party_id") @db.Uuid
+  status      ServiceStatus @default(pending)
+  submittedAt DateTime      @default(now()) @map("submitted_at") @db.Timestamp
+  details     Json?
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamp
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  // Relations
+  party            Party            @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  umrahVisaDetails UmrahVisaDetail[]
+  documents        Document[]
+
+  @@map("services")
+  @@index([partyId])
+  @@index([serviceType])
+  @@index([status])
+}
+
+model UmrahVisaDetail {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceId      String           @map("service_id") @db.Uuid
+  fullName       String           @map("full_name") @db.VarChar(255)
+  passportNumber String           @map("passport_number") @db.VarChar(50)
+  nationality    String           @db.VarChar(100)
+  travelDateFrom DateTime         @map("travel_date_from") @db.Date
+  travelDateTo   DateTime         @map("travel_date_to") @db.Date
+  passportExpiry DateTime         @map("passport_expiry") @db.Date
+  dateOfBirth    DateTime         @map("date_of_birth") @db.Date
+  gender         Gender?
+  phoneNumber    String?          @map("phone_number") @db.VarChar(20)
+  status         UmrahVisaStatus  @default(pending)
+  partyName      String?          @map("party_name") @db.VarChar(255)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamp
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  // Relations
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@map("umrah_visa_details")
+  @@index([serviceId])
+  @@index([status])
+  @@index([partyName])
+}
+
+model Document {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceId    String   @map("service_id") @db.Uuid
+  documentType String   @map("document_type") @db.VarChar(100)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  filePath     String   @map("file_path") @db.VarChar(500)
+  fileSize     Int?
+  mimeType     String?  @map("mime_type") @db.VarChar(100)
+  uploadedAt   DateTime @default(now()) @map("uploaded_at") @db.Timestamp
+
+  // Relations
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+  @@index([serviceId])
+}
+
+model RefreshToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.Text
+  expiresAt DateTime @map("expires_at") @db.Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([token])
+}

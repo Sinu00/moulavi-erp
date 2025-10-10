@@ -164,9 +164,9 @@ export default function UmrahVisaPage() {
 
   const filteredVisas = umrahVisas.filter(visa => {
     const matchesSearch = 
-      visa.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      visa.passport_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      visa.party_name.toLowerCase().includes(searchTerm.toLowerCase());
+      visa.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      visa.passportNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      visa.partyName.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = !statusFilter || statusFilter === 'all' || visa.status === statusFilter;
     
@@ -327,28 +327,28 @@ export default function UmrahVisaPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2 mb-1">
                             <h3 className="text-sm font-medium text-gray-900 truncate">
-                              {visa.full_name}
+                              {visa.fullName}
                             </h3>
                             <span className="text-xs text-gray-500">•</span>
                             <span className="text-xs text-gray-500">{visa.gender}</span>
                           </div>
                           <div className="flex items-center space-x-2 mb-1">
                             <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                              {visa.party_name}
+                              {visa.partyName}
                             </span>
                           </div>
                           <div className="flex items-center space-x-4 text-xs text-gray-500">
                             <span className="flex items-center">
                               <FileText className="h-3 w-3 mr-1" />
-                              {visa.passport_number}
+                              {visa.passportNumber}
                             </span>
                             <span className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
-                              {new Date(visa.travel_date_from).toLocaleDateString()}
+                              {new Date(visa.travelDateFrom).toLocaleDateString()}
                             </span>
                             <span className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
-                              {new Date(visa.travel_date_to).toLocaleDateString()}
+                              {new Date(visa.travelDateTo).toLocaleDateString()}
                             </span>
                           </div>
                         </div>
