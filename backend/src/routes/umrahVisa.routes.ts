@@ -519,11 +519,21 @@ router.get(
         where: {
           service: {
             partyId: userParty.id
-          }
+          },
+          isDeleted: false
         },
         include: {
           service: {
             include: {
+              party: {
+                select: {
+                  id: true,
+                  partyName: true,
+                  email: true,
+                  contactNumber: true,
+                  whatsappNumber: true
+                }
+              },
               documents: {
                 select: {
                   id: true,
@@ -535,7 +545,10 @@ router.get(
               }
             }
           },
-          passengers: true
+          passengers: {
+            where: { isDeleted: false },
+            orderBy: { isLeadPassenger: 'desc' }
+          }
         },
         skip,
         take: limitNum,
@@ -545,7 +558,8 @@ router.get(
         where: {
           service: {
             partyId: userParty.id
-          }
+          },
+          isDeleted: false
         }
       })
     ]);

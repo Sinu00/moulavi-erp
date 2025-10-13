@@ -5,19 +5,77 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
-import { serviceAPI, authAPI } from '@/lib/api';
-import { Plus, FileText, Clock, CheckCircle, XCircle, LogOut, User } from 'lucide-react';
+import { umrahVisaAPI, authAPI } from '@/lib/api';
+import ViewUmrahVisaDialog from '@/components/ViewUmrahVisaDialog';
+import { 
+  Plus, 
+  FileText, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  LogOut, 
+  User,
+  Hash,
+  Users,
+  Calendar,
+  Building,
+  Eye,
+  AlertCircle,
+  RefreshCw
+} from 'lucide-react';
 import { format } from 'date-fns';
-import { Service } from '@/types';
+
+interface UmrahPassenger {
+  id: string;
+  bookingId: string;
+  isLeadPassenger: boolean;
+  fullName: string;
+  passportNumber: string;
+  nationality: string;
+  passportExpiry: string;
+  dateOfBirth: string;
+  gender: 'male' | 'female';
+  phoneNumber?: string;
+}
+
+interface UmrahVisaBooking {
+  id: string;
+  serviceId: string;
+  bookingMode: string;
+  groupNumber?: string;
+  groupName?: string;
+  flightNumber: string;
+  arrivalDate: string;
+  departureDate: string;
+  arrivalAirport: string;
+  passengerCount: number;
+  status: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+  passengers: UmrahPassenger[];
+  service: {
+    id: string;
+    party: {
+      id: string;
+      partyName: string;
+      email: string;
+      contactNumber?: string;
+      whatsappNumber?: string;
+    };
+  };
+}
 
 export default function PartyDashboardPage() {
   const router = useRouter();
   const user = getUser();
-  const [services, setServices] = useState<Service[]>([]);
+  const [bookings, setBookings] = useState<UmrahVisaBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingServices, setLoadingServices] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -52,20 +110,20 @@ export default function PartyDashboardPage() {
     }, 10000); // 10 second timeout
     
     try {
-      const response = await serviceAPI.getPartyServices({ page: 1, limit: 50 });
-      const servicesData = response.data.services || [];
-      setServices(servicesData);
+      const response = await umrahVisaAPI.getPartyBookings({ page: 1, limit: 50 });
+      const bookingsData = response.data.bookings || [];
+      setBookings(bookingsData);
 
-      // Calculate stats using Umrah visa status when available
+      // Calculate stats using booking status
       setStats({
-        total: servicesData.length,
-        pending: servicesData.filter((s: any) => (s.umrahVisaStatus || s.status) === 'pending').length,
-        processing: servicesData.filter((s: any) => (s.umrahVisaStatus || s.status) === 'processing').length,
-        completed: servicesData.filter((s: any) => (s.umrahVisaStatus || s.status) === 'completed').length,
+        total: bookingsData.length,
+        pending: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'pending').length,
+        processing: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'processing').length,
+        completed: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'completed').length,
       });
     } catch (error) {
-      console.error('Error loading services:', error);
-      setServices([]);
+      console.error('Error loading bookings:', error);
+      setBookings([]);
       setStats({
         total: 0,
         pending: 0,
@@ -77,6 +135,40 @@ export default function PartyDashboardPage() {
       setLoading(false);
       setLoadingServices(false);
     }
+  };
+
+  const getStatusBadge = (status: string) => {
+    if (!status) {
+      return (
+        <Badge className="bg-gray-100 text-gray-800 border-0">
+          <Clock className="h-3 w-3 mr-1" />
+          Unknown
+        </Badge>
+      );
+    }
+
+    const statusConfig = {
+      pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+      processing: { color: 'bg-blue-100 text-blue-800', icon: RefreshCw },
+      approved: { color: 'bg-green-100 text-green-800', icon: CheckCircle },
+      rejected: { color: 'bg-red-100 text-red-800', icon: XCircle },
+      completed: { color: 'bg-purple-100 text-purple-800', icon: CheckCircle },
+    };
+
+    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+    const Icon = config.icon;
+
+    return (
+      <Badge className={`${config.color} border-0`}>
+        <Icon className="h-3 w-3 mr-1" />
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
+
+  const handleViewBooking = (bookingId: string) => {
+    setSelectedBookingId(bookingId);
+    setViewDialogOpen(true);
   };
 
   const getStatusIcon = (status: string) => {
@@ -274,63 +366,132 @@ export default function PartyDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent Requests */}
+        {/* Umrah Visa Bookings */}
         <Card>
           <CardHeader>
-            <CardTitle>Your Service Requests</CardTitle>
+            <CardTitle>Your Umrah Visa Bookings</CardTitle>
             <CardDescription>Track the status of your submissions</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start">
+                  <div key={i} className="border rounded-lg p-3 sm:p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 space-y-3 sm:space-y-0">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Skeleton className="h-4 w-4" />
-                          <Skeleton className="h-5 w-32" />
+                        <div className="flex items-center space-x-3 mb-2">
+                          <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-full" />
+                          <div className="flex-1">
+                            <Skeleton className="h-5 w-48 mb-2" />
+                            <Skeleton className="h-4 w-32" />
+                          </div>
                         </div>
-                        <Skeleton className="h-4 w-48 mb-1" />
-                        <Skeleton className="h-3 w-24" />
                       </div>
-                      <Skeleton className="h-6 w-20 rounded-full" />
+                      <Skeleton className="h-6 w-20" />
                     </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 pb-4 border-b">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                    </div>
+                    <Skeleton className="h-10 w-24" />
                   </div>
                 ))}
               </div>
-            ) : services.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No service requests yet</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Click on a service above to submit your first request
+            ) : bookings.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No bookings found</h3>
+                <p className="text-gray-500 mb-4">
+                  Click on "Apply Now" above to submit your first Umrah visa request
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {services.map((service) => (
+              <div className="space-y-4">
+                {bookings.map((booking) => (
                   <div
-                    key={service.id}
-                    className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                    key={booking.id}
+                    className="border rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(service.umrahVisaStatus || service.status)}
-                          <h3 className="font-semibold">
-                            {service.serviceType.replace('_', ' ').toUpperCase()}
-                          </h3>
+                    <div className="p-3 sm:p-4">
+                      {/* Header Section */}
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 space-y-3 sm:space-y-0">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                              <Building className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+                                {booking.service.party.partyName}
+                              </h3>
+                              <p className="text-xs sm:text-sm text-gray-500 truncate">{booking.service.party.email}</p>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Submitted: {format(new Date(service.submittedAt), 'PPp')}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Request ID: {service.id.substring(0, 8)}
-                        </p>
+                        <div className="sm:ml-4 flex justify-start sm:justify-end">
+                          {getStatusBadge(booking.status)}
+                        </div>
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(service.umrahVisaStatus || service.status)}`}>
-                        {(service.umrahVisaStatus || service.status).toUpperCase()}
-                      </span>
+
+                      {/* Main Info Grid */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 pb-4 border-b">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1 flex items-center">
+                            <Hash className="h-3 w-3 mr-1" />
+                            Group Number
+                          </p>
+                          <p className="text-xs sm:text-sm font-medium truncate">
+                            {booking.groupNumber || (
+                              <span className="text-gray-400">Not Assigned</span>
+                            )}
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1 flex items-center">
+                            <Users className="h-3 w-3 mr-1" />
+                            Group Name
+                          </p>
+                          <p className="text-xs sm:text-sm font-medium truncate">
+                            {booking.groupName || (
+                              <span className="text-gray-400">Not Assigned</span>
+                            )}
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1 flex items-center">
+                            <Users className="h-3 w-3 mr-1" />
+                            Passengers
+                          </p>
+                          <p className="text-xs sm:text-sm font-medium">{booking.passengerCount}</p>
+                        </div>
+                        
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1 flex items-center">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            Created
+                          </p>
+                          <p className="text-xs sm:text-sm font-medium">
+                            {new Date(booking.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action Button - View Only */}
+                      <div className="flex items-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewBooking(booking.id)}
+                          className="flex items-center justify-center text-xs sm:text-sm"
+                        >
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                          View Details
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -339,6 +500,13 @@ export default function PartyDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* View Dialog */}
+      <ViewUmrahVisaDialog
+        bookingId={selectedBookingId}
+        open={viewDialogOpen}
+        onOpenChange={setViewDialogOpen}
+      />
     </div>
   );
 }
