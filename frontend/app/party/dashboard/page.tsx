@@ -85,7 +85,7 @@ export default function PartyDashboardPage() {
 
   useEffect(() => {
     if (!user || !hasRole('party')) {
-      router.push('/party-auth');
+      router.push('/');
       return;
     }
 

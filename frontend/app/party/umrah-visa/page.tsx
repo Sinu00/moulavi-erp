@@ -130,7 +130,7 @@ export default function UmrahVisaPage() {
     setUser(currentUser);
     
     if (!currentUser || !hasRole('party')) {
-      router.push('/party-auth');
+      router.push('/');
       return;
     }
 

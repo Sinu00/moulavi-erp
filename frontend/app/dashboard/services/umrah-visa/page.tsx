@@ -138,7 +138,7 @@ export default function UmrahVisaPage() {
     setUser(currentUser);
     
     if (!currentUser || !hasRole(['admin', 'staff'])) {
-      router.push('/auth');
+      router.push('/');
       return;
     }
     

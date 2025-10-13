@@ -27,7 +27,7 @@ export default function UserMasterPage() {
   // CRITICAL: Always check authentication first
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
-      router.push('/auth');
+      router.push('/');
       return;
     }
   }, [user, router]);

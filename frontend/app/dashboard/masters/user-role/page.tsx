@@ -44,7 +44,7 @@ export default function UserRoleMasterPage() {
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
-      router.push('/auth');
+      router.push('/');
       return;
     }
   }, [user, router]);

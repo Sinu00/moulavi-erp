@@ -37,12 +37,12 @@ Modern, responsive frontend for the Moulavi ERP system built with Next.js 14 and
 ## Routes
 
 ### Public
-- `/` - Home page
-- `/auth` - Admin & Staff login
-- `/party-auth` - Party login
+- `/` - Unified login page (redirects based on role)
 
 ### Protected (Admin/Staff)
 - `/dashboard` - Main dashboard
+- `/dashboard/masters/*` - Master data management pages
+- `/dashboard/services/*` - Service management pages
 
 ### Protected (Party)
 - `/party/dashboard` - Party dashboard
