@@ -458,13 +458,18 @@ router.get(
                   partyName: true,
                   email: true,
                   contactNumber: true,
-                  whatsappNumber: true
+                  whatsappNumber: true,
+                  address: true,
+                  gstNumber: true,
+                  customerType: true,
+                  accountCurrency: true
                 }
               }
             }
           },
           passengers: {
-            where: { isDeleted: false }
+            where: { isDeleted: false },
+            orderBy: { isLeadPassenger: 'desc' }
           }
         },
         skip,
@@ -600,6 +605,78 @@ router.get(
     }
     
     res.json({ booking });
+  })
+);
+
+// Update group number (admin/staff only)
+router.patch(
+  '/booking/:id/group-number',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { id } = req.params;
+    const { groupNumber, groupName } = req.body;
+    
+    if (!groupNumber || !groupName) {
+      return res.status(400).json({ error: 'Group number and group name are required' });
+    }
+    
+    // Get current booking to log old values
+    const currentBooking = await prisma.umrahVisaBooking.findUnique({
+      where: { id, isDeleted: false },
+      select: { groupNumber: true, groupName: true }
+    });
+
+    if (!currentBooking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    const booking = await prisma.umrahVisaBooking.update({
+      where: { 
+        id,
+        isDeleted: false
+      },
+      data: { 
+        groupNumber,
+        groupName,
+        updatedAt: new Date()
+      },
+      include: {
+        service: {
+          include: {
+            party: {
+              select: {
+                partyName: true,
+                email: true
+              }
+            }
+          }
+        },
+        passengers: {
+          where: { isDeleted: false }
+        }
+      }
+    });
+
+    // Log group number update
+    await AuditService.logBookingUpdate(
+      id,
+      req.user!.id,
+      { 
+        groupNumber: currentBooking.groupNumber, 
+        groupName: currentBooking.groupName 
+      },
+      { groupNumber, groupName },
+      req
+    );
+    
+    // Invalidate cache
+    CacheService.invalidateBookingCache();
+    
+    res.json({ 
+      booking,
+      message: 'Group number updated successfully' 
+    });
   })
 );
 

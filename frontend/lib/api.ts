@@ -98,11 +98,11 @@ export const serviceAPI = {
   updateStatus: (id: string, status: string) =>
     api.patch(`/services/${id}/status`, { status }),
   
-  // Umrah Visa specific endpoints
-  getUmrahVisas: (params?: any) => api.get('/services/umrah-visa', { params }),
+  // Umrah Visa specific endpoints - deprecated, use umrahVisaAPI instead
+  getUmrahVisas: (params?: any) => umrahVisaAPI.getBookings(params),
   
   updateUmrahVisaStatus: (id: string, status: string) =>
-    api.patch(`/services/umrah-visa/${id}/status`, { status }),
+    umrahVisaAPI.updateBookingStatus(id, status),
   
   // Party-specific endpoints
   getPartyServices: (params?: any) => api.get('/services/party-services', { params }),
@@ -153,14 +153,15 @@ export const umrahVisaAPI = {
   updateBookingStatus: (id: string, status: string, notes?: string) =>
     api.patch(`/umrah-visa/booking/${id}/status`, { status, notes }),
   
+  updateGroupNumber: (id: string, groupNumber: string, groupName: string) =>
+    api.patch(`/umrah-visa/booking/${id}/group-number`, { groupNumber, groupName }),
+  
   deleteBooking: (id: string) => api.delete(`/umrah-visa/booking/${id}`),
   
-  getStats: (params?: any) => api.get('/umrah-visa/stats', { params }),
+  getTransportPricing: (params: any) => 
+    api.get('/umrah-visa/transport-pricing', { params }),
   
-  getTransportPricing: (route: string, transportType: string, pax: number) =>
-    api.get('/umrah-visa/transport-pricing', { 
-      params: { route, transport_type: transportType, pax } 
-    }),
+  getStats: (params?: any) => api.get('/umrah-visa/stats', { params }),
 };
 
 // User Management API

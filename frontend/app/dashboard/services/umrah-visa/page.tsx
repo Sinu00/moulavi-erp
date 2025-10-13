@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
-import { serviceAPI } from '@/lib/api';
+import { umrahVisaAPI } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import ViewUmrahVisaDialog from '@/components/ViewUmrahVisaDialog';
+import AddGroupNumberDialog from '@/components/AddGroupNumberDialog';
 import { 
   Menu, 
   Search, 
@@ -24,7 +26,12 @@ import {
   AlertCircle,
   User,
   Calendar,
-  FileText
+  FileText,
+  Hash,
+  Users,
+  Building,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import {
   Select,
@@ -84,6 +91,8 @@ interface UmrahVisaBooking {
     submittedAt: string;
     createdAt: string;
     party: {
+      id: string;
+      partyName: string;
       email: string;
       contactNumber?: string;
       whatsappNumber?: string;
@@ -116,6 +125,12 @@ export default function UmrahVisaPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Dialog states
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [groupNumberDialogOpen, setGroupNumberDialogOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
 
   useEffect(() => {
     // Check authentication on client side only
@@ -141,8 +156,8 @@ export default function UmrahVisaPage() {
       const params: any = { page, limit: 10 };
       if (status && status !== 'all') params.status = status;
       
-      const response = await serviceAPI.getUmrahVisas(params);
-      setUmrahVisas(response.data.umrahVisas);
+      const response = await umrahVisaAPI.getBookings(params);
+      setUmrahVisas(response.data.bookings);
       setPagination(response.data.pagination);
     } catch (error) {
       console.error('Error loading Umrah visas:', error);
@@ -155,7 +170,7 @@ export default function UmrahVisaPage() {
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {
       setUpdatingStatus(id);
-      await serviceAPI.updateUmrahVisaStatus(id, newStatus);
+      await umrahVisaAPI.updateBookingStatus(id, newStatus);
       
       // Update local state
       setUmrahVisas(prev => 
@@ -171,6 +186,35 @@ export default function UmrahVisaPage() {
     } finally {
       setUpdatingStatus(null);
     }
+  };
+
+  const handleViewBooking = (bookingId: string) => {
+    setSelectedBookingId(bookingId);
+    setViewDialogOpen(true);
+  };
+
+  const handleAddGroupNumber = (booking: UmrahVisaBooking) => {
+    setSelectedBooking(booking);
+    setGroupNumberDialogOpen(true);
+  };
+
+  const handleDeleteBooking = async (id: string, partyName: string) => {
+    if (!confirm(`Are you sure you want to delete this booking for ${partyName}?`)) {
+      return;
+    }
+
+    try {
+      await umrahVisaAPI.deleteBooking(id);
+      toast.success('Booking deleted successfully');
+      loadUmrahVisas(pagination.page, statusFilter);
+    } catch (error: any) {
+      console.error('Error deleting booking:', error);
+      toast.error(error?.response?.data?.error || 'Failed to delete booking');
+    }
+  };
+
+  const handleGroupNumberSuccess = () => {
+    loadUmrahVisas(pagination.page, statusFilter);
   };
 
   const getStatusBadge = (status: string) => {
@@ -374,61 +418,151 @@ export default function UmrahVisaPage() {
                     return (
                     <div
                       key={booking.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                      className="border rounded-lg hover:bg-gray-50 transition-colors"
                     >
-                      <div className="flex items-center space-x-4 flex-1">
-                        <div className="flex-shrink-0">
-                          <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <User className="h-6 w-6 text-indigo-600" />
+                      <div className="p-3 sm:p-4">
+                        {/* Header Section */}
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 space-y-3 sm:space-y-0">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3 mb-2">
+                              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                                <Building className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+                                  {booking.service.party.partyName}
+                                </h3>
+                                <p className="text-xs sm:text-sm text-gray-500 truncate">{booking.service.party.email}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="sm:ml-4 flex justify-start sm:justify-end">
+                            {getStatusBadge(booking.status)}
                           </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <h3 className="text-sm font-medium text-gray-900 truncate">
-                              {leadPassenger?.fullName || 'N/A'}
-                            </h3>
-                            <span className="text-xs text-gray-500">•</span>
-                            <span className="text-xs text-gray-500">{leadPassenger?.gender || 'N/A'}</span>
+
+                        {/* Main Info Grid */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 pb-4 border-b">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1 flex items-center">
+                              <Hash className="h-3 w-3 mr-1" />
+                              Group Number
+                            </p>
+                            <p className="text-xs sm:text-sm font-medium truncate">
+                              {booking.groupNumber || (
+                                <span className="text-gray-400">Not Assigned</span>
+                              )}
+                            </p>
                           </div>
-                          <div className="flex items-center space-x-2 mb-1">
-                            <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                              {booking.groupName || booking.service.party.email}
-                            </span>
+                          
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1 flex items-center">
+                              <Users className="h-3 w-3 mr-1" />
+                              Group Name
+                            </p>
+                            <p className="text-xs sm:text-sm font-medium truncate">
+                              {booking.groupName || (
+                                <span className="text-gray-400">Not Assigned</span>
+                              )}
+                            </p>
                           </div>
-                          <div className="flex items-center space-x-4 text-xs text-gray-500">
-                            <span className="flex items-center">
-                              <FileText className="h-3 w-3 mr-1" />
-                              {leadPassenger?.passportNumber || 'N/A'}
-                            </span>
-                            <span className="flex items-center">
+                          
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1 flex items-center">
+                              <Users className="h-3 w-3 mr-1" />
+                              Passengers
+                            </p>
+                            <p className="text-xs sm:text-sm font-medium">{booking.passengerCount}</p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1 flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
-                              {booking.arrivalDate ? new Date(booking.arrivalDate).toLocaleDateString() : 'N/A'}
-                            </span>
-                            <span className="flex items-center">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              {booking.departureDate ? new Date(booking.departureDate).toLocaleDateString() : 'N/A'}
-                            </span>
+                              Created
+                            </p>
+                            <p className="text-xs sm:text-sm font-medium">
+                              {new Date(booking.createdAt).toLocaleDateString()}
+                            </p>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        {getStatusBadge(booking.status)}
-                        <Select
-                          value={booking.status}
-                          onValueChange={(value) => handleStatusUpdate(booking.id, value)}
-                          disabled={updatingStatus === booking.id}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="processing">Processing</SelectItem>
-                            <SelectItem value="approved">Approved</SelectItem>
-                            <SelectItem value="rejected">Rejected</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                          </SelectContent>
-                        </Select>
+
+                        {/* Action Buttons - Mobile Optimized */}
+                        <div className="space-y-3">
+                          {/* First Row: Primary Actions */}
+                          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleAddGroupNumber(booking)}
+                              className="flex items-center justify-center text-xs sm:text-sm"
+                            >
+                              {booking.groupNumber ? (
+                                <>
+                                  <Edit className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Update Group</span>
+                                  <span className="sm:hidden">Update</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Add Group</span>
+                                  <span className="sm:hidden">Add</span>
+                                </>
+                              )}
+                            </Button>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewBooking(booking.id)}
+                              className="flex items-center justify-center text-xs sm:text-sm"
+                            >
+                              <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              View
+                            </Button>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/dashboard/services/umrah-visa/edit/${booking.id}`)}
+                              className="flex items-center justify-center text-xs sm:text-sm"
+                            >
+                              <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              Edit
+                            </Button>
+                            
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteBooking(booking.id, booking.service.party.partyName)}
+                              className="flex items-center justify-center text-xs sm:text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              Delete
+                            </Button>
+                          </div>
+                          
+                          {/* Second Row: Status Selector */}
+                          <div className="flex items-center">
+                            <span className="text-xs text-gray-500 mr-2 sm:mr-3">Status:</span>
+                            <Select
+                              value={booking.status}
+                              onValueChange={(value) => handleStatusUpdate(booking.id, value)}
+                              disabled={updatingStatus === booking.id}
+                            >
+                              <SelectTrigger className="w-full sm:w-40 h-8 text-xs sm:text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="processing">Processing</SelectItem>
+                                <SelectItem value="approved">Approved</SelectItem>
+                                <SelectItem value="rejected">Rejected</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     );
@@ -438,18 +572,19 @@ export default function UmrahVisaPage() {
 
               {/* Pagination */}
               {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6">
-                  <div className="text-sm text-gray-500">
+                <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-3">
+                  <div className="text-xs sm:text-sm text-gray-500 order-2 sm:order-1">
                     Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
                     {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
                     {pagination.total} results
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-2 order-1 sm:order-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => loadUmrahVisas(pagination.page - 1, statusFilter)}
                       disabled={pagination.page === 1 || loading}
+                      className="text-xs sm:text-sm"
                     >
                       Previous
                     </Button>
@@ -458,6 +593,7 @@ export default function UmrahVisaPage() {
                       size="sm"
                       onClick={() => loadUmrahVisas(pagination.page + 1, statusFilter)}
                       disabled={pagination.page === pagination.totalPages || loading}
+                      className="text-xs sm:text-sm"
                     >
                       Next
                     </Button>
@@ -468,6 +604,20 @@ export default function UmrahVisaPage() {
           </Card>
         </div>
       </div>
+
+      {/* Dialogs */}
+      <ViewUmrahVisaDialog
+        bookingId={selectedBookingId}
+        open={viewDialogOpen}
+        onOpenChange={setViewDialogOpen}
+      />
+      
+      <AddGroupNumberDialog
+        booking={selectedBooking}
+        open={groupNumberDialogOpen}
+        onOpenChange={setGroupNumberDialogOpen}
+        onSuccess={handleGroupNumberSuccess}
+      />
     </div>
   );
 }
