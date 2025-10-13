@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,198 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String         @db.VarChar(255)
+  email          String         @unique @db.VarChar(255)
+  password       String         @db.VarChar(255)
+  role           UserRole
+  isActive       Boolean        @default(true) @map("is_active")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  createdParties Party[]        @relation("CreatedBy")
+  party          Party?         @relation("PartyUser")
+  refreshTokens  RefreshToken[]
+  statusHistory BookingStatusHistory[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Party {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partyName       String          @map("party_name") @db.VarChar(255)
+  email           String          @unique @db.VarChar(255)
+  contactNumber   String?         @map("contact_number") @db.VarChar(20)
+  whatsappNumber  String?         @map("whatsapp_number") @db.VarChar(20)
+  address         String?
+  gstNumber       String?         @map("gst_number") @db.VarChar(50)
+  customerType    CustomerType    @map("customer_type")
+  accountCurrency AccountCurrency @map("account_currency")
+  isSupplier      Boolean         @default(false) @map("is_supplier")
+  isCustomer      Boolean         @default(true) @map("is_customer")
+  loginRequired   Boolean         @default(false) @map("login_required")
+  userId          String?         @unique @map("user_id") @db.Uuid
+  createdBy       String          @map("created_by") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  creator         User            @relation("CreatedBy", fields: [createdBy], references: [id])
+  user            User?           @relation("PartyUser", fields: [userId], references: [id])
+  services        Service[]
+  limits          PartyLimits?
+
+  @@index([email])
+  @@index([partyName])
+  @@index([customerType])
+  @@index([userId])
+  @@map("parties")
+}
+
+model Service {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceType      String            @map("service_type") @db.VarChar(50)
+  partyId          String            @map("party_id") @db.Uuid
+  status           ServiceStatus     @default(pending)
+  submittedAt      DateTime          @default(now()) @map("submitted_at") @db.Timestamp(6)
+  details          Json?
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  documents        Document[]
+  party            Party             @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  umrahVisaBooking UmrahVisaBooking?
+
+  @@index([partyId])
+  @@index([serviceType])
+  @@index([status])
+  @@map("services")
+}
+
+
+model UmrahVisaBooking {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceId         String            @unique @map("service_id") @db.Uuid
+  bookingMode       BookingMode       @map("booking_mode")
+  groupNumber       String?           @map("group_number") @db.VarChar(100)
+  groupName         String?           @map("group_name") @db.VarChar(255)
+  flightNumber      String            @map("flight_number") @db.VarChar(50)
+  arrivalDate       DateTime          @map("arrival_date") @db.Date
+  departureDate     DateTime          @map("departure_date") @db.Date
+  arrivalAirport    String            @map("arrival_airport") @db.VarChar(100)
+  transportRoute    String?           @map("transport_route") @db.VarChar(100)
+  transportType     String?           @map("transport_type") @db.VarChar(50)
+  transportPax      Int?              @map("transport_pax")
+  transportPrice    Decimal?          @map("transport_price") @db.Decimal(10, 2)
+  accommodationType AccommodationType @map("accommodation_type")
+  makkahCheckIn     DateTime?         @map("makkah_checkin") @db.Date
+  makkahCheckOut    DateTime?         @map("makkah_checkout") @db.Date
+  madinaCheckIn     DateTime?         @map("madina_checkin") @db.Date
+  madinaCheckOut    DateTime?         @map("madina_checkout") @db.Date
+  iqamaNumber       String?           @map("iqama_number") @db.VarChar(50)
+  iqamaName         String?           @map("iqama_name") @db.VarChar(255)
+  iqamaDob          DateTime?         @map("iqama_dob") @db.Date
+  iqamaMobile       String?           @map("iqama_mobile") @db.VarChar(20)
+  passengerCount    Int               @map("passenger_count")
+  status            UmrahVisaStatus   @default(pending)
+  isDeleted         Boolean           @default(false) @map("is_deleted")
+  deletedAt         DateTime?         @map("deleted_at") @db.Timestamp(6)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  passengers        UmrahPassenger[]
+  service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  statusHistory     BookingStatusHistory[]
+
+  @@index([serviceId])
+  @@index([status])
+  @@index([arrivalDate])
+  @@index([departureDate])
+  @@index([bookingMode])
+  @@index([accommodationType])
+  @@index([isDeleted])
+  @@index([createdAt])
+  // @@unique([groupNumber], map: "unique_group_number")
+  // @@unique([flightNumber, arrivalDate, departureDate], map: "unique_flight_booking")
+  @@map("umrah_visa_bookings")
+}
+
+model UmrahPassenger {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId       String           @map("booking_id") @db.Uuid
+  isLeadPassenger Boolean          @default(false) @map("is_lead_passenger")
+  fullName        String           @map("full_name") @db.VarChar(255)
+  passportNumber  String           @map("passport_number") @db.VarChar(50)
+  nationality     String           @db.VarChar(100)
+  passportExpiry  DateTime         @map("passport_expiry") @db.Date
+  dateOfBirth     DateTime         @map("date_of_birth") @db.Date
+  gender          Gender
+  phoneNumber     String?          @map("phone_number") @db.VarChar(20)
+  isDeleted       Boolean          @default(false) @map("is_deleted")
+  deletedAt       DateTime?        @map("deleted_at") @db.Timestamp(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt       DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  booking         UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([isLeadPassenger])
+  @@index([isDeleted])
+  @@index([passportNumber])
+  @@index([nationality])
+  @@map("umrah_passengers")
+}
+
+model TransportPricing {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routeId       String   @map("route_id") @db.VarChar(100)
+  transportType String   @map("transport_type") @db.VarChar(50)
+  paxCount      Int      @map("pax_count")
+  price         Decimal  @db.Decimal(10, 2)
+  validFrom     DateTime @map("valid_from") @db.Timestamp(6)
+  validTo       DateTime? @map("valid_to") @db.Timestamp(6)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  
+  @@map("transport_pricing")
+  @@index([routeId, transportType, paxCount])
+  @@index([isActive])
+  @@index([validFrom, validTo])
+}
+
+model Document {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceId    String   @map("service_id") @db.Uuid
+  documentType String   @map("document_type") @db.VarChar(100)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  filePath     String   @map("file_path") @db.VarChar(500)
+  fileSize     Int?
+  mimeType     String?  @map("mime_type") @db.VarChar(100)
+  uploadedAt   DateTime @default(now()) @map("uploaded_at") @db.Timestamp(6)
+  passengerId  String?  @map("passenger_id") @db.Uuid
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamp(6)
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@index([passengerId])
+  @@index([documentType])
+  @@index([isDeleted])
+  @@map("documents")
+}
+
+model RefreshToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamp(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
 }
 
 enum UserRole {
@@ -40,6 +229,7 @@ enum UmrahVisaStatus {
   approved
   rejected
   completed
+  cancelled
 }
 
 enum Gender {
@@ -47,131 +237,240 @@ enum Gender {
   female
 }
 
-model User {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name       String   @db.VarChar(255)
-  email      String   @unique @db.VarChar(255)
-  password   String   @db.VarChar(255)
-  role       UserRole
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp
-
-  // Relations
-  createdParties     Party[]        @relation("CreatedBy")
-  party              Party?         @relation("PartyUser")
-  refreshTokens      RefreshToken[]
-
-  @@map("users")
-  @@index([email])
-  @@index([role])
+enum BookingMode {
+  group_number
+  travel_documents
 }
 
-model Party {
-  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  partyName       String          @map("party_name") @db.VarChar(255)
-  email           String          @unique @db.VarChar(255)
-  contactNumber   String?         @map("contact_number") @db.VarChar(20)
-  whatsappNumber  String?         @map("whatsapp_number") @db.VarChar(20)
-  address         String?         @db.Text
-  gstNumber       String?         @map("gst_number") @db.VarChar(50)
-  customerType    CustomerType    @map("customer_type")
-  accountCurrency AccountCurrency @map("account_currency")
-  isSupplier      Boolean         @default(false) @map("is_supplier")
-  isCustomer      Boolean         @default(true) @map("is_customer")
-  loginRequired   Boolean         @default(false) @map("login_required")
-  userId          String?         @unique @map("user_id") @db.Uuid
-  createdBy       String          @map("created_by") @db.Uuid
-  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamp
-  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamp
-
-  // Relations
-  user            User?           @relation("PartyUser", fields: [userId], references: [id], onDelete: SetNull)
-  creator         User            @relation("CreatedBy", fields: [createdBy], references: [id])
-  services        Service[]
-
-  @@map("parties")
-  @@index([email])
-  @@index([partyName])
-  @@index([customerType])
-  @@index([userId])
+enum AccommodationType {
+  hotel
+  iqama
 }
 
-model Service {
-  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  serviceType String        @map("service_type") @db.VarChar(50)
-  partyId     String        @map("party_id") @db.Uuid
-  status      ServiceStatus @default(pending)
-  submittedAt DateTime      @default(now()) @map("submitted_at") @db.Timestamp
-  details     Json?
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamp
-  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamp
-
-  // Relations
-  party            Party            @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  umrahVisaDetails UmrahVisaDetail[]
-  documents        Document[]
-
-  @@map("services")
-  @@index([partyId])
-  @@index([serviceType])
-  @@index([status])
+// Status History Tracking
+model BookingStatusHistory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId   String   @map("booking_id") @db.Uuid
+  oldStatus   String?  @map("old_status") @db.VarChar(50)
+  newStatus   String   @map("new_status") @db.VarChar(50)
+  changedBy   String   @map("changed_by") @db.Uuid
+  reason      String?  @db.VarChar(500)
+  changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamp
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamp
+  
+  booking     UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user        User @relation(fields: [changedBy], references: [id])
+  
+  @@map("booking_status_history")
+  @@index([bookingId])
+  @@index([changedBy])
+  @@index([changedAt])
 }
 
-model UmrahVisaDetail {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  serviceId      String           @map("service_id") @db.Uuid
-  fullName       String           @map("full_name") @db.VarChar(255)
-  passportNumber String           @map("passport_number") @db.VarChar(50)
-  nationality    String           @db.VarChar(100)
-  travelDateFrom DateTime         @map("travel_date_from") @db.Date
-  travelDateTo   DateTime         @map("travel_date_to") @db.Date
-  passportExpiry DateTime         @map("passport_expiry") @db.Date
-  dateOfBirth    DateTime         @map("date_of_birth") @db.Date
-  gender         Gender?
-  phoneNumber    String?          @map("phone_number") @db.VarChar(20)
-  status         UmrahVisaStatus  @default(pending)
-  partyName      String?          @map("party_name") @db.VarChar(255)
-  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamp
-  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp
-
-  // Relations
-  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-
-  @@map("umrah_visa_details")
-  @@index([serviceId])
-  @@index([status])
-  @@index([partyName])
+// Audit Trail for all changes
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType  String   @map("entity_type") @db.VarChar(50) // 'booking', 'passenger', 'document'
+  entityId    String   @map("entity_id") @db.Uuid
+  action      String   @db.VarChar(50) // 'create', 'update', 'delete'
+  oldValues   Json?    @map("old_values")
+  newValues   Json?    @map("new_values")
+  changedBy   String   @map("changed_by") @db.Uuid
+  changedAt   DateTime @default(now()) @map("changed_at") @db.Timestamp
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent") @db.Text
+  
+  user        User @relation(fields: [changedBy], references: [id])
+  
+  @@map("audit_logs")
+  @@index([entityType, entityId])
+  @@index([changedBy])
+  @@index([changedAt])
 }
 
-model Document {
+
+// Party-specific limits
+model PartyLimits {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partyId             String   @unique @map("party_id") @db.Uuid
+  maxPassengers       Int      @default(50) @map("max_passengers")
+  maxPassengersIqama  Int      @default(5) @map("max_passengers_iqama")
+  maxTravelDays       Int      @default(80) @map("max_travel_days")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+  
+  party               Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  
+  @@map("party_limits")
+}
+
+// Cancellation Policies
+model CancellationPolicy {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String   @db.VarChar(100)
+  daysBeforeTravel  Int      @map("days_before_travel")
+  cancellationFee   Decimal  @map("cancellation_fee") @db.Decimal(10, 2)
+  refundPercentage  Decimal  @map("refund_percentage") @db.Decimal(5, 2)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+  
+  @@map("cancellation_policies")
+  @@index([isActive])
+  @@index([daysBeforeTravel])
+}
+
+// Transport Master
+model TransportMaster {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  serviceId    String   @map("service_id") @db.Uuid
-  documentType String   @map("document_type") @db.VarChar(100)
-  fileName     String   @map("file_name") @db.VarChar(255)
-  filePath     String   @map("file_path") @db.VarChar(500)
-  fileSize     Int?
-  mimeType     String?  @map("mime_type") @db.VarChar(100)
-  uploadedAt   DateTime @default(now()) @map("uploaded_at") @db.Timestamp
+  vehicleRoute String   @map("vehicle_route") @db.VarChar(100)
+  vehicleType  String   @map("vehicle_type") @db.VarChar(50)
+  pax          Int
+  price        Decimal  @db.Decimal(10, 2)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  // Relations
-  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-
-  @@map("documents")
-  @@index([serviceId])
+  @@unique([vehicleRoute, vehicleType, pax])
+  @@index([vehicleRoute])
+  @@index([vehicleType])
+  @@index([isActive])
+  @@map("transport_masters")
 }
 
-model RefreshToken {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  token     String   @unique @db.Text
-  expiresAt DateTime @map("expires_at") @db.Timestamp
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+model CountryMaster {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  countryCode String   @unique @map("country_code") @db.VarChar(3)
+  countryName String   @map("country_name") @db.VarChar(100)
+  nationality String   @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
 
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("refresh_tokens")
-  @@index([userId])
-  @@index([token])
+  @@index([countryCode])
+  @@index([countryName])
+  @@index([nationality])
+  @@index([isActive])
+  @@map("country_masters")
 }
+
+model CurrencyMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  currencyCode String   @unique @map("currency_code") @db.VarChar(3)
+  currencyName String   @map("currency_name") @db.VarChar(50)
+  symbol       String   @db.VarChar(10)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([currencyCode])
+  @@index([currencyName])
+  @@index([isActive])
+  @@map("currency_masters")
+}
+
+model DestinationMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  destinationCode String @unique @map("destination_code") @db.VarChar(10)
+  destinationName String @map("destination_name") @db.VarChar(100)
+  city         String   @db.VarChar(100)
+  country      String   @db.VarChar(100)
+  description  String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  hotels       HotelMaster[]
+  fromRoutes   AirportRouteMaster[] @relation("FromDestination")
+  toRoutes     AirportRouteMaster[] @relation("ToDestination")
+
+  @@index([destinationCode])
+  @@index([destinationName])
+  @@index([city])
+  @@index([isActive])
+  @@map("destination_masters")
+}
+
+model HotelMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hotelCode    String   @unique @map("hotel_code") @db.VarChar(20)
+  hotelName    String   @map("hotel_name") @db.VarChar(255)
+  destinationId String   @map("destination_id") @db.Uuid
+  category     String   @db.VarChar(50) // 3-star, 4-star, 5-star, etc.
+  capacity     Int      // Total room capacity
+  amenities    String[] // Array of amenities
+  description  String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  destination  DestinationMaster @relation(fields: [destinationId], references: [id])
+
+  @@index([hotelCode])
+  @@index([hotelName])
+  @@index([destinationId])
+  @@index([category])
+  @@index([isActive])
+  @@map("hotel_masters")
+}
+
+model ServiceTypeMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceCode  String   @unique @map("service_code") @db.VarChar(20)
+  serviceName  String   @map("service_name") @db.VarChar(100)
+  category     String   @db.VarChar(50) // Visa, Travel, Accommodation, etc.
+  description  String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([serviceCode])
+  @@index([serviceName])
+  @@index([category])
+  @@index([isActive])
+  @@map("service_type_masters")
+}
+
+model UserRoleMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleCode     String   @unique @map("role_code") @db.VarChar(20)
+  roleName     String   @map("role_name") @db.VarChar(100)
+  permissions  String[] // Array of permissions
+  description  String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([roleCode])
+  @@index([roleName])
+  @@index([isActive])
+  @@map("user_role_masters")
+}
+
+model AirportRouteMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routeCode    String   @unique @map("route_code") @db.VarChar(20)
+  routeName    String   @map("route_name") @db.VarChar(100)
+  fromAirport  String   @map("from_airport") @db.VarChar(100)
+  toAirport    String   @map("to_airport") @db.VarChar(100)
+  fromDestinationId String? @map("from_destination_id") @db.Uuid
+  toDestinationId   String? @map("to_destination_id") @db.Uuid
+  description  String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  fromDestination DestinationMaster? @relation("FromDestination", fields: [fromDestinationId], references: [id])
+  toDestination   DestinationMaster? @relation("ToDestination", fields: [toDestinationId], references: [id])
+
+  @@index([routeCode])
+  @@index([routeName])
+  @@index([fromAirport])
+  @@index([toAirport])
+  @@index([fromDestinationId])
+  @@index([toDestinationId])
+  @@index([isActive])
+  @@map("airport_route_masters")
+}
+

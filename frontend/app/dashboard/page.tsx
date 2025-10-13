@@ -206,8 +206,15 @@ export default function DashboardPage() {
       {/* Create Party Dialog */}
       <CreatePartyDialog
         open={showCreateDialog}
-        onClose={() => setShowCreateDialog(false)}
-        onSuccess={handlePartyCreated}
+        onOpenChange={setShowCreateDialog}
+        onSubmit={async (partyData) => {
+          try {
+            await partyAPI.create(partyData);
+            handlePartyCreated();
+          } catch (error) {
+            throw error; // Re-throw to let the dialog handle the error display
+          }
+        }}
       />
     </div>
   );

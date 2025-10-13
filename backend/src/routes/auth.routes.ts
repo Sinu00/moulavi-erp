@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { body } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
@@ -22,7 +22,18 @@ const loginValidation = [
 
 // Login endpoint
 router.post('/login', loginValidation, asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Check validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ 
+      error: 'Validation failed', 
+      details: errors.array() 
+    });
+  }
+
   const { email, password } = req.body;
+  
+  console.log(`[Auth] Login attempt for email: ${email}`);
   
   // Find user
   const user = await prisma.user.findUnique({
@@ -30,8 +41,11 @@ router.post('/login', loginValidation, asyncHandler(async (req: AuthRequest, res
   });
   
   if (!user) {
+    console.log(`[Auth] User not found for email: ${email}`);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  
+  console.log(`[Auth] User found: ${user.name} (${user.role}), isActive: ${user.isActive}`);
   
   // Check if user is active
   if (!user.isActive) {
@@ -40,7 +54,10 @@ router.post('/login', loginValidation, asyncHandler(async (req: AuthRequest, res
   
   // Verify password
   const isPasswordValid = await comparePassword(password, user.password);
+  console.log(`[Auth] Password validation result: ${isPasswordValid}`);
+  
   if (!isPasswordValid) {
+    console.log(`[Auth] Invalid password for user: ${email}`);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   

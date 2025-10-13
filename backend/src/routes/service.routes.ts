@@ -74,25 +74,38 @@ router.post(
         }
       });
       
-      // Create Umrah visa details
-      const visaDetails = await tx.umrahVisaDetail.create({
+      // Create Umrah visa booking
+      const visaBooking = await tx.umrahVisaBooking.create({
         data: {
           serviceId: service.id,
+          bookingMode: 'group_number',
+          groupNumber: `GRP-${Date.now()}`,
+          flightNumber: 'TBD',
+          arrivalDate: new Date(travel_date_from),
+          departureDate: new Date(travel_date_to),
+          arrivalAirport: 'TBD',
+          accommodationType: 'hotel',
+          passengerCount: 1,
+          status: 'pending'
+        }
+      });
+
+      // Create passenger for the booking
+      const passenger = await tx.umrahPassenger.create({
+        data: {
+          bookingId: visaBooking.id,
+          isLeadPassenger: true,
           fullName: full_name,
           passportNumber: passport_number,
           nationality,
-          travelDateFrom: new Date(travel_date_from),
-          travelDateTo: new Date(travel_date_to),
           passportExpiry: new Date(passport_expiry),
           dateOfBirth: new Date(date_of_birth),
           gender: gender as any,
-          phoneNumber: phone_number,
-          status: 'pending',
-          partyName: party.partyName
+          phoneNumber: phone_number
         }
       });
       
-      return { service, visaDetails };
+      return { service, visaBooking, passenger };
     });
     
     // Send confirmation email
@@ -109,7 +122,8 @@ router.post(
     
     res.status(201).json({
       service: result.service,
-      details: result.visaDetails,
+      booking: result.visaBooking,
+      passenger: result.passenger,
       message: 'Umrah visa service created successfully',
     });
   })
@@ -138,8 +152,12 @@ router.get(
     }
     
     const [umrahVisas, total] = await Promise.all([
-      prisma.umrahVisaDetail.findMany({
-        where,
+      prisma.umrahVisaBooking.findMany({
+        where: {
+          service: {
+            serviceType: 'umrah_visa'
+          }
+        },
         include: {
           service: {
             include: {
@@ -151,17 +169,24 @@ router.get(
                 }
               }
             }
-          }
+          },
+          passengers: true
         },
         skip,
         take: limitNum,
         orderBy: { createdAt: 'desc' }
       }),
-      prisma.umrahVisaDetail.count({ where })
+      prisma.umrahVisaBooking.count({ 
+        where: {
+          service: {
+            serviceType: 'umrah_visa'
+          }
+        }
+      })
     ]);
     
     // Transform the data to match the expected format
-    const transformedVisas = umrahVisas.map(visa => ({
+    const transformedVisas = umrahVisas.map((visa: any) => ({
       ...visa,
       service_id: visa.service.id,
       service_status: visa.service.status,
@@ -169,7 +194,8 @@ router.get(
       service_created_at: visa.service.createdAt,
       party_email: visa.service.party.email,
       contact_number: visa.service.party.contactNumber,
-      whatsapp_number: visa.service.party.whatsappNumber
+      whatsapp_number: visa.service.party.whatsappNumber,
+      passengers: visa.passengers
     }));
     
     res.json({
@@ -278,12 +304,12 @@ router.get(
       return res.json({ services: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0 } });
     }
     
-    // Get services with Umrah visa details
+    // Get services with Umrah visa booking
     const [services, total] = await Promise.all([
       prisma.service.findMany({
         where: { partyId: userParty.id },
         include: {
-          umrahVisaDetails: true,
+          umrahVisaBooking: true,
           documents: {
             select: {
               id: true,
@@ -302,13 +328,13 @@ router.get(
     
     // Transform the data to include Umrah visa status
     const transformedServices = services.map(service => {
-      const umrahVisaDetail = service.umrahVisaDetails[0]; // Get first Umrah visa detail
+      const umrahVisaBooking = service.umrahVisaBooking; // Get Umrah visa booking
       
       return {
         ...service,
         // Include Umrah visa status if available
-        umrahVisaStatus: umrahVisaDetail?.status || service.status,
-        umrahVisaDetail: umrahVisaDetail || null,
+        umrahVisaStatus: umrahVisaBooking?.status || service.status,
+        umrahVisaBooking: umrahVisaBooking || null,
         documents: service.documents
       };
     });
@@ -342,7 +368,7 @@ router.get(
             contactNumber: true
           }
         },
-        umrahVisaDetails: true,
+        umrahVisaBooking: true,
         documents: true
       }
     });
@@ -373,8 +399,8 @@ router.get(
     
     // Get service-specific details
     let details = null;
-    if (service.serviceType === 'umrah_visa' && service.umrahVisaDetails.length > 0) {
-      details = service.umrahVisaDetails[0];
+    if (service.serviceType === 'umrah_visa' && service.umrahVisaBooking) {
+      details = service.umrahVisaBooking;
     }
     
     res.json({
@@ -398,7 +424,7 @@ router.patch(
       return res.status(400).json({ error: 'Invalid status' });
     }
     
-    const umrahVisa = await prisma.umrahVisaDetail.update({
+    const umrahVisa = await prisma.umrahVisaBooking.update({
       where: { id },
       data: { status: status as any }
     });

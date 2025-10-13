@@ -23,8 +23,12 @@ import {
   Receipt,
   TrendingUp,
   XCircle,
+  DollarSign,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Building,
+  Shield,
+  Truck
 } from 'lucide-react';
 import { getUser, removeUser } from '@/lib/auth';
 import { authAPI } from '@/lib/api';
@@ -75,10 +79,17 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   const masterItems = [
     { name: 'User Master', icon: User, path: '/dashboard/masters/user' },
     { name: 'Country Master', icon: MapPin, path: '/dashboard/masters/country' },
+    { name: 'Currency Master', icon: DollarSign, path: '/dashboard/masters/currency' },
+    { name: 'Destination Master', icon: MapPin, path: '/dashboard/masters/destination' },
+    { name: 'Hotel Master', icon: Building, path: '/dashboard/masters/hotel' },
+    { name: 'Service Type Master', icon: Settings, path: '/dashboard/masters/service-type' },
+    { name: 'User Role Master', icon: Shield, path: '/dashboard/masters/user-role' },
+    { name: 'Airport Route Master', icon: Plane, path: '/dashboard/masters/airport-route' },
+    { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
+    { name: 'Transport Master', icon: Truck, path: '/dashboard/masters/transport' },
     { name: 'Wakala Master', icon: Building2, path: '/dashboard/masters/wakala' },
     { name: 'Doc Types Master', icon: FileType, path: '/dashboard/masters/doc-types' },
     { name: 'Post Category Master', icon: Tag, path: '/dashboard/masters/post-category' },
-    { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
     { name: 'Visa Master', icon: Award, path: '/dashboard/masters/visa' },
     { name: 'Bank Master', icon: CreditCard, path: '/dashboard/masters/bank' },
     { name: 'Certificate Master', icon: Award, path: '/dashboard/masters/certificate' },
@@ -277,7 +288,16 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                     <button
                       key={item.name}
                       onClick={() => {
-                        if (item.path === '/dashboard/masters/user' || item.path === '/dashboard/masters/party') {
+                        if (item.path === '/dashboard/masters/user' || 
+                            item.path === '/dashboard/masters/party' || 
+                            item.path === '/dashboard/masters/transport' || 
+                            item.path === '/dashboard/masters/country' || 
+                            item.path === '/dashboard/masters/currency' ||
+                            item.path === '/dashboard/masters/destination' ||
+                            item.path === '/dashboard/masters/hotel' ||
+                            item.path === '/dashboard/masters/service-type' ||
+                            item.path === '/dashboard/masters/user-role' ||
+                            item.path === '/dashboard/masters/airport-route') {
                           router.push(item.path);
                         } else {
                           toast.info(`${item.name} coming soon`);

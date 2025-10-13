@@ -110,10 +110,13 @@ export const serviceAPI = {
 
 // Upload API
 export const uploadAPI = {
-  uploadDocument: (serviceId: string, file: File, documentType: string) => {
+  uploadDocument: (serviceId: string, file: File, documentType: string, passengerId?: string) => {
     const formData = new FormData();
     formData.append('document', file);
     formData.append('document_type', documentType);
+    if (passengerId) {
+      formData.append('passenger_id', passengerId);
+    }
     
     return api.post(`/upload/service/${serviceId}`, formData, {
       headers: {
@@ -122,7 +125,42 @@ export const uploadAPI = {
     });
   },
   
+  uploadPassengerDocuments: (bookingId: string, passengerId: string, files: File[], documentTypes: string[]) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('documents', file));
+    formData.append('document_types', JSON.stringify(documentTypes));
+    
+    return api.post(`/upload/booking/${bookingId}/passenger/${passengerId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  
   deleteDocument: (documentId: string) => api.delete(`/upload/${documentId}`),
+};
+
+// Umrah Visa Booking API
+export const umrahVisaAPI = {
+  createBooking: (data: any) => api.post('/umrah-visa/booking', data),
+  
+  getBookings: (params?: any) => api.get('/umrah-visa/bookings', { params }),
+  
+  getPartyBookings: (params?: any) => api.get('/umrah-visa/party-bookings', { params }),
+  
+  getBookingById: (id: string) => api.get(`/umrah-visa/booking/${id}`),
+  
+  updateBookingStatus: (id: string, status: string, notes?: string) =>
+    api.patch(`/umrah-visa/booking/${id}/status`, { status, notes }),
+  
+  deleteBooking: (id: string) => api.delete(`/umrah-visa/booking/${id}`),
+  
+  getStats: (params?: any) => api.get('/umrah-visa/stats', { params }),
+  
+  getTransportPricing: (route: string, transportType: string, pax: number) =>
+    api.get('/umrah-visa/transport-pricing', { 
+      params: { route, transport_type: transportType, pax } 
+    }),
 };
 
 // User Management API
@@ -136,5 +174,97 @@ export const userAPI = {
   update: (id: string, data: any) => api.put(`/users/${id}`, data),
   
   delete: (id: string) => api.delete(`/users/${id}`),
+};
+
+// Transport Master API
+export const transportMasterAPI = {
+  create: (data: any) => api.post('/transport-masters', data),
+  
+  getAll: (params?: any) => api.get('/transport-masters', { params }),
+  
+  getById: (id: string) => api.get(`/transport-masters/${id}`),
+  
+  getByRoute: (route: string) => api.get(`/transport-masters/by-route/${route}`),
+  
+  getPricing: (route: string, vehicleType: string, pax: number) =>
+    api.get('/transport-masters/pricing', { 
+      params: { route, vehicleType, pax } 
+    }),
+  
+  update: (id: string, data: any) => api.put(`/transport-masters/${id}`, data),
+  
+  delete: (id: string) => api.delete(`/transport-masters/${id}`),
+  
+  toggleStatus: (id: string) => api.patch(`/transport-masters/${id}/toggle-status`),
+};
+
+export const countryMasterAPI = {
+  create: (data: any) => api.post('/country-masters', data),
+  getAll: (params?: any) => api.get('/country-masters', { params }),
+  getActive: () => api.get('/country-masters/active'),
+  getById: (id: string) => api.get(`/country-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/country-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/country-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/country-masters/${id}/toggle-status`),
+};
+
+export const currencyMasterAPI = {
+  create: (data: any) => api.post('/currency-masters', data),
+  getAll: (params?: any) => api.get('/currency-masters', { params }),
+  getActive: () => api.get('/currency-masters/active'),
+  getById: (id: string) => api.get(`/currency-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/currency-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/currency-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/currency-masters/${id}/toggle-status`),
+};
+
+export const destinationMasterAPI = {
+  create: (data: any) => api.post('/destination-masters', data),
+  getAll: (params?: any) => api.get('/destination-masters', { params }),
+  getActive: () => api.get('/destination-masters/active'),
+  getById: (id: string) => api.get(`/destination-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/destination-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/destination-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/destination-masters/${id}/toggle-status`),
+};
+
+export const hotelMasterAPI = {
+  create: (data: any) => api.post('/hotel-masters', data),
+  getAll: (params?: any) => api.get('/hotel-masters', { params }),
+  getByDestination: (destinationId: string, params?: any) => api.get(`/hotel-masters/by-destination/${destinationId}`, { params }),
+  getById: (id: string) => api.get(`/hotel-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/hotel-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/hotel-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/hotel-masters/${id}/toggle-status`),
+};
+
+export const serviceTypeMasterAPI = {
+  create: (data: any) => api.post('/service-type-masters', data),
+  getAll: (params?: any) => api.get('/service-type-masters', { params }),
+  getActive: (params?: any) => api.get('/service-type-masters/active', { params }),
+  getById: (id: string) => api.get(`/service-type-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/service-type-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/service-type-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/service-type-masters/${id}/toggle-status`),
+};
+
+export const userRoleMasterAPI = {
+  create: (data: any) => api.post('/user-role-masters', data),
+  getAll: (params?: any) => api.get('/user-role-masters', { params }),
+  getActive: () => api.get('/user-role-masters/active'),
+  getById: (id: string) => api.get(`/user-role-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/user-role-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/user-role-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/user-role-masters/${id}/toggle-status`),
+};
+
+export const airportRouteMasterAPI = {
+  create: (data: any) => api.post('/airport-route-masters', data),
+  getAll: (params?: any) => api.get('/airport-route-masters', { params }),
+  getActive: (params?: any) => api.get('/airport-route-masters/active', { params }),
+  getById: (id: string) => api.get(`/airport-route-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/airport-route-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/airport-route-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/airport-route-masters/${id}/toggle-status`),
 };
 

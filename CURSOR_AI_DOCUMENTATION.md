@@ -6,10 +6,11 @@
 3. [Backend API Patterns](#backend-api-patterns)
 4. [Frontend Architecture](#frontend-architecture)
 5. [Step-by-Step Implementation Guides](#step-by-step-implementation-guides)
-6. [Common Issues & Solutions](#common-issues--solutions)
-7. [Code Conventions & Best Practices](#code-conventions--best-practices)
-8. [Testing & Debugging](#testing--debugging)
-9. [Quick Reference](#quick-reference)
+6. [Umrah Visa Booking System](#umrah-visa-booking-system)
+7. [Common Issues & Solutions](#common-issues--solutions)
+8. [Code Conventions & Best Practices](#code-conventions--best-practices)
+9. [Testing & Debugging](#testing--debugging)
+10. [Quick Reference](#quick-reference)
 
 ---
 
@@ -1032,6 +1033,614 @@ export default function UserMasterPage() {
 
 ---
 
+## Umrah Visa Booking System
+
+### Overview
+The Umrah Visa Booking system is a comprehensive multi-step booking flow that allows party users to submit Umrah visa applications with detailed passenger information, travel arrangements, and document uploads.
+
+### Key Features
+- **Dual Booking Modes**: Group number booking or travel documents booking
+- **Multi-step Form**: 6-step progressive form with validation
+- **Transport Management**: Route-based transport selection with dynamic pricing
+- **Accommodation Options**: Hotel bookings or Iqama sponsor details
+- **Passenger Management**: Support for 1-50 passengers with lead passenger designation
+- **Document Uploads**: Passenger-specific document management
+- **Real-time Validation**: Frontend and backend validation with Zod schemas
+
+### Database Schema
+
+#### Core Models
+```prisma
+enum BookingMode {
+  group_number
+  travel_documents
+}
+
+enum AccommodationType {
+  hotel
+  iqama
+}
+
+model UmrahVisaBooking {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceId         String              @unique @map("service_id") @db.Uuid
+  bookingMode       BookingMode         @map("booking_mode")
+  groupNumber       String?             @map("group_number") @db.VarChar(100)
+  groupName         String?             @map("group_name") @db.VarChar(255)
+  flightNumber      String              @map("flight_number") @db.VarChar(50)
+  arrivalDate       DateTime            @map("arrival_date") @db.Date
+  departureDate     DateTime            @map("departure_date") @db.Date
+  arrivalAirport    String              @map("arrival_airport") @db.VarChar(100)
+  transportRoute    String?             @map("transport_route") @db.VarChar(100)
+  transportType     String?             @map("transport_type") @db.VarChar(50)
+  transportPax      Int?                @map("transport_pax")
+  transportPrice    Decimal?            @map("transport_price") @db.Decimal(10, 2)
+  accommodationType AccommodationType   @map("accommodation_type")
+  makkahCheckIn     DateTime?           @map("makkah_checkin") @db.Date
+  makkahCheckOut    DateTime?           @map("makkah_checkout") @db.Date
+  madinaCheckIn     DateTime?           @map("madina_checkin") @db.Date
+  madinaCheckOut    DateTime?           @map("madina_checkout") @db.Date
+  iqamaNumber       String?             @map("iqama_number") @db.VarChar(50)
+  iqamaName         String?             @map("iqama_name") @db.VarChar(255)
+  iqamaDob          DateTime?           @map("iqama_dob") @db.Date
+  iqamaMobile       String?             @map("iqama_mobile") @db.VarChar(20)
+  passengerCount    Int                 @map("passenger_count")
+  status            UmrahVisaStatus     @default(pending)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamp
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+  
+  service           Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  passengers        UmrahPassenger[]
+  
+  @@map("umrah_visa_bookings")
+  @@index([serviceId])
+  @@index([status])
+}
+
+model UmrahPassenger {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId         String              @map("booking_id") @db.Uuid
+  isLeadPassenger   Boolean             @default(false) @map("is_lead_passenger")
+  fullName          String              @map("full_name") @db.VarChar(255)
+  passportNumber    String              @map("passport_number") @db.VarChar(50)
+  nationality       String              @db.VarChar(100)
+  passportExpiry    DateTime            @map("passport_expiry") @db.Date
+  dateOfBirth       DateTime            @map("date_of_birth") @db.Date
+  gender            Gender
+  phoneNumber       String?             @map("phone_number") @db.VarChar(20)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamp
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+  
+  booking           UmrahVisaBooking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  @@map("umrah_passengers")
+  @@index([bookingId])
+  @@index([isLeadPassenger])
+}
+```
+
+#### Document Model Enhancement
+```prisma
+model Document {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  serviceId    String   @map("service_id") @db.Uuid
+  passengerId  String?  @map("passenger_id") @db.Uuid  // New field for passenger-specific documents
+  documentType String   @map("document_type") @db.VarChar(50)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  filePath     String   @map("file_path") @db.VarChar(500)
+  fileSize     Int      @map("file_size")
+  mimeType     String   @map("mime_type") @db.VarChar(100)
+  uploadedAt   DateTime @default(now()) @map("uploaded_at") @db.Timestamp
+  
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  
+  @@map("documents")
+  @@index([serviceId])
+  @@index([passengerId])  // New index for passenger documents
+}
+```
+
+### Booking Flow Architecture
+
+#### Step 1: Booking Mode Selection
+- **Group Number Mode**: Requires group number and group name
+- **Travel Documents Mode**: Requires individual passenger documents
+
+#### Step 2: Travel Details
+- Flight number (required)
+- Arrival and departure dates (max 80 days apart)
+- Arrival airport/route selection
+
+#### Step 3: Transport Details (Conditional)
+- Required for Jeddah-based routes
+- Optional for other routes
+- Dynamic pricing based on route, transport type, and PAX
+
+#### Step 4: Accommodation Details
+- **Hotel Option**: Makkah and Madina check-in/check-out dates
+- **Iqama Option**: Sponsor details (iqama number, name, DOB, mobile)
+
+#### Step 5: Passenger Information
+- Passenger count (max 5 for iqama, unlimited for hotel)
+- Individual passenger details for each passenger
+- Exactly one lead passenger required
+
+#### Step 6: Document Upload
+- **Group Number Mode**: Only PAN card for lead passenger required
+- **Travel Documents Mode**: Passport front/back for all passengers + PAN card for lead
+
+### Configuration Files
+
+#### Backend Configuration (`backend/src/config/umrahConfig.ts`)
+```typescript
+export const ROUTE_OPTIONS: RouteOption[] = [
+  { id: 'jeddah_to_jeddah', name: 'Jeddah to Jeddah', requiresTransport: true },
+  { id: 'jeddah_to_makkah', name: 'Jeddah to Makkah', requiresTransport: true },
+  { id: 'makkah_to_jeddah', name: 'Makkah to Jeddah', requiresTransport: false },
+  // ... other routes
+];
+
+export const TRANSPORT_OPTIONS: TransportOption[] = [
+  { type: 'Lexus ES 250', paxOptions: [3], pricePerPax: { 3: 150 } },
+  { type: 'Staria', paxOptions: [8], pricePerPax: { 8: 250 } },
+  { type: 'GMC', paxOptions: [7], pricePerPax: { 7: 220 } },
+  { type: 'Hiace', paxOptions: [10], pricePerPax: { 10: 350 } },
+];
+
+export const VALIDATION_RULES = {
+  MAX_TRAVEL_DAYS: 80,
+  MAX_PASSENGERS: 50,
+  MAX_PASSENGERS_IQAMA: 5,
+};
+```
+
+#### Frontend Configuration (`frontend/lib/umrahConstants.ts`)
+```typescript
+export const BOOKING_STEPS = [
+  { id: 1, title: 'Booking Mode', description: 'Select booking type' },
+  { id: 2, title: 'Travel Details', description: 'Flight and dates' },
+  { id: 3, title: 'Transport', description: 'Transport arrangements' },
+  { id: 4, title: 'Accommodation', description: 'Hotel or Iqama details' },
+  { id: 5, title: 'Passengers', description: 'Passenger information' },
+  { id: 6, title: 'Documents', description: 'Upload required documents' },
+];
+```
+
+### API Endpoints
+
+#### Booking Management
+```typescript
+// Create Umrah visa booking
+POST /api/umrah-visa/booking
+{
+  "party_id": "uuid",
+  "booking_mode": "group_number" | "travel_documents",
+  "group_number": "string", // optional
+  "group_name": "string", // optional
+  "flight_number": "string",
+  "arrival_date": "2024-01-01",
+  "departure_date": "2024-01-10",
+  "arrival_airport": "jeddah_to_makkah",
+  "transport_route": "jeddah_to_makkah",
+  "transport_type": "staria", // optional
+  "transport_pax": 8, // optional
+  "transport_price": 250, // optional
+  "accommodation_type": "hotel" | "iqama",
+  "makkah_checkin": "2024-01-01", // optional
+  "makkah_checkout": "2024-01-05", // optional
+  "madina_checkin": "2024-01-05", // optional
+  "madina_checkout": "2024-01-10", // optional
+  "iqama_number": "string", // optional
+  "iqama_name": "string", // optional
+  "iqama_dob": "2024-01-01", // optional
+  "iqama_mobile": "string", // optional
+  "passenger_count": 3,
+  "passengers": [
+    {
+      "is_lead_passenger": true,
+      "full_name": "John Doe",
+      "passport_number": "A1234567",
+      "nationality": "Indian",
+      "passport_expiry": "2025-01-01",
+      "date_of_birth": "1990-01-01",
+      "gender": "male",
+      "phone_number": "+1234567890"
+    }
+  ]
+}
+
+// Get transport pricing
+GET /api/umrah-visa/transport-pricing?route=jeddah_to_makkah&transport_type=staria&pax=8
+
+// Get party bookings
+GET /api/umrah-visa/party-bookings?page=1&limit=10
+
+// Get booking by ID
+GET /api/umrah-visa/booking/:id
+
+// Update booking status
+PATCH /api/umrah-visa/booking/:id/status
+{
+  "status": "pending" | "processing" | "completed" | "cancelled"
+}
+```
+
+#### Document Upload
+```typescript
+// Upload single document
+POST /api/upload/service/:serviceId
+Content-Type: multipart/form-data
+{
+  "document": File,
+  "document_type": "pan_card" | "passport_front" | "passport_back",
+  "passenger_id": "uuid" // optional
+}
+
+// Upload multiple passenger documents
+POST /api/upload/booking/:bookingId/passenger/:passengerId
+Content-Type: multipart/form-data
+{
+  "documents": File[],
+  "document_types": ["passport_front", "passport_back"]
+}
+```
+
+### Frontend Components
+
+#### Main Booking Page (`frontend/app/party/umrah-visa/page.tsx`)
+```typescript
+export default function UmrahVisaPage() {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [transportPrice, setTransportPrice] = useState<number | null>(null);
+  const [documents, setDocuments] = useState<{ [passengerId: string]: File[] }>({});
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setValue,
+    watch,
+  } = useForm<UmrahVisaBookingFormData>({
+    resolver: zodResolver(umrahVisaBookingSchema),
+    defaultValues: {
+      bookingMode: 'group_number',
+      accommodationType: 'hotel',
+      passengerCount: 1,
+      passengers: [{
+        isLeadPassenger: true,
+        fullName: '',
+        passportNumber: '',
+        nationality: '',
+        passportExpiry: '',
+        dateOfBirth: '',
+        gender: 'male',
+        phoneNumber: ''
+      }]
+    }
+  });
+
+  // Step navigation logic
+  const nextStep = () => {
+    if (currentStep < BOOKING_STEPS.length) {
+      setCurrentStep(currentStep + 1);
+      setCompletedSteps([...completedSteps, currentStep]);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  // Transport price calculation
+  const calculateTransportPrice = async (route: string, transportType: string, pax: number) => {
+    try {
+      const transport = TRANSPORT_OPTIONS.find(t => t.id === transportType);
+      if (!transport || !transport.paxOptions.includes(pax)) {
+        setTransportPrice(null);
+        return;
+      }
+      
+      const response = await umrahVisaAPI.getTransportPricing(route, transportType, pax);
+      setTransportPrice(response.data.price);
+    } catch (error) {
+      console.error('Error calculating transport price:', error);
+      setTransportPrice(null);
+    }
+  };
+
+  // Form submission
+  const onSubmit = async (data: UmrahVisaBookingFormData) => {
+    try {
+      const bookingData: CreateUmrahVisaBookingRequest = {
+        party_id: partyId,
+        booking_mode: data.bookingMode,
+        // ... transform form data
+      };
+
+      const response = await umrahVisaAPI.createBooking(bookingData);
+      const booking = response.data.booking;
+
+      toast.success('Umrah visa booking submitted successfully!');
+      router.push('/party/dashboard');
+
+      // Background document uploads
+      setTimeout(async () => {
+        // Upload documents for each passenger
+      }, 1000);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to submit booking');
+    }
+  };
+}
+```
+
+### Validation Schemas
+
+#### Frontend Validation (`frontend/lib/umrahValidation.ts`)
+```typescript
+export const umrahVisaBookingSchema = z.object({
+  // Step 1
+  bookingMode: z.enum(['group_number', 'travel_documents']),
+  
+  // Step 2
+  groupNumber: z.string().optional(),
+  groupName: z.string().optional(),
+  flightNumber: z.string().min(1, 'Flight number is required'),
+  arrivalDate: z.string().min(1, 'Arrival date is required'),
+  departureDate: z.string().min(1, 'Departure date is required'),
+  arrivalAirport: z.string().min(1, 'Please select arrival airport/route'),
+  
+  // Step 3
+  transportType: z.string().optional(),
+  transportPax: z.number().optional(),
+  transportPrice: z.number().optional(),
+  
+  // Step 4
+  accommodationType: z.enum(['hotel', 'iqama']),
+  makkahCheckIn: z.string().optional(),
+  makkahCheckOut: z.string().optional(),
+  madinaCheckIn: z.string().optional(),
+  madinaCheckOut: z.string().optional(),
+  iqamaNumber: z.string().optional(),
+  iqamaName: z.string().optional(),
+  iqamaDob: z.string().optional(),
+  iqamaMobile: z.string().optional(),
+  
+  // Step 5
+  passengerCount: z.number().min(1).max(VALIDATION_RULES.MAX_PASSENGERS),
+  passengers: z.array(passengerSchema).min(1)
+}).refine((data) => {
+  // Cross-field validation logic
+  if (data.bookingMode === 'group_number') {
+    return data.groupNumber && data.groupName;
+  }
+  return true;
+}, {
+  message: 'Group number and group name are required for group booking mode',
+  path: ['groupNumber']
+}).refine((data) => {
+  // Date validation
+  const arrival = new Date(data.arrivalDate);
+  const departure = new Date(data.departureDate);
+  const diffTime = departure.getTime() - arrival.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays <= VALIDATION_RULES.MAX_TRAVEL_DAYS && diffDays > 0;
+}, {
+  message: `Travel duration cannot exceed ${VALIDATION_RULES.MAX_TRAVEL_DAYS} days`,
+  path: ['departureDate']
+});
+```
+
+### Business Logic
+
+#### Transport Pricing Logic
+```typescript
+export function getTransportPrice(routeId: string, transportId: string, pax: number): number | null {
+  const routePricing = TRANSPORT_PRICING[routeId];
+  if (!routePricing) return null;
+  
+  const transportPricing = routePricing[transportId];
+  if (!transportPricing) return null;
+  
+  return transportPricing[pax] || null;
+}
+
+export function requiresTransport(routeId: string): boolean {
+  const route = getRouteById(routeId);
+  return route?.requiresTransport || false;
+}
+```
+
+#### Passenger Validation Logic
+```typescript
+export function validatePassengerCount(count: number, accommodationType: AccommodationType): boolean {
+  if (accommodationType === 'iqama') {
+    return count <= VALIDATION_RULES.MAX_PASSENGERS_IQAMA;
+  }
+  return count <= VALIDATION_RULES.MAX_PASSENGERS;
+}
+
+export function validateTravelDates(arrival: Date, departure: Date): boolean {
+  const diffTime = departure.getTime() - arrival.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays <= VALIDATION_RULES.MAX_TRAVEL_DAYS && diffDays > 0;
+}
+```
+
+### Error Handling
+
+#### Common Error Scenarios
+1. **Validation Errors**: Form validation failures
+2. **Transport Pricing Errors**: Invalid route/transport/pax combinations
+3. **Document Upload Errors**: File upload failures
+4. **Database Errors**: Transaction failures
+5. **Authentication Errors**: Unauthorized access
+
+#### Error Recovery
+```typescript
+// Frontend error handling
+try {
+  const response = await umrahVisaAPI.createBooking(bookingData);
+  // Success handling
+} catch (error: any) {
+  if (error.response?.status === 201) {
+    // Handle success that was treated as error
+    toast.success('Umrah visa booking submitted successfully!');
+    router.push('/party/dashboard');
+  } else {
+    toast.error(error.response?.data?.error || 'Failed to submit booking');
+  }
+}
+
+// Backend error handling
+const errors = validationResult(req);
+if (!errors.isEmpty()) {
+  return res.status(400).json({ 
+    error: 'Validation failed', 
+    details: errors.array() 
+  });
+}
+```
+
+### Performance Optimizations
+
+#### Frontend Optimizations
+- **Lazy Loading**: Components loaded on demand
+- **Background Uploads**: Non-blocking document uploads
+- **Form State Management**: Efficient state updates
+- **Validation Caching**: Cached validation results
+
+#### Backend Optimizations
+- **Database Transactions**: Atomic operations
+- **Indexed Queries**: Optimized database queries
+- **Connection Pooling**: Efficient database connections
+- **Error Handling**: Graceful error recovery
+
+### Security Considerations
+
+#### Input Validation
+- **Frontend**: Zod schema validation
+- **Backend**: express-validator middleware
+- **Database**: Prisma type safety
+
+#### File Upload Security
+- **File Type Validation**: MIME type checking
+- **File Size Limits**: Configurable size limits
+- **Path Sanitization**: Secure file paths
+- **Access Control**: User-based access
+
+#### Data Protection
+- **Encryption**: Sensitive data encryption
+- **Access Logs**: Audit trail maintenance
+- **Role-Based Access**: Permission-based access
+- **Input Sanitization**: XSS prevention
+
+### Testing Strategy
+
+#### Unit Tests
+- **Validation Logic**: Schema validation tests
+- **Business Logic**: Pricing and validation functions
+- **API Endpoints**: Route handler tests
+- **Database Operations**: Prisma operation tests
+
+#### Integration Tests
+- **End-to-End Flow**: Complete booking flow
+- **API Integration**: Frontend-backend communication
+- **Database Integration**: Transaction testing
+- **File Upload Testing**: Document upload flow
+
+#### Manual Testing
+- **User Experience**: Step-by-step flow testing
+- **Error Scenarios**: Error handling validation
+- **Performance Testing**: Load and stress testing
+- **Security Testing**: Vulnerability assessment
+
+### Deployment Considerations
+
+#### Environment Configuration
+```bash
+# Backend environment variables
+DATABASE_URL="postgresql://user:password@localhost:5432/moulavi_erp"
+JWT_SECRET="your-jwt-secret"
+UPLOAD_DIR="./uploads"
+MAX_FILE_SIZE="10485760" # 10MB
+
+# Frontend environment variables
+NEXT_PUBLIC_API_URL="http://localhost:5000/api"
+NEXT_PUBLIC_MAX_FILE_SIZE="10485760"
+```
+
+#### Database Migrations
+```bash
+# Run migrations
+cd backend
+npx prisma migrate dev --name add_umrah_visa_booking
+npx prisma generate
+npx prisma studio
+```
+
+#### File Storage
+- **Local Storage**: Development environment
+- **Cloud Storage**: Production environment (AWS S3, Google Cloud Storage)
+- **Backup Strategy**: Regular backup procedures
+- **Cleanup Policies**: Automated file cleanup
+
+### Monitoring and Analytics
+
+#### Key Metrics
+- **Booking Success Rate**: Successful vs failed bookings
+- **Step Completion Rate**: Drop-off analysis per step
+- **Transport Selection**: Popular transport options
+- **Document Upload Success**: Upload success rates
+- **Performance Metrics**: Response times and error rates
+
+#### Logging
+```typescript
+// Backend logging
+console.log('Umrah visa booking created:', {
+  bookingId: booking.id,
+  partyId: booking.partyId,
+  passengerCount: booking.passengerCount,
+  bookingMode: booking.bookingMode
+});
+
+// Frontend logging
+console.log('Booking step completed:', {
+  step: currentStep,
+  stepName: BOOKING_STEPS[currentStep - 1].title,
+  timestamp: new Date().toISOString()
+});
+```
+
+### Future Enhancements
+
+#### Planned Features
+- **Payment Integration**: Online payment processing
+- **SMS Notifications**: Real-time status updates
+- **WhatsApp Integration**: Automated messaging
+- **Advanced Analytics**: Booking insights and reports
+- **Mobile App**: Native mobile application
+- **Multi-language Support**: Internationalization
+- **API Rate Limiting**: Enhanced security
+- **Caching Layer**: Redis integration
+- **Real-time Updates**: WebSocket integration
+
+#### Technical Improvements
+- **Microservices Architecture**: Service decomposition
+- **Event-Driven Architecture**: Asynchronous processing
+- **Advanced Caching**: Redis and CDN integration
+- **Performance Monitoring**: APM integration
+- **Automated Testing**: CI/CD pipeline
+- **Containerization**: Docker deployment
+- **Load Balancing**: Horizontal scaling
+- **Database Optimization**: Query optimization
+
+---
+
 ## Common Issues & Solutions
 
 ### 1. Infinite Loading Loops
@@ -1511,8 +2120,17 @@ model User { ... }  // Extend existing User model if needed
 - `GET /api/services/:id` - Get service by ID
 - `PATCH /api/services/:id/status` - Update service status
 
+**Umrah Visa Booking:**
+- `POST /api/umrah-visa/booking` - Create Umrah visa booking
+- `GET /api/umrah-visa/bookings` - Get all bookings (admin/staff)
+- `GET /api/umrah-visa/party-bookings` - Get party's bookings
+- `GET /api/umrah-visa/booking/:id` - Get booking by ID
+- `PATCH /api/umrah-visa/booking/:id/status` - Update booking status
+- `GET /api/umrah-visa/transport-pricing` - Get transport pricing
+
 **Uploads:**
 - `POST /api/upload/service/:id` - Upload document
+- `POST /api/upload/booking/:bookingId/passenger/:passengerId` - Upload passenger documents
 - `DELETE /api/upload/:id` - Delete document
 
 ### Component Library
@@ -1577,6 +2195,51 @@ interface Service {
   serviceType: string;
   partyId: string;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
+}
+
+interface UmrahVisaBooking {
+  id: string;
+  serviceId: string;
+  bookingMode: 'group_number' | 'travel_documents';
+  groupNumber?: string;
+  groupName?: string;
+  flightNumber: string;
+  arrivalDate: string;
+  departureDate: string;
+  arrivalAirport: string;
+  transportRoute?: string;
+  transportType?: string;
+  transportPax?: number;
+  transportPrice?: number;
+  accommodationType: 'hotel' | 'iqama';
+  makkahCheckIn?: string;
+  makkahCheckOut?: string;
+  madinaCheckIn?: string;
+  madinaCheckOut?: string;
+  iqamaNumber?: string;
+  iqamaName?: string;
+  iqamaDob?: string;
+  iqamaMobile?: string;
+  passengerCount: number;
+  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+  passengers: UmrahPassenger[];
+}
+
+interface UmrahPassenger {
+  id: string;
+  bookingId: string;
+  isLeadPassenger: boolean;
+  fullName: string;
+  passportNumber: string;
+  nationality: string;
+  passportExpiry: string;
+  dateOfBirth: string;
+  gender: 'male' | 'female';
+  phoneNumber?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 ```
 
@@ -1644,6 +2307,48 @@ npm run lint         # Run ESLint
 - `party_id` (UUID, Foreign Key)
 - `status` (ENUM: pending, processing, completed, cancelled)
 - `submitted_at` (TIMESTAMP)
+
+**Umrah Visa Bookings Table:**
+- `id` (UUID, Primary Key)
+- `service_id` (UUID, Foreign Key, Unique)
+- `booking_mode` (ENUM: group_number, travel_documents)
+- `group_number` (VARCHAR(100), Optional)
+- `group_name` (VARCHAR(255), Optional)
+- `flight_number` (VARCHAR(50))
+- `arrival_date` (DATE)
+- `departure_date` (DATE)
+- `arrival_airport` (VARCHAR(100))
+- `transport_route` (VARCHAR(100), Optional)
+- `transport_type` (VARCHAR(50), Optional)
+- `transport_pax` (INT, Optional)
+- `transport_price` (DECIMAL(10,2), Optional)
+- `accommodation_type` (ENUM: hotel, iqama)
+- `makkah_checkin` (DATE, Optional)
+- `makkah_checkout` (DATE, Optional)
+- `madina_checkin` (DATE, Optional)
+- `madina_checkout` (DATE, Optional)
+- `iqama_number` (VARCHAR(50), Optional)
+- `iqama_name` (VARCHAR(255), Optional)
+- `iqama_dob` (DATE, Optional)
+- `iqama_mobile` (VARCHAR(20), Optional)
+- `passenger_count` (INT)
+- `status` (ENUM: pending, processing, completed, cancelled)
+- `created_at` (TIMESTAMP)
+- `updated_at` (TIMESTAMP)
+
+**Umrah Passengers Table:**
+- `id` (UUID, Primary Key)
+- `booking_id` (UUID, Foreign Key)
+- `is_lead_passenger` (BOOLEAN, Default: false)
+- `full_name` (VARCHAR(255))
+- `passport_number` (VARCHAR(50))
+- `nationality` (VARCHAR(100))
+- `passport_expiry` (DATE)
+- `date_of_birth` (DATE)
+- `gender` (ENUM: male, female)
+- `phone_number` (VARCHAR(20), Optional)
+- `created_at` (TIMESTAMP)
+- `updated_at` (TIMESTAMP)
 
 ---
 

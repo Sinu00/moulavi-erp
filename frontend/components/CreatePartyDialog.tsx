@@ -1,225 +1,306 @@
 'use client';
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { toast } from 'sonner';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { partyAPI } from '@/lib/api';
-
-const partySchema = z.object({
-  party_name: z.string().min(1, 'Party name is required'),
-  email: z.string().email('Invalid email address'),
-  contact_number: z.string().optional(),
-  whatsapp_number: z.string().optional(),
-  address: z.string().optional(),
-  gst_number: z.string().optional(),
-  customer_type: z.enum(['direct', 'b2b']),
-  account_currency: z.enum(['SAR', 'INR', 'AED']),
-  is_supplier: z.boolean().optional(),
-  is_customer: z.boolean().optional(),
-  login_required: z.boolean().optional(),
-});
-
-type PartyFormData = z.infer<typeof partySchema>;
+import { toast } from 'sonner';
+import { Party, CreatePartyRequest } from '@/types';
 
 interface CreatePartyDialogProps {
   open: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (partyData: CreatePartyRequest) => Promise<void>;
+  editingParty?: Party | null;
+  title?: string;
 }
 
-export default function CreatePartyDialog({ open, onClose, onSuccess }: CreatePartyDialogProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [customerType, setCustomerType] = useState<'direct' | 'b2b'>('direct');
-  const [currency, setCurrency] = useState<'SAR' | 'INR' | 'AED'>('INR');
-  const [loginRequired, setLoginRequired] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<PartyFormData>({
-    resolver: zodResolver(partySchema),
-    defaultValues: {
-      customer_type: 'direct',
-      account_currency: 'INR',
-      is_customer: true,
-      is_supplier: false,
-      login_required: false,
-    },
+export default function CreatePartyDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  editingParty,
+  title = 'Create New Party'
+}: CreatePartyDialogProps) {
+  const [formData, setFormData] = useState({
+    party_name: '',
+    email: '',
+    contact_number: '',
+    whatsapp_number: '',
+    address: '',
+    gst_number: '',
+    customer_type: 'direct' as 'direct' | 'b2b',
+    account_currency: 'INR' as 'SAR' | 'INR' | 'AED',
+    is_supplier: false,
+    is_customer: true,
+    login_required: false
   });
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const onSubmit = async (data: PartyFormData) => {
-    setIsLoading(true);
-
-    try {
-      const response = await partyAPI.create({
-        ...data,
-        customer_type: customerType,
-        account_currency: currency,
-        login_required: loginRequired,
-      });
-
-      toast.success('Party created successfully!');
-      if (loginRequired) {
-        toast.info('Login credentials have been sent to the party email.');
+  // Reset form when dialog opens/closes or editing party changes
+  useEffect(() => {
+    if (open) {
+      if (editingParty) {
+        setFormData({
+          party_name: editingParty.partyName,
+          email: editingParty.email,
+          contact_number: editingParty.contactNumber || '',
+          whatsapp_number: editingParty.whatsappNumber || '',
+          address: editingParty.address || '',
+          gst_number: editingParty.gstNumber || '',
+          customer_type: editingParty.customerType,
+          account_currency: editingParty.accountCurrency,
+          is_supplier: editingParty.isSupplier,
+          is_customer: editingParty.isCustomer,
+          login_required: editingParty.loginRequired
+        });
+      } else {
+        setFormData({
+          party_name: '',
+          email: '',
+          contact_number: '',
+          whatsapp_number: '',
+          address: '',
+          gst_number: '',
+          customer_type: 'direct',
+          account_currency: 'INR',
+          is_supplier: false,
+          is_customer: true,
+          login_required: false
+        });
       }
-      
-      reset();
-      onSuccess();
-      onClose();
+      setErrors({});
+    }
+  }, [open, editingParty]);
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.party_name.trim()) {
+      newErrors.party_name = 'Party name is required';
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onSubmit(formData);
+      onOpenChange(false);
+      toast.success(editingParty ? 'Party updated successfully' : 'Party created successfully');
     } catch (error: any) {
-      console.error('Error creating party:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to create party';
-      toast.error(errorMessage);
+      console.error('Error submitting party:', error);
+      toast.error(error.response?.data?.error || 'Failed to save party');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (!open) return null;
+  const handleInputChange = (field: string, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-        <div className="p-4 sm:p-6">
-          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Create New Party</h2>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-md">
+        <SheetHeader>
+          <SheetTitle>{editingParty ? 'Edit Party' : title}</SheetTitle>
+        </SheetHeader>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="party_name">Party Name *</Label>
+            <Input
+              id="party_name"
+              type="text"
+              value={formData.party_name}
+              onChange={(e) => handleInputChange('party_name', e.target.value)}
+              placeholder="Enter party name"
+              className={errors.party_name ? 'border-red-500' : ''}
+            />
+            {errors.party_name && (
+              <p className="text-sm text-red-500">{errors.party_name}</p>
+            )}
+          </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="party_name">Party Name *</Label>
-                <Input
-                  id="party_name"
-                  placeholder="Enter party name"
-                  {...register('party_name')}
-                  disabled={isLoading}
-                />
-                {errors.party_name && (
-                  <p className="text-sm text-red-600">{errors.party_name.message}</p>
-                )}
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              placeholder="Enter email address"
+              className={errors.email ? 'border-red-500' : ''}
+            />
+            {errors.email && (
+              <p className="text-sm text-red-500">{errors.email}</p>
+            )}
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="party@example.com"
-                  {...register('email')}
-                  disabled={isLoading}
-                />
-                {errors.email && (
-                  <p className="text-sm text-red-600">{errors.email.message}</p>
-                )}
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="contact_number">Contact Number</Label>
+            <Input
+              id="contact_number"
+              type="text"
+              value={formData.contact_number}
+              onChange={(e) => handleInputChange('contact_number', e.target.value)}
+              placeholder="+91 1234567890"
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="contact_number">Contact Number</Label>
-                <Input
-                  id="contact_number"
-                  placeholder="+91 1234567890"
-                  {...register('contact_number')}
-                  disabled={isLoading}
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp_number">WhatsApp Number</Label>
+            <Input
+              id="whatsapp_number"
+              type="text"
+              value={formData.whatsapp_number}
+              onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
+              placeholder="+91 1234567890"
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="whatsapp_number">WhatsApp Number</Label>
-                <Input
-                  id="whatsapp_number"
-                  placeholder="+91 1234567890"
-                  {...register('whatsapp_number')}
-                  disabled={isLoading}
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="address">Address</Label>
+            <Input
+              id="address"
+              type="text"
+              value={formData.address}
+              onChange={(e) => handleInputChange('address', e.target.value)}
+              placeholder="Enter full address"
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="customer_type">Customer Type *</Label>
-                <Select value={customerType} onValueChange={(value: any) => setCustomerType(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="direct">Direct</SelectItem>
-                    <SelectItem value="b2b">B2B</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="gst_number">GST Number</Label>
+            <Input
+              id="gst_number"
+              type="text"
+              value={formData.gst_number}
+              onChange={(e) => handleInputChange('gst_number', e.target.value)}
+              placeholder="GST Number"
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="account_currency">Account Currency *</Label>
-                <Select value={currency} onValueChange={(value: any) => setCurrency(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="INR">INR</SelectItem>
-                    <SelectItem value="SAR">SAR</SelectItem>
-                    <SelectItem value="AED">AED</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="customer_type">Customer Type *</Label>
+            <Select
+              value={formData.customer_type}
+              onValueChange={(value) => handleInputChange('customer_type', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select customer type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="direct">Direct</SelectItem>
+                <SelectItem value="b2b">B2B</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  placeholder="Enter full address"
-                  {...register('address')}
-                  disabled={isLoading}
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="account_currency">Account Currency *</Label>
+            <Select
+              value={formData.account_currency}
+              onValueChange={(value) => handleInputChange('account_currency', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select currency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="INR">INR</SelectItem>
+                <SelectItem value="SAR">SAR</SelectItem>
+                <SelectItem value="AED">AED</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="gst_number">GST Number</Label>
-                <Input
-                  id="gst_number"
-                  placeholder="GST Number"
-                  {...register('gst_number')}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2 flex items-center">
+          <div className="space-y-2">
+            <Label>Party Type</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  id="login_required"
-                  checked={loginRequired}
-                  onChange={(e) => setLoginRequired(e.target.checked)}
-                  className="mr-2"
-                  disabled={isLoading}
+                  id="is_supplier"
+                  checked={formData.is_supplier}
+                  onChange={(e) => handleInputChange('is_supplier', e.target.checked)}
+                  className="rounded"
                 />
-                <Label htmlFor="login_required" className="cursor-pointer">
-                  Create login account for party
+                <Label htmlFor="is_supplier" className="cursor-pointer">
+                  Supplier
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is_customer"
+                  checked={formData.is_customer}
+                  onChange={(e) => handleInputChange('is_customer', e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="is_customer" className="cursor-pointer">
+                  Customer
                 </Label>
               </div>
             </div>
+          </div>
 
-            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:space-x-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="w-full sm:w-auto">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-                {isLoading ? 'Creating...' : 'Create Party'}
-              </Button>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="login_required"
+                checked={formData.login_required}
+                onChange={(e) => handleInputChange('login_required', e.target.checked)}
+                className="rounded"
+              />
+              <Label htmlFor="login_required" className="cursor-pointer">
+                Create login account for party
+              </Label>
             </div>
-          </form>
-        </div>
-      </div>
-    </div>
+          </div>
+
+          <SheetFooter className="flex justify-end space-x-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+            >
+              {loading ? 'Saving...' : (editingParty ? 'Update Party' : 'Create Party')}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }
-

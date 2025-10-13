@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,33 +17,43 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getUser, hasRole } from '@/lib/auth';
-import { serviceAPI, partyAPI, uploadAPI } from '@/lib/api';
+import { umrahVisaAPI, partyAPI, uploadAPI, transportMasterAPI } from '@/lib/api';
 import Navbar from '@/components/Navbar';
-import { ArrowLeft, Upload, Check, User, FileText, Calendar, ChevronRight, ChevronLeft } from 'lucide-react';
-
-const umrahVisaSchema = z.object({
-  full_name: z.string().min(1, 'Full name is required'),
-  passport_number: z.string().min(1, 'Passport number is required'),
-  nationality: z.string().min(1, 'Nationality is required'),
-  travel_date_from: z.string().min(1, 'Travel start date is required'),
-  travel_date_to: z.string().min(1, 'Travel end date is required'),
-  passport_expiry: z.string().min(1, 'Passport expiry date is required'),
-  date_of_birth: z.string().min(1, 'Date of birth is required'),
-  gender: z.enum(['male', 'female']),
-  phone_number: z.string().optional(),
-});
-
-type UmrahVisaFormData = z.infer<typeof umrahVisaSchema>;
+import { ArrowLeft, Upload, Check, User, FileText, Calendar, ChevronRight, ChevronLeft, Plane, Home, Users } from 'lucide-react';
+import { 
+  ROUTE_OPTIONS, 
+  TRANSPORT_OPTIONS, 
+  VALIDATION_RULES, 
+  requiresTransport,
+  isJeddahRoute,
+  getTransportPaxForType,
+  validatePassengerCount,
+  validateTravelDates,
+  BOOKING_STEPS
+} from '@/lib/umrahConstants';
+import { 
+  umrahVisaBookingSchema,
+  UmrahVisaBookingFormData,
+  PassengerFormData
+} from '@/lib/umrahValidation';
+import { 
+  BookingMode, 
+  AccommodationType, 
+  CreateUmrahVisaBookingRequest,
+  CreateUmrahPassengerRequest 
+} from '@/types';
 
 export default function UmrahVisaPage() {
   const router = useRouter();
-  const user = getUser();
+  const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [partyId, setPartyId] = useState<string | null>(null);
-  const [gender, setGender] = useState<'male' | 'female'>('male');
-  const [documents, setDocuments] = useState<File[]>([]);
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [transportPrice, setTransportPrice] = useState<number | null>(null);
+  const [transportOptions, setTransportOptions] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<{ [passengerId: string]: File[] }>({});
+  const [isClient, setIsClient] = useState(false);
 
   const {
     register,
@@ -54,52 +63,91 @@ export default function UmrahVisaPage() {
     getValues,
     setValue,
     watch,
-  } = useForm<UmrahVisaFormData>({
-    resolver: zodResolver(umrahVisaSchema),
+    reset,
+  } = useForm<UmrahVisaBookingFormData>({
+    resolver: zodResolver(umrahVisaBookingSchema),
     defaultValues: {
-      gender: 'male'
+      bookingMode: 'group_number',
+      accommodationType: 'hotel',
+      passengerCount: 1,
+      passengers: [{
+        isLeadPassenger: true,
+        fullName: '',
+        passportNumber: '',
+        nationality: '',
+        passportExpiry: '',
+        dateOfBirth: '',
+        gender: 'male',
+        phoneNumber: ''
+      }]
     }
   });
 
   const steps = [
     {
       id: 1,
-      title: 'Personal Information',
-      description: 'Basic personal details',
-      icon: User,
-      fields: ['full_name', 'date_of_birth', 'gender', 'phone_number', 'nationality']
+      title: 'Booking Mode',
+      description: 'Select booking method',
+      icon: Users,
+      fields: ['bookingMode']
     },
     {
       id: 2,
-      title: 'Passport Details',
-      description: 'Passport information',
-      icon: FileText,
-      fields: ['passport_number', 'passport_expiry']
+      title: 'Group & Flight Details',
+      description: 'Enter group and flight information',
+      icon: Plane,
+      fields: ['groupNumber', 'groupName', 'flightNumber', 'arrivalDate', 'departureDate', 'arrivalAirport']
     },
     {
       id: 3,
-      title: 'Travel Dates',
-      description: 'Travel itinerary',
-      icon: Calendar,
-      fields: ['travel_date_from', 'travel_date_to']
+      title: 'Transport Details',
+      description: 'Select transport options',
+      icon: Plane,
+      fields: ['transportRoute', 'transportType', 'transportPax']
     },
     {
       id: 4,
-      title: 'Documents',
-      description: 'Upload required documents',
-      icon: Upload,
-      fields: []
+      title: 'Accommodation',
+      description: 'Choose accommodation type',
+      icon: Home,
+      fields: ['accommodationType', 'hotelDetails', 'iqamaDetails']
+    },
+    {
+      id: 5,
+      title: 'Passenger Details & Documents',
+      description: 'Enter passenger information and upload documents',
+      icon: User,
+      fields: ['passengerCount', 'passengers', 'documents']
     }
   ];
 
   useEffect(() => {
-    if (!user || !hasRole('party')) {
+    // Set client-side flag to prevent hydration mismatch
+    setIsClient(true);
+    
+    // Get user from localStorage on client side only
+    const currentUser = getUser();
+    setUser(currentUser);
+    
+    if (!currentUser || !hasRole('party')) {
       router.push('/party-auth');
       return;
     }
 
     loadPartyInfo();
-  }, [user, router]);
+  }, [router]);
+
+  // Load transport options when arrival airport changes
+  useEffect(() => {
+    const arrivalAirport = watch('arrivalAirport');
+    if (arrivalAirport) {
+      loadTransportOptions(arrivalAirport);
+      // Clear transport selection when route changes
+      setValue('transportType', '');
+      setValue('transportPax', undefined);
+      setTransportPrice(null);
+    }
+  }, [watch('arrivalAirport')]);
 
   const loadPartyInfo = async () => {
     try {
@@ -118,18 +166,33 @@ export default function UmrahVisaPage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, passengerId: string) => {
     if (e.target.files) {
-      setDocuments(Array.from(e.target.files));
+      setDocuments(prev => ({
+        ...prev,
+        [passengerId]: Array.from(e.target.files!)
+      }));
     }
   };
 
   const nextStep = async () => {
     const currentStepData = steps.find(step => step.id === currentStep);
     if (currentStepData && currentStepData.fields.length > 0) {
-      const isValid = await trigger(currentStepData.fields as any);
-      if (!isValid) {
-        return;
+      // Special handling for transport step - only validate if it's a Jeddah route
+      if (currentStep === 3) {
+        const arrivalAirport = getValues('arrivalAirport');
+        if (isJeddahRoute(arrivalAirport)) {
+          const isValid = await trigger(['transportType', 'transportPax']);
+          if (!isValid) {
+            return;
+          }
+        }
+        // For non-Jeddah routes, transport is optional, so we can proceed
+      } else {
+        const isValid = await trigger(currentStepData.fields as any);
+        if (!isValid) {
+          return;
+        }
       }
     }
     
@@ -148,7 +211,114 @@ export default function UmrahVisaPage() {
     }
   };
 
-  const onSubmit = async (data: UmrahVisaFormData) => {
+  const addPassenger = () => {
+    const currentPassengers = getValues('passengers') || [];
+    const newPassenger: PassengerFormData = {
+      isLeadPassenger: false,
+      fullName: '',
+      passportNumber: '',
+      nationality: '',
+      passportExpiry: '',
+      dateOfBirth: '',
+      gender: 'male',
+      phoneNumber: ''
+    };
+    
+    setValue('passengers', [...currentPassengers, newPassenger]);
+    setValue('passengerCount', currentPassengers.length + 1);
+  };
+
+  const removePassenger = (index: number) => {
+    const currentPassengers = getValues('passengers') || [];
+    if (currentPassengers.length > 1) {
+      const updatedPassengers = currentPassengers.filter((_, i) => i !== index);
+      setValue('passengers', updatedPassengers);
+      setValue('passengerCount', updatedPassengers.length);
+    }
+  };
+
+  const updatePassengerCount = (count: number) => {
+    const currentPassengers = getValues('passengers') || [];
+    const accommodationType = getValues('accommodationType');
+    
+    if (!validatePassengerCount(count, accommodationType)) {
+      toast.error(`Maximum ${accommodationType === 'iqama' ? VALIDATION_RULES.MAX_PASSENGERS_IQAMA : VALIDATION_RULES.MAX_PASSENGERS} passengers allowed`);
+      return;
+    }
+    
+    setValue('passengerCount', count);
+    
+    // Adjust passengers array
+    if (count > currentPassengers.length) {
+      // Add new passengers
+      const newPassengers = Array.from({ length: count - currentPassengers.length }, (_, i) => ({
+        isLeadPassenger: false,
+        fullName: '',
+        passportNumber: '',
+        nationality: '',
+        passportExpiry: '',
+        dateOfBirth: '',
+        gender: 'male' as const,
+        phoneNumber: ''
+      }));
+      setValue('passengers', [...currentPassengers, ...newPassengers]);
+    } else if (count < currentPassengers.length) {
+      // Remove passengers
+      const updatedPassengers = currentPassengers.slice(0, count);
+      setValue('passengers', updatedPassengers);
+    }
+  };
+
+  const loadTransportOptions = async (route: string) => {
+    try {
+      const response = await transportMasterAPI.getByRoute(route);
+      setTransportOptions(response.data.transportMasters);
+    } catch (error) {
+      console.error('Error loading transport options:', error);
+      setTransportOptions([]);
+    }
+  };
+
+  const calculateTransportPrice = async (route: string, transportType: string, pax: number) => {
+    try {
+      const response = await transportMasterAPI.getPricing(route, transportType, pax);
+      setTransportPrice(response.data.price);
+    } catch (error) {
+      console.error('Error calculating transport price:', error);
+      setTransportPrice(null);
+    }
+  };
+
+  const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>, passengerId: string, documentType: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only JPEG, PNG, and PDF files are allowed');
+      return;
+    }
+
+    // Update documents state
+    setDocuments(prev => ({
+      ...prev,
+      [passengerId]: [
+        ...(prev[passengerId] || []).filter(d => !d.name.includes(documentType)),
+        { ...file, name: `${documentType}_${file.name}` }
+      ]
+    }));
+
+    toast.success(`${documentType.replace('_', ' ')} uploaded successfully`);
+  };
+
+  const onSubmit = async (data: UmrahVisaBookingFormData) => {
     if (!partyId) {
       toast.error('Party information not found');
       return;
@@ -157,114 +327,173 @@ export default function UmrahVisaPage() {
     setIsLoading(true);
 
     try {
-      // Create service
-      const response = await serviceAPI.createUmrahVisa({
+      // Transform data for API
+      const bookingData: CreateUmrahVisaBookingRequest = {
         party_id: partyId,
-        ...data,
-        gender,
-      });
+        booking_mode: data.bookingMode,
+        group_number: data.groupNumber,
+        group_name: data.groupName,
+        flight_number: data.flightNumber,
+        arrival_date: data.arrivalDate,
+        departure_date: data.departureDate,
+        arrival_airport: data.arrivalAirport,
+        transport_route: data.arrivalAirport,
+        transport_type: transportOptions.find(option => option.id === data.transportType)?.vehicleType || data.transportType,
+        transport_pax: data.transportPax,
+        accommodation_type: data.accommodationType,
+        makkah_checkin: data.makkahCheckIn,
+        makkah_checkout: data.makkahCheckOut,
+        madina_checkin: data.madinaCheckIn,
+        madina_checkout: data.madinaCheckOut,
+        iqama_number: data.iqamaNumber,
+        iqama_name: data.iqamaName,
+        iqama_dob: data.iqamaDob,
+        iqama_mobile: data.iqamaMobile,
+        passenger_count: data.passengerCount,
+        passengers: data.passengers.map(p => ({
+          is_lead_passenger: p.isLeadPassenger,
+          full_name: p.fullName,
+          passport_number: p.passportNumber,
+          nationality: p.nationality,
+          passport_expiry: p.passportExpiry,
+          date_of_birth: p.dateOfBirth,
+          gender: p.gender,
+          phone_number: p.phoneNumber
+        }))
+      };
 
-      const serviceId = response.data.service.id;
+      // Create booking
+      const response = await umrahVisaAPI.createBooking(bookingData);
+      const booking = response.data.booking;
 
-      // Upload documents if any
-      if (documents.length > 0) {
-        for (const file of documents) {
-          try {
-            await uploadAPI.uploadDocument(serviceId, file, 'passport');
-          } catch (uploadError) {
-            // Error handling is done by the API interceptor
-            toast.warning(`Failed to upload ${file.name}`);
-          }
-        }
-      }
+      // Show success message immediately
+      toast.success('Umrah visa booking submitted successfully!');
 
-      toast.success('Umrah visa request submitted successfully!');
+      // Navigate to dashboard immediately
       router.push('/party/dashboard');
+
+      // Upload documents in background (non-blocking)
+      setTimeout(async () => {
+        try {
+          const uploadPromises = [];
+          for (let i = 0; i < booking.passengers.length; i++) {
+            const passenger = booking.passengers[i];
+            const passengerDocs = documents[`passenger-${i}`];
+            
+            if (passengerDocs && passengerDocs.length > 0) {
+              const documentTypes = passenger.isLeadPassenger 
+                ? ['pan_card', 'passport_front', 'passport_back']
+                : ['passport_front', 'passport_back'];
+              
+              uploadPromises.push(
+                uploadAPI.uploadPassengerDocuments(
+                  booking.id, 
+                  passenger.id, 
+                  passengerDocs, 
+                  documentTypes
+                ).catch(uploadError => {
+                  console.error(`Failed to upload documents for ${passenger.fullName}:`, uploadError);
+                  return { passenger: passenger.fullName, error: uploadError };
+                })
+              );
+            }
+          }
+
+          if (uploadPromises.length > 0) {
+            const uploadResults = await Promise.allSettled(uploadPromises);
+            const failedUploads = uploadResults
+              .filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && result.value?.error))
+              .map(result => result.status === 'fulfilled' ? result.value.passenger : 'Unknown passenger');
+            
+            if (failedUploads.length > 0) {
+              console.warn(`Failed to upload documents for: ${failedUploads.join(', ')}`);
+            }
+          }
+        } catch (error) {
+          console.error('Background document upload failed:', error);
+        }
+      }, 1000); // Wait 1 second before starting background uploads
     } catch (error: any) {
-      // Error handling is done by the API interceptor
-      toast.error(error.response?.data?.error || 'Failed to submit request');
+      console.error('Booking submission error:', error);
+      
+      // Check if it's actually a success but being treated as error
+      if (error.response?.status === 201) {
+        toast.success('Umrah visa booking submitted successfully!');
+        router.push('/party/dashboard');
+      } else if (error.response?.status === 409) {
+        // Handle conflict errors with detailed messages
+        const errorData = error.response.data;
+        if (errorData.conflicts && Array.isArray(errorData.conflicts)) {
+          const conflictMessages = errorData.conflicts.map((conflict: any) => conflict.message).join(', ');
+          toast.error(`Booking conflict: ${conflictMessages}`);
+        } else {
+          toast.error(errorData.error || 'Booking conflict detected');
+        }
+      } else {
+        toast.error(error.response?.data?.error || error.message || 'Failed to submit booking');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const renderStepContent = () => {
+    const bookingMode = watch('bookingMode');
+    const arrivalAirport = watch('arrivalAirport');
+    const accommodationType = watch('accommodationType');
+    const transportRoute = watch('transportRoute');
+    const transportType = watch('transportType');
+    const transportPax = watch('transportPax');
+    const passengers = watch('passengers') || [];
+
     switch (currentStep) {
       case 1:
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Full Name *</Label>
-                <Input
-                  id="full_name"
-                  placeholder="As per passport"
-                  {...register('full_name')}
-                  disabled={isLoading}
-                />
-                {errors.full_name && (
-                  <p className="text-sm text-red-600">{errors.full_name.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="date_of_birth">Date of Birth *</Label>
-                <Input
-                  id="date_of_birth"
-                  type="date"
-                  {...register('date_of_birth')}
-                  disabled={isLoading}
-                />
-                {errors.date_of_birth && (
-                  <p className="text-sm text-red-600">{errors.date_of_birth.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="gender">Gender *</Label>
-                <Select 
-                  value={watch('gender')} 
-                  onValueChange={(value: 'male' | 'female') => {
-                    setValue('gender', value);
-                    setGender(value);
-                  }}
+            <div className="space-y-4">
+              <Label className="text-base font-medium">Select Booking Mode *</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div 
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    bookingMode === 'group_number' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => setValue('bookingMode', 'group_number')}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.gender && (
-                  <p className="text-sm text-red-600">{errors.gender.message}</p>
-                )}
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      bookingMode === 'group_number' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`} />
+                    <div>
+                      <h3 className="font-medium">Group Number</h3>
+                      <p className="text-sm text-gray-500">Book with existing group number</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div 
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    bookingMode === 'travel_documents' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => setValue('bookingMode', 'travel_documents')}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      bookingMode === 'travel_documents' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`} />
+                    <div>
+                      <h3 className="font-medium">Travel Documents</h3>
+                      <p className="text-sm text-gray-500">Book with travel documents</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone_number">Phone Number</Label>
-                <Input
-                  id="phone_number"
-                  type="tel"
-                  placeholder="+91 1234567890"
-                  {...register('phone_number')}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="nationality">Nationality *</Label>
-                <Input
-                  id="nationality"
-                  placeholder="e.g., Indian"
-                  {...register('nationality')}
-                  disabled={isLoading}
-                />
-                {errors.nationality && (
-                  <p className="text-sm text-red-600">{errors.nationality.message}</p>
-                )}
-              </div>
+              {errors.bookingMode && (
+                <p className="text-sm text-red-600">{errors.bookingMode.message}</p>
+              )}
             </div>
           </div>
         );
@@ -273,29 +502,94 @@ export default function UmrahVisaPage() {
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {bookingMode === 'group_number' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="groupNumber">Group Number *</Label>
+                    <Input
+                      id="groupNumber"
+                      placeholder="Enter group number"
+                      {...register('groupNumber')}
+                      disabled={isLoading}
+                    />
+                    {errors.groupNumber && (
+                      <p className="text-sm text-red-600">{errors.groupNumber.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="groupName">Group Name *</Label>
+                    <Input
+                      id="groupName"
+                      placeholder="Enter group name"
+                      {...register('groupName')}
+                      disabled={isLoading}
+                    />
+                    {errors.groupName && (
+                      <p className="text-sm text-red-600">{errors.groupName.message}</p>
+                    )}
+                  </div>
+                </>
+              )}
+
               <div className="space-y-2">
-                <Label htmlFor="passport_number">Passport Number *</Label>
+                <Label htmlFor="flightNumber">Flight Number *</Label>
                 <Input
-                  id="passport_number"
-                  placeholder="Passport Number"
-                  {...register('passport_number')}
+                  id="flightNumber"
+                  placeholder="e.g., SV1234"
+                  {...register('flightNumber')}
                   disabled={isLoading}
                 />
-                {errors.passport_number && (
-                  <p className="text-sm text-red-600">{errors.passport_number.message}</p>
+                {errors.flightNumber && (
+                  <p className="text-sm text-red-600">{errors.flightNumber.message}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="passport_expiry">Passport Expiry Date *</Label>
+                <Label htmlFor="arrivalDate">Arrival Date *</Label>
                 <Input
-                  id="passport_expiry"
+                  id="arrivalDate"
                   type="date"
-                  {...register('passport_expiry')}
+                  {...register('arrivalDate')}
                   disabled={isLoading}
                 />
-                {errors.passport_expiry && (
-                  <p className="text-sm text-red-600">{errors.passport_expiry.message}</p>
+                {errors.arrivalDate && (
+                  <p className="text-sm text-red-600">{errors.arrivalDate.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="departureDate">Departure Date *</Label>
+                <Input
+                  id="departureDate"
+                  type="date"
+                  {...register('departureDate')}
+                  disabled={isLoading}
+                />
+                {errors.departureDate && (
+                  <p className="text-sm text-red-600">{errors.departureDate.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="arrivalAirport">Arrival Airport/Route *</Label>
+                <Select 
+                  value={watch('arrivalAirport')} 
+                  onValueChange={(value) => setValue('arrivalAirport', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select arrival airport/route" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROUTE_OPTIONS.map((route) => (
+                      <SelectItem key={route.id} value={route.id}>
+                        {route.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.arrivalAirport && (
+                  <p className="text-sm text-red-600">{errors.arrivalAirport.message}</p>
                 )}
               </div>
             </div>
@@ -303,34 +597,95 @@ export default function UmrahVisaPage() {
         );
 
       case 3:
+        const isJeddahRouteSelected = arrivalAirport && isJeddahRoute(arrivalAirport);
+        
         return (
           <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-medium">
+                  Transport Details {isJeddahRouteSelected ? '*' : '(Optional)'}
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('/transport-pricing.pdf', '_blank')}
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  View Pricing Brochure
+                </Button>
+              </div>
+              
+              {!isJeddahRouteSelected && (
+                <p className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                  Transport is optional for this route. You can skip this step or provide transport details if needed.
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="travel_date_from">Travel Start Date *</Label>
+                <Label htmlFor="transportRoute">Transport Route</Label>
                 <Input
-                  id="travel_date_from"
-                  type="date"
-                  {...register('travel_date_from')}
-                  disabled={isLoading}
+                  id="transportRoute"
+                  value={arrivalAirport}
+                  disabled
+                  className="bg-gray-50"
                 />
-                {errors.travel_date_from && (
-                  <p className="text-sm text-red-600">{errors.travel_date_from.message}</p>
-                )}
+                <p className="text-xs text-gray-500">Auto-filled based on arrival airport</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="travel_date_to">Travel End Date *</Label>
-                <Input
-                  id="travel_date_to"
-                  type="date"
-                  {...register('travel_date_to')}
-                  disabled={isLoading}
-                />
-                {errors.travel_date_to && (
-                  <p className="text-sm text-red-600">{errors.travel_date_to.message}</p>
+                <Label htmlFor="transportType">
+                  Transport Option {isJeddahRouteSelected ? '*' : ''}
+                </Label>
+                <Select 
+                  value={watch('transportType')} 
+                  onValueChange={(value) => {
+                    setValue('transportType', value);
+                    // Find the selected transport option and set PAX and price
+                    const selectedOption = transportOptions.find(option => option.id === value);
+                    if (selectedOption) {
+                      setValue('transportPax', selectedOption.pax);
+                      setTransportPrice(selectedOption.price);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select transport option" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {transportOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{option.vehicleType}</span>
+                          <span className="text-xs text-gray-500">
+                            {option.pax} PAX - SAR {option.price}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.transportType && (
+                  <p className="text-sm text-red-600">{errors.transportType.message}</p>
                 )}
               </div>
+
+              {transportPrice && transportPax && (
+                <div className="space-y-2">
+                  <Label>Transport Price</Label>
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-lg font-semibold text-green-800">
+                      SAR {transportPrice}
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Price for {transportPax} passengers
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -338,35 +693,439 @@ export default function UmrahVisaPage() {
       case 4:
         return (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="documents">Upload Documents (Passport, Photo, etc.)</Label>
-              <div className="flex items-center space-x-2">
-                <Input
-                  id="documents"
-                  type="file"
-                  multiple
-                  accept="image/*,.pdf"
-                  onChange={handleFileChange}
-                  disabled={isLoading}
-                />
-                <Upload className="h-5 w-5 text-gray-400" />
+            <div className="space-y-4">
+              <Label className="text-base font-medium">Select Accommodation Type *</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div 
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    accommodationType === 'hotel' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => setValue('accommodationType', 'hotel')}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      accommodationType === 'hotel' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`} />
+                    <div>
+                      <h3 className="font-medium">Hotel Details</h3>
+                      <p className="text-sm text-gray-500">Provide hotel check-in/check-out dates</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div 
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                    accommodationType === 'iqama' 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => setValue('accommodationType', 'iqama')}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      accommodationType === 'iqama' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`} />
+                    <div>
+                      <h3 className="font-medium">Iqama Details</h3>
+                      <p className="text-sm text-gray-500">Provide sponsor iqama information</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {documents.length > 0 && (
-                <p className="text-sm text-green-600">
-                  {documents.length} file(s) selected
+              {errors.accommodationType && (
+                <p className="text-sm text-red-600">{errors.accommodationType.message}</p>
+              )}
+            </div>
+
+            {accommodationType === 'hotel' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="makkahCheckIn">Makkah Check-in Date *</Label>
+                  <Input
+                    id="makkahCheckIn"
+                    type="date"
+                    {...register('makkahCheckIn')}
+                    disabled={isLoading}
+                  />
+                  {errors.makkahCheckIn && (
+                    <p className="text-sm text-red-600">{errors.makkahCheckIn.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="makkahCheckOut">Makkah Check-out Date *</Label>
+                  <Input
+                    id="makkahCheckOut"
+                    type="date"
+                    {...register('makkahCheckOut')}
+                    disabled={isLoading}
+                  />
+                  {errors.makkahCheckOut && (
+                    <p className="text-sm text-red-600">{errors.makkahCheckOut.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="madinaCheckIn">Madina Check-in Date *</Label>
+                  <Input
+                    id="madinaCheckIn"
+                    type="date"
+                    {...register('madinaCheckIn')}
+                    disabled={isLoading}
+                  />
+                  {errors.madinaCheckIn && (
+                    <p className="text-sm text-red-600">{errors.madinaCheckIn.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="madinaCheckOut">Madina Check-out Date *</Label>
+                  <Input
+                    id="madinaCheckOut"
+                    type="date"
+                    {...register('madinaCheckOut')}
+                    disabled={isLoading}
+                  />
+                  {errors.madinaCheckOut && (
+                    <p className="text-sm text-red-600">{errors.madinaCheckOut.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {accommodationType === 'iqama' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="iqamaNumber">Iqama Number *</Label>
+                  <Input
+                    id="iqamaNumber"
+                    placeholder="Enter iqama number"
+                    {...register('iqamaNumber')}
+                    disabled={isLoading}
+                  />
+                  {errors.iqamaNumber && (
+                    <p className="text-sm text-red-600">{errors.iqamaNumber.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="iqamaName">Iqama Name *</Label>
+                  <Input
+                    id="iqamaName"
+                    placeholder="Enter iqama holder name"
+                    {...register('iqamaName')}
+                    disabled={isLoading}
+                  />
+                  {errors.iqamaName && (
+                    <p className="text-sm text-red-600">{errors.iqamaName.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="iqamaDob">Date of Birth *</Label>
+                  <Input
+                    id="iqamaDob"
+                    type="date"
+                    {...register('iqamaDob')}
+                    disabled={isLoading}
+                  />
+                  {errors.iqamaDob && (
+                    <p className="text-sm text-red-600">{errors.iqamaDob.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="iqamaMobile">Mobile Number *</Label>
+                  <Input
+                    id="iqamaMobile"
+                    type="tel"
+                    placeholder="+966 123456789"
+                    {...register('iqamaMobile')}
+                    disabled={isLoading}
+                  />
+                  {errors.iqamaMobile && (
+                    <p className="text-sm text-red-600">{errors.iqamaMobile.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
+      case 5:
+        return (
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-medium">Passenger Count *</Label>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updatePassengerCount(Math.max(1, watch('passengerCount') - 1))}
+                    disabled={watch('passengerCount') <= 1}
+                  >
+                    -
+                  </Button>
+                  <span className="w-12 text-center font-medium">{watch('passengerCount')}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updatePassengerCount(watch('passengerCount') + 1)}
+                    disabled={watch('passengerCount') >= (accommodationType === 'iqama' ? VALIDATION_RULES.MAX_PASSENGERS_IQAMA : VALIDATION_RULES.MAX_PASSENGERS)}
+                  >
+                    +
+                  </Button>
+                </div>
+              </div>
+              
+              {accommodationType === 'iqama' && (
+                <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+                  Maximum {VALIDATION_RULES.MAX_PASSENGERS_IQAMA} passengers allowed for iqama accommodation
                 </p>
               )}
-              <p className="text-sm text-gray-500">
-                Supported formats: JPG, PNG, PDF. Maximum file size: 10MB per file.
-              </p>
+            </div>
+
+            <div className="space-y-6">
+              {passengers.map((passenger, index) => (
+                <Card key={index} className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-semibold">
+                      Passenger {index + 1} {passenger.isLeadPassenger && '(Lead Passenger)'}
+                    </h3>
+                    {index === 0 && (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`lead-${index}`}
+                          checked={passenger.isLeadPassenger}
+                          onChange={(e) => {
+                            const updatedPassengers = [...passengers];
+                            updatedPassengers[index].isLeadPassenger = e.target.checked;
+                            setValue('passengers', updatedPassengers);
+                          }}
+                          className="rounded"
+                        />
+                        <Label htmlFor={`lead-${index}`} className="text-sm">
+                          Lead Passenger
+                        </Label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Passenger Details */}
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-4">Personal Information</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-fullName`}>Full Name *</Label>
+                          <Input
+                            id={`passenger-${index}-fullName`}
+                            placeholder="As per passport"
+                            {...register(`passengers.${index}.fullName`)}
+                            disabled={isLoading}
+                          />
+                          {errors.passengers?.[index]?.fullName && (
+                            <p className="text-sm text-red-600">{errors.passengers[index]?.fullName?.message}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-passportNumber`}>Passport Number *</Label>
+                          <Input
+                            id={`passenger-${index}-passportNumber`}
+                            placeholder="Passport number"
+                            {...register(`passengers.${index}.passportNumber`)}
+                            disabled={isLoading}
+                          />
+                          {errors.passengers?.[index]?.passportNumber && (
+                            <p className="text-sm text-red-600">{errors.passengers[index]?.passportNumber?.message}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-nationality`}>Nationality *</Label>
+                          <Input
+                            id={`passenger-${index}-nationality`}
+                            placeholder="e.g., Indian"
+                            {...register(`passengers.${index}.nationality`)}
+                            disabled={isLoading}
+                          />
+                          {errors.passengers?.[index]?.nationality && (
+                            <p className="text-sm text-red-600">{errors.passengers[index]?.nationality?.message}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-passportExpiry`}>Passport Expiry *</Label>
+                          <Input
+                            id={`passenger-${index}-passportExpiry`}
+                            type="date"
+                            {...register(`passengers.${index}.passportExpiry`)}
+                            disabled={isLoading}
+                          />
+                          {errors.passengers?.[index]?.passportExpiry && (
+                            <p className="text-sm text-red-600">{errors.passengers[index]?.passportExpiry?.message}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-dateOfBirth`}>Date of Birth *</Label>
+                          <Input
+                            id={`passenger-${index}-dateOfBirth`}
+                            type="date"
+                            {...register(`passengers.${index}.dateOfBirth`)}
+                            disabled={isLoading}
+                          />
+                          {errors.passengers?.[index]?.dateOfBirth && (
+                            <p className="text-sm text-red-600">{errors.passengers[index]?.dateOfBirth?.message}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-gender`}>Gender *</Label>
+                          <Select 
+                            value={watch(`passengers.${index}.gender`)} 
+                            onValueChange={(value: 'male' | 'female') => {
+                              const updatedPassengers = [...passengers];
+                              updatedPassengers[index].gender = value;
+                              setValue('passengers', updatedPassengers);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {errors.passengers?.[index]?.gender && (
+                            <p className="text-sm text-red-600">{errors.passengers[index]?.gender?.message}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`passenger-${index}-phoneNumber`}>Phone Number</Label>
+                          <Input
+                            id={`passenger-${index}-phoneNumber`}
+                            type="tel"
+                            placeholder="+91 1234567890"
+                            {...register(`passengers.${index}.phoneNumber`)}
+                            disabled={isLoading}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Document Upload Section */}
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-4">Required Documents</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* PAN Card - Only for Lead Passenger */}
+                        {passenger.isLeadPassenger && (
+                          <div className="space-y-2">
+                            <Label htmlFor={`pan-${index}`}>PAN Card *</Label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                              <input
+                                type="file"
+                                id={`pan-${index}`}
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={(e) => handleDocumentUpload(e, `passenger-${index}`, 'pan_card')}
+                                className="hidden"
+                              />
+                              <label
+                                htmlFor={`pan-${index}`}
+                                className="cursor-pointer flex flex-col items-center space-y-2"
+                              >
+                                <Upload className="h-8 w-8 text-gray-400" />
+                                <span className="text-sm text-gray-600">
+                                  {documents[`passenger-${index}`]?.find(d => d.name.includes('pan')) ? 
+                                    'PAN Card uploaded' : 'Upload PAN Card'}
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Passport Front */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`passport-front-${index}`}>Passport Front *</Label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                            <input
+                              type="file"
+                              id={`passport-front-${index}`}
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={(e) => handleDocumentUpload(e, `passenger-${index}`, 'passport_front')}
+                              className="hidden"
+                            />
+                            <label
+                              htmlFor={`passport-front-${index}`}
+                              className="cursor-pointer flex flex-col items-center space-y-2"
+                            >
+                              <Upload className="h-8 w-8 text-gray-400" />
+                              <span className="text-sm text-gray-600">
+                                {documents[`passenger-${index}`]?.find(d => d.name.includes('passport_front')) ? 
+                                  'Passport Front uploaded' : 'Upload Passport Front'}
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Passport Back */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`passport-back-${index}`}>Passport Back *</Label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                            <input
+                              type="file"
+                              id={`passport-back-${index}`}
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={(e) => handleDocumentUpload(e, `passenger-${index}`, 'passport_back')}
+                              className="hidden"
+                            />
+                            <label
+                              htmlFor={`passport-back-${index}`}
+                              className="cursor-pointer flex flex-col items-center space-y-2"
+                            >
+                              <Upload className="h-8 w-8 text-gray-400" />
+                              <span className="text-sm text-gray-600">
+                                {documents[`passenger-${index}`]?.find(d => d.name.includes('passport_back')) ? 
+                                  'Passport Back uploaded' : 'Upload Passport Back'}
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
             </div>
           </div>
         );
+
 
       default:
         return null;
     }
   };
+
+  // Prevent hydration mismatch by not rendering until client-side
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return null;

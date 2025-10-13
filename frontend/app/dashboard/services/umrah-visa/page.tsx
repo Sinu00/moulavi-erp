@@ -37,25 +37,58 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
-interface UmrahVisaRequest {
+interface UmrahPassenger {
   id: string;
-  service_id: string;
-  full_name: string;
-  passport_number: string;
+  bookingId: string;
+  isLeadPassenger: boolean;
+  fullName: string;
+  passportNumber: string;
   nationality: string;
-  travel_date_from: string;
-  travel_date_to: string;
-  passport_expiry: string;
-  date_of_birth: string;
+  passportExpiry: string;
+  dateOfBirth: string;
   gender: 'male' | 'female';
-  phone_number?: string;
+  phoneNumber?: string;
+}
+
+interface UmrahVisaBooking {
+  id: string;
+  serviceId: string;
+  bookingMode: string;
+  groupNumber?: string;
+  groupName?: string;
+  flightNumber: string;
+  arrivalDate: string;
+  departureDate: string;
+  arrivalAirport: string;
+  transportRoute?: string;
+  transportType?: string;
+  transportPax?: number;
+  transportPrice?: number;
+  accommodationType: string;
+  makkahCheckIn?: string;
+  makkahCheckOut?: string;
+  madinaCheckIn?: string;
+  madinaCheckOut?: string;
+  iqamaNumber?: string;
+  iqamaName?: string;
+  iqamaDob?: string;
+  iqamaMobile?: string;
+  passengerCount: number;
   status: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
-  party_name: string;
-  created_at: string;
-  updated_at: string;
-  party_email: string;
-  contact_number?: string;
-  whatsapp_number?: string;
+  createdAt: string;
+  updatedAt: string;
+  passengers: UmrahPassenger[];
+  service: {
+    id: string;
+    status: string;
+    submittedAt: string;
+    createdAt: string;
+    party: {
+      email: string;
+      contactNumber?: string;
+      whatsappNumber?: string;
+    };
+  };
 }
 
 interface PaginationInfo {
@@ -67,10 +100,10 @@ interface PaginationInfo {
 
 export default function UmrahVisaPage() {
   const router = useRouter();
-  const user = getUser();
+  const [user, setUser] = useState<any>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [umrahVisas, setUmrahVisas] = useState<UmrahVisaRequest[]>([]);
+  const [umrahVisas, setUmrahVisas] = useState<UmrahVisaBooking[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 10,
@@ -82,18 +115,25 @@ export default function UmrahVisaPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    if (!user || !hasRole(['admin', 'staff'])) {
+    // Check authentication on client side only
+    const currentUser = getUser();
+    setUser(currentUser);
+    
+    if (!currentUser || !hasRole(['admin', 'staff'])) {
       router.push('/auth');
       return;
     }
+    
+    setIsAuthenticated(true);
 
     if (!hasLoaded) {
       loadUmrahVisas();
       setHasLoaded(true);
     }
-  }, [user]);
+  }, [hasLoaded]);
 
   const loadUmrahVisas = async (page = 1, status?: string) => {
     try {
@@ -119,8 +159,8 @@ export default function UmrahVisaPage() {
       
       // Update local state
       setUmrahVisas(prev => 
-        prev.map(visa => 
-          visa.id === id ? { ...visa, status: newStatus as any } : visa
+        prev.map(booking => 
+          booking.id === id ? { ...booking, status: newStatus as any } : booking
         )
       );
       
@@ -162,18 +202,34 @@ export default function UmrahVisaPage() {
     );
   };
 
-  const filteredVisas = umrahVisas.filter(visa => {
+  const filteredVisas = umrahVisas.filter(booking => {
+    // Search in lead passenger details
+    const leadPassenger = booking.passengers.find(p => p.isLeadPassenger);
     const matchesSearch = 
-      visa.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      visa.passportNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      visa.partyName.toLowerCase().includes(searchTerm.toLowerCase());
+      (leadPassenger?.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (leadPassenger?.passportNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (booking.groupName || '').toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = !statusFilter || statusFilter === 'all' || visa.status === statusFilter;
+    const matchesStatus = !statusFilter || statusFilter === 'all' || booking.status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
 
-  if (!user) {
+  // Show loading state during authentication check
+  if (!isAuthenticated && !user) {
+    return (
+      <div className="flex h-screen bg-gray-50/50">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
     return null;
   }
 
@@ -313,9 +369,11 @@ export default function UmrahVisaPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredVisas.map((visa) => (
+                  {filteredVisas.map((booking) => {
+                    const leadPassenger = booking.passengers.find(p => p.isLeadPassenger);
+                    return (
                     <div
-                      key={visa.id}
+                      key={booking.id}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       <div className="flex items-center space-x-4 flex-1">
@@ -327,38 +385,38 @@ export default function UmrahVisaPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2 mb-1">
                             <h3 className="text-sm font-medium text-gray-900 truncate">
-                              {visa.fullName}
+                              {leadPassenger?.fullName || 'N/A'}
                             </h3>
                             <span className="text-xs text-gray-500">•</span>
-                            <span className="text-xs text-gray-500">{visa.gender}</span>
+                            <span className="text-xs text-gray-500">{leadPassenger?.gender || 'N/A'}</span>
                           </div>
                           <div className="flex items-center space-x-2 mb-1">
                             <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">
-                              {visa.partyName}
+                              {booking.groupName || booking.service.party.email}
                             </span>
                           </div>
                           <div className="flex items-center space-x-4 text-xs text-gray-500">
                             <span className="flex items-center">
                               <FileText className="h-3 w-3 mr-1" />
-                              {visa.passportNumber}
+                              {leadPassenger?.passportNumber || 'N/A'}
                             </span>
                             <span className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
-                              {new Date(visa.travelDateFrom).toLocaleDateString()}
+                              {booking.arrivalDate ? new Date(booking.arrivalDate).toLocaleDateString() : 'N/A'}
                             </span>
                             <span className="flex items-center">
                               <Calendar className="h-3 w-3 mr-1" />
-                              {new Date(visa.travelDateTo).toLocaleDateString()}
+                              {booking.departureDate ? new Date(booking.departureDate).toLocaleDateString() : 'N/A'}
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-3">
-                        {getStatusBadge(visa.status)}
+                        {getStatusBadge(booking.status)}
                         <Select
-                          value={visa.status}
-                          onValueChange={(value) => handleStatusUpdate(visa.id, value)}
-                          disabled={updatingStatus === visa.id}
+                          value={booking.status}
+                          onValueChange={(value) => handleStatusUpdate(booking.id, value)}
+                          disabled={updatingStatus === booking.id}
                         >
                           <SelectTrigger className="w-32">
                             <SelectValue />
@@ -373,7 +431,8 @@ export default function UmrahVisaPage() {
                         </Select>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
