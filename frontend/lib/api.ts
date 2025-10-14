@@ -146,8 +146,6 @@ export const umrahVisaAPI = {
   
   getBookings: (params?: any) => api.get('/umrah-visa/bookings', { params }),
   
-  getPartyBookings: (params?: any) => api.get('/umrah-visa/party-bookings', { params }),
-  
   getBookingById: (id: string) => api.get(`/umrah-visa/booking/${id}`),
   
   updateBookingStatus: (id: string, status: string, notes?: string) =>
@@ -232,7 +230,7 @@ export const destinationMasterAPI = {
 export const hotelMasterAPI = {
   create: (data: any) => api.post('/hotel-masters', data),
   getAll: (params?: any) => api.get('/hotel-masters', { params }),
-  getByDestination: (destinationId: string, params?: any) => api.get(`/hotel-masters/by-destination/${destinationId}`, { params }),
+  getByLocation: (locationId: string, params?: any) => api.get(`/hotel-masters/by-location/${locationId}`, { params }),
   getById: (id: string) => api.get(`/hotel-masters/${id}`),
   update: (id: string, data: any) => api.put(`/hotel-masters/${id}`, data),
   delete: (id: string) => api.delete(`/hotel-masters/${id}`),

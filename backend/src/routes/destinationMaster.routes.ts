@@ -39,7 +39,7 @@ router.post(
       });
     }
 
-    const { destinationCode, destinationName, city, country, description } = req.body as CreateDestinationMasterRequest;
+    const { destinationCode, destinationName, city, country } = req.body as CreateDestinationMasterRequest;
 
     const existingDestination = await prisma.destinationMaster.findUnique({
       where: { destinationCode },
@@ -55,7 +55,6 @@ router.post(
         destinationName,
         city,
         country,
-        description,
       },
     });
 
@@ -97,7 +96,7 @@ router.get(
         include: {
           hotels: {
             where: { isActive: true },
-            select: { id: true, hotelName: true, category: true }
+            select: { id: true, hotelName: true }
           }
         }
       }),
@@ -150,7 +149,7 @@ router.get(
       include: {
         hotels: {
           where: { isActive: true },
-          select: { id: true, hotelName: true, category: true, capacity: true }
+          select: { id: true, hotelName: true }
         }
       }
     });
@@ -180,7 +179,7 @@ router.put(
     }
 
     const { id } = req.params;
-    const { destinationCode, destinationName, city, country, description, isActive } = req.body as UpdateDestinationMasterRequest;
+    const { destinationCode, destinationName, city, country, isActive } = req.body as UpdateDestinationMasterRequest;
 
     // Check if destination code already exists for a different destination
     const existingDestination = await prisma.destinationMaster.findFirst({
@@ -204,7 +203,6 @@ router.put(
         destinationName,
         city,
         country,
-        description,
         isActive,
       },
     });

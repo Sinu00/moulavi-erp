@@ -6,13 +6,10 @@ import {
   Document, 
   RefreshToken,
   TransportMaster,
-  CountryMaster,
   CurrencyMaster,
   DestinationMaster,
   HotelMaster,
   ServiceTypeMaster,
-  UserRoleMaster,
-  AirportRouteMaster,
   UserRole,
   CustomerType,
   AccountCurrency,
@@ -21,7 +18,7 @@ import {
   Gender
 } from '@prisma/client';
 
-// Re-export Prisma types for convenience
+// Re-export Prisma types for convenience (Updated for cleanup)
 export type { 
   User, 
   Party, 
@@ -29,13 +26,10 @@ export type {
   Document, 
   RefreshToken,
   TransportMaster,
-  CountryMaster,
   CurrencyMaster,
   DestinationMaster,
   HotelMaster,
   ServiceTypeMaster,
-  UserRoleMaster,
-  AirportRouteMaster,
   UserRole,
   CustomerType,
   AccountCurrency,
@@ -53,57 +47,71 @@ export interface AuthRequest extends Request {
   };
 }
 
-// Umrah Visa Booking Types
-export type BookingMode = 'group_number' | 'travel_documents';
+// Umrah Visa Booking Types (New Step-by-Step Workflow)
 export type AccommodationType = 'hotel' | 'iqama';
 
-export interface CreateUmrahVisaBookingRequest {
-  party_id: string;
-  booking_mode: BookingMode;
-  group_number?: string;
-  group_name?: string;
-  flight_number: string;
-  arrival_date: string;
-  departure_date: string;
-  arrival_airport: string;
-  transport_route?: string;
-  transport_type?: string;
-  transport_pax?: number;
-  transport_price?: number;
-  accommodation_type: AccommodationType;
-  makkah_checkin?: string;
-  makkah_checkout?: string;
-  madina_checkin?: string;
-  madina_checkout?: string;
-  iqama_number?: string;
-  iqama_name?: string;
-  iqama_dob?: string;
-  iqama_mobile?: string;
-  passenger_count: number;
-  passengers: CreateUmrahPassengerRequest[];
+// Step 1: Group Details + Basic Info
+export interface Step1Data {
+  hasGroupNumber: boolean;
+  groupNumber?: string;
+  groupName?: string;
+  passengerCount: number;
 }
 
-export interface CreateUmrahPassengerRequest {
-  is_lead_passenger: boolean;
-  full_name: string;
-  passport_number: string;
-  nationality: string;
-  passport_expiry: string;
-  date_of_birth: string;
-  gender: 'male' | 'female';
-  phone_number?: string;
+// Step 2: Travel Details (Both arrival and departure required)
+export interface Step2Data {
+  arrivalDate: string;
+  arrivalAirportId: string;
+  arrivalFlightNumber: string;
+  departureDate: string;
+  departureAirportId: string;
+  departureFlightNumber: string;
+  transportBookings?: Array<{
+    fromLocationId: string;
+    toLocationId: string;
+    vehicleType: string;
+    paxCount: number;
+    price: number;
+    travelDate?: string;
+  }>;
 }
 
+// Step 3: Accommodation Details (Simplified - no roomCount/guestCount)
+export interface Step3Data {
+  accommodationType: AccommodationType;
+  iqamaDetails?: {
+    iqamaNumber?: string;
+    iqamaName?: string;
+    iqamaDob?: string;
+    iqamaMobile?: string;
+  };
+  hotelBookings?: Array<{
+    locationId: string;
+    hotelId: string;
+    checkInDate: string;
+    checkOutDate: string;
+  }>;
+}
+
+// Step 4: Passenger Details (Simplified)
+export interface Step4Data {
+  passengers: Array<{
+    fullName: string;
+    isLeadPassenger: boolean;
+  }>;
+}
+
+// Transport Pricing Types (Updated)
 export interface TransportPricingRequest {
   route: string;
-  transport_type: string;
-  pax: number;
+  vehicleType: string;
+  paxCount: number;
 }
 
 export interface TransportPricingResponse {
   route: string;
-  transport_type: string;
-  pax: number;
+  vehicleType: string;
+  paxCount: number;
   price: number;
 }
 
@@ -130,33 +138,21 @@ export interface UpdateUserRequest {
   is_active?: boolean;
 }
 
-// Transport Master Types
+// Transport Master Types (Updated - paxCount instead of pax)
 export interface CreateTransportMasterRequest {
-  vehicleRoute: string;
+  fromLocationId: string;
+  toLocationId: string;
   vehicleType: string;
-  pax: number;
+  paxCount: number;
   price: number;
 }
 
 export interface UpdateTransportMasterRequest {
-  vehicleRoute?: string;
+  fromLocationId?: string;
+  toLocationId?: string;
   vehicleType?: string;
-  pax?: number;
+  paxCount?: number;
   price?: number;
-  isActive?: boolean;
-}
-
-// Country Master Types
-export interface CreateCountryMasterRequest {
-  countryCode: string;
-  countryName: string;
-  nationality: string;
-}
-
-export interface UpdateCountryMasterRequest {
-  countryCode?: string;
-  countryName?: string;
-  nationality?: string;
   isActive?: boolean;
 }
 
@@ -174,13 +170,12 @@ export interface UpdateCurrencyMasterRequest {
   isActive?: boolean;
 }
 
-// Destination Master Types
+// Destination Master Types (Simplified - removed description)
 export interface CreateDestinationMasterRequest {
   destinationCode: string;
   destinationName: string;
   city: string;
-  country: string;
-  description?: string;
+  country?: string; // Defaults to "Saudi Arabia"
 }
 
 export interface UpdateDestinationMasterRequest {
@@ -188,29 +183,20 @@ export interface UpdateDestinationMasterRequest {
   destinationName?: string;
   city?: string;
   country?: string;
-  description?: string;
   isActive?: boolean;
 }
 
-// Hotel Master Types
+// Hotel Master Types (Simplified - removed category, capacity, amenities, description)
 export interface CreateHotelMasterRequest {
   hotelCode: string;
   hotelName: string;
-  destinationId: string;
-  category: string;
-  capacity: number;
-  amenities?: string[];
-  description?: string;
+  locationId: string;
 }
 
 export interface UpdateHotelMasterRequest {
   hotelCode?: string;
   hotelName?: string;
-  destinationId?: string;
-  category?: string;
-  capacity?: number;
-  amenities?: string[];
-  description?: string;
+  locationId?: string;
   isActive?: boolean;
 }
 
@@ -226,62 +212,6 @@ export interface UpdateServiceTypeMasterRequest {
   serviceCode?: string;
   serviceName?: string;
   category?: string;
-  description?: string;
-  isActive?: boolean;
-}
-
-// User Role Master Types
-export interface CreateUserRoleMasterRequest {
-  roleCode: string;
-  roleName: string;
-  permissions: string[];
-  description?: string;
-}
-
-export interface UpdateUserRoleMasterRequest {
-  roleCode?: string;
-  roleName?: string;
-  permissions?: string[];
-  description?: string;
-  isActive?: boolean;
-}
-
-// Airport Route Master Types
-export interface CreateAirportRouteMasterRequest {
-  routeCode: string;
-  routeName: string;
-  fromAirport: string;
-  toAirport: string;
-  fromDestinationId?: string;
-  toDestinationId?: string;
-  description?: string;
-}
-
-export interface UpdateAirportRouteMasterRequest {
-  routeCode?: string;
-  routeName?: string;
-  fromAirport?: string;
-  toAirport?: string;
-  fromDestinationId?: string;
-  toDestinationId?: string;
-  description?: string;
-  isActive?: boolean;
-}
-
-// Destination Master Types
-export interface CreateDestinationMasterRequest {
-  destinationCode: string;
-  destinationName: string;
-  city: string;
-  country: string;
-  description?: string;
-}
-
-export interface UpdateDestinationMasterRequest {
-  destinationCode?: string;
-  destinationName?: string;
-  city?: string;
-  country?: string;
   description?: string;
   isActive?: boolean;
 }

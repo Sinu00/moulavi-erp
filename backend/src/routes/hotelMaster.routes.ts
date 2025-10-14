@@ -10,19 +10,13 @@ const router = Router();
 const createHotelMasterValidation = [
   body('hotelCode').isString().notEmpty().trim().isLength({ min: 2, max: 20 }),
   body('hotelName').isString().notEmpty().trim(),
-  body('destinationId').isString().notEmpty().trim(),
-  body('category').isString().notEmpty().trim(),
-  body('capacity').isInt({ min: 1 }),
+  body('locationId').isString().notEmpty().trim(),
 ];
 
 const updateHotelMasterValidation = [
   body('hotelCode').isString().notEmpty().trim().isLength({ min: 2, max: 20 }).optional(),
   body('hotelName').isString().notEmpty().trim().optional(),
-  body('destinationId').isString().notEmpty().trim().optional(),
-  body('category').isString().notEmpty().trim().optional(),
-  body('capacity').isInt({ min: 1 }).optional(),
-  body('amenities').isArray().optional(),
-  body('description').isString().optional(),
+  body('locationId').isString().notEmpty().trim().optional(),
   body('isActive').isBoolean().optional(),
 ];
 
@@ -33,7 +27,7 @@ router.post(
   authorize('admin', 'staff'),
   createHotelMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { hotelCode, hotelName, destinationId, category, capacity, amenities, description } = req.body as CreateHotelMasterRequest;
+    const { hotelCode, hotelName, locationId } = req.body as CreateHotelMasterRequest;
 
     const existingHotel = await prisma.hotelMaster.findUnique({
       where: { hotelCode },
@@ -43,24 +37,20 @@ router.post(
       return res.status(400).json({ error: 'Hotel with this code already exists' });
     }
 
-    // Verify destination exists
-    const destination = await prisma.destinationMaster.findUnique({
-      where: { id: destinationId },
+    // Verify location (destination) exists
+    const location = await prisma.destinationMaster.findUnique({
+      where: { id: locationId },
     });
 
-    if (!destination) {
-      return res.status(400).json({ error: 'Destination not found' });
+    if (!location) {
+      return res.status(400).json({ error: 'Location not found' });
     }
 
     const hotelMaster = await prisma.hotelMaster.create({
       data: {
         hotelCode,
         hotelName,
-        destinationId,
-        category,
-        capacity,
-        amenities: amenities || [],
-        description,
+        locationId,
       },
     });
 
@@ -74,7 +64,7 @@ router.get(
   authenticate,
   authorize('admin', 'staff', 'party'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = '1', limit = '10', search, isActive, destinationId, category } = req.query;
+    const { page = '1', limit = '10', search, isActive, locationId } = req.query;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -85,17 +75,13 @@ router.get(
       where.OR = [
         { hotelName: { contains: search, mode: 'insensitive' } },
         { hotelCode: { contains: search, mode: 'insensitive' } },
-        { category: { contains: search, mode: 'insensitive' } },
       ];
     }
     if (isActive !== undefined) {
       where.isActive = String(isActive).toLowerCase() === 'true';
     }
-    if (destinationId) {
-      where.destinationId = destinationId;
-    }
-    if (category) {
-      where.category = category;
+    if (locationId) {
+      where.locationId = locationId;
     }
 
     const [hotelMasters, total] = await Promise.all([
@@ -105,7 +91,7 @@ router.get(
         take: limitNum,
         orderBy: { hotelName: 'asc' },
         include: {
-          destination: {
+          location: {
             select: { id: true, destinationName: true, city: true }
           }
         }
@@ -125,34 +111,24 @@ router.get(
   })
 );
 
-// Get hotels by destination
+// Get hotels by location (destination)
 router.get(
-  '/by-destination/:destinationId',
+  '/by-location/:locationId',
   authenticate,
   authorize('admin', 'staff', 'party'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { destinationId } = req.params;
-    const { category } = req.query;
-
-    const where: any = {
-      destinationId,
-      isActive: true,
-    };
-
-    if (category) {
-      where.category = category;
-    }
+    const { locationId } = req.params;
 
     const hotelMasters = await prisma.hotelMaster.findMany({
-      where,
+      where: {
+        locationId,
+        isActive: true,
+      },
       orderBy: { hotelName: 'asc' },
       select: {
         id: true,
         hotelCode: true,
         hotelName: true,
-        category: true,
-        capacity: true,
-        amenities: true,
       },
     });
 
@@ -170,7 +146,7 @@ router.get(
     const hotelMaster = await prisma.hotelMaster.findUnique({
       where: { id },
       include: {
-        destination: {
+        location: {
           select: { id: true, destinationName: true, city: true, country: true }
         }
       }
@@ -192,16 +168,16 @@ router.put(
   updateHotelMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const { hotelCode, hotelName, destinationId, category, capacity, amenities, description, isActive } = req.body as UpdateHotelMasterRequest;
+    const { hotelCode, hotelName, locationId, isActive } = req.body as UpdateHotelMasterRequest;
 
-    // Verify destination exists if provided
-    if (destinationId) {
-      const destination = await prisma.destinationMaster.findUnique({
-        where: { id: destinationId },
+    // Verify location exists if provided
+    if (locationId) {
+      const location = await prisma.destinationMaster.findUnique({
+        where: { id: locationId },
       });
 
-      if (!destination) {
-        return res.status(400).json({ error: 'Destination not found' });
+      if (!location) {
+        return res.status(400).json({ error: 'Location not found' });
       }
     }
 
@@ -210,11 +186,7 @@ router.put(
       data: {
         hotelCode,
         hotelName,
-        destinationId,
-        category,
-        capacity,
-        amenities,
-        description,
+        locationId,
         isActive,
       },
     });

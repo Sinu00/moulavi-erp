@@ -229,7 +229,7 @@ export default function AirportRouteMasterPage() {
                         <SelectValue placeholder="Filter by from destination" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All From Destinations</SelectItem>
+                        <SelectItem value="all">All From Destinations</SelectItem>
                         {destinations.map((destination) => (
                           <SelectItem key={destination.id} value={destination.id}>
                             {destination.destinationName}
@@ -242,7 +242,7 @@ export default function AirportRouteMasterPage() {
                         <SelectValue placeholder="Filter by to destination" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All To Destinations</SelectItem>
+                        <SelectItem value="all">All To Destinations</SelectItem>
                         {destinations.map((destination) => (
                           <SelectItem key={destination.id} value={destination.id}>
                             {destination.destinationName}
@@ -344,7 +344,7 @@ export default function AirportRouteMasterPage() {
                 <SelectValue placeholder="From destination" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All From Destinations</SelectItem>
+                <SelectItem value="all">All From Destinations</SelectItem>
                 {destinations.map((destination) => (
                   <SelectItem key={destination.id} value={destination.id}>
                     {destination.destinationName}
@@ -357,7 +357,7 @@ export default function AirportRouteMasterPage() {
                 <SelectValue placeholder="To destination" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All To Destinations</SelectItem>
+                <SelectItem value="all">All To Destinations</SelectItem>
                 {destinations.map((destination) => (
                   <SelectItem key={destination.id} value={destination.id}>
                     {destination.destinationName}
@@ -428,7 +428,7 @@ export default function AirportRouteMasterPage() {
                       <SelectValue placeholder="Select from destination" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No destination</SelectItem>
+                      <SelectItem value="none">No destination</SelectItem>
                       {destinations.map((destination) => (
                         <SelectItem key={destination.id} value={destination.id}>
                           {destination.destinationName} - {destination.city}
@@ -444,7 +444,7 @@ export default function AirportRouteMasterPage() {
                       <SelectValue placeholder="Select to destination" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No destination</SelectItem>
+                      <SelectItem value="none">No destination</SelectItem>
                       {destinations.map((destination) => (
                         <SelectItem key={destination.id} value={destination.id}>
                           {destination.destinationName} - {destination.city}

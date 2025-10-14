@@ -74,15 +74,23 @@ export class CancellationService {
     cancellationDate: Date = new Date()
   ): Promise<CancellationCalculation> {
     try {
-      // Get booking details
+      // Get booking details with related data
       const booking = await prisma.umrahVisaBooking.findUnique({
         where: { id: bookingId },
         select: {
           id: true,
-          arrivalDate: true,
-          transportPrice: true,
           status: true,
-          isDeleted: true
+          isDeleted: true,
+          travelDetails: {
+            select: {
+              arrivalDate: true
+            }
+          },
+          transportBookings: {
+            select: {
+              price: true
+            }
+          }
         }
       });
 
@@ -120,7 +128,19 @@ export class CancellationService {
       }
 
       // Get applicable policy
-      const policy = await this.getCancellationPolicy(booking.arrivalDate, cancellationDate);
+      const arrivalDate = booking.travelDetails?.arrivalDate;
+      if (!arrivalDate) {
+        return {
+          canCancel: false,
+          cancellationFee: 0,
+          refundAmount: 0,
+          refundPercentage: 0,
+          policy: null,
+          message: 'No travel details found for booking'
+        };
+      }
+      
+      const policy = await this.getCancellationPolicy(arrivalDate, cancellationDate);
 
       if (!policy) {
         return {
@@ -133,8 +153,11 @@ export class CancellationService {
         };
       }
 
-      // Calculate refund (assuming total booking cost includes transport)
-      const totalCost = Number(booking.transportPrice || 0);
+      // Calculate refund from transport bookings
+      const totalTransportCost = booking.transportBookings?.reduce((sum, transport) => {
+        return sum + Number(transport.price || 0);
+      }, 0) || 0;
+      const totalCost = totalTransportCost;
       const cancellationFee = policy.cancellationFee;
       const refundPercentage = policy.refundPercentage;
       const refundAmount = (totalCost - cancellationFee) * (refundPercentage / 100);

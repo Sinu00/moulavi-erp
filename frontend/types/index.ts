@@ -347,15 +347,11 @@ export interface HotelMaster {
   id: string;
   hotelCode: string;
   hotelName: string;
-  destinationId: string;
-  category: string;
-  capacity: number;
-  amenities: string[];
-  description?: string;
+  locationId: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  destination?: {
+  location?: {
     id: string;
     destinationName: string;
     city: string;
@@ -365,21 +361,13 @@ export interface HotelMaster {
 export interface CreateHotelMasterRequest {
   hotelCode: string;
   hotelName: string;
-  destinationId?: string;
-  category?: string;
-  capacity: number;
-  amenities?: string[];
-  description?: string;
+  locationId: string;
 }
 
 export interface UpdateHotelMasterRequest {
   hotelCode?: string;
   hotelName?: string;
-  destinationId?: string;
-  category?: string;
-  capacity?: number;
-  amenities?: string[];
-  description?: string;
+  locationId?: string;
   isActive?: boolean;
 }
 

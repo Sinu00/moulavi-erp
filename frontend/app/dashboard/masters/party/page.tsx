@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
+import { partyAPI } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import PartyStatsCards from '@/components/PartyStatsCards';
 import PartyTable from '@/components/PartyTable';

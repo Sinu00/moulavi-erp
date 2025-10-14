@@ -84,6 +84,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Hotel Master', icon: Building, path: '/dashboard/masters/hotel' },
     { name: 'Service Type Master', icon: Settings, path: '/dashboard/masters/service-type' },
     { name: 'User Role Master', icon: Shield, path: '/dashboard/masters/user-role' },
+    { name: 'Airport Master', icon: Plane, path: '/dashboard/masters/airport' },
     { name: 'Airport Route Master', icon: Plane, path: '/dashboard/masters/airport-route' },
     { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
     { name: 'Transport Master', icon: Truck, path: '/dashboard/masters/transport' },

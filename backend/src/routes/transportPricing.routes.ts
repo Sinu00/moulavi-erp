@@ -31,7 +31,7 @@ router.get(
     }
     
     const pricingResult = await TransportPricingService.getTransportPrice({
-      routeId: routeId as string,
+      routeId: routeId as string, // Keep for backward compatibility
       transportType: transportType as string,
       paxCount: parseInt(paxCount as string),
       date: date ? new Date(date as string) : undefined
@@ -41,20 +41,34 @@ router.get(
   })
 );
 
-// Get all transport options for a route
+// Get all transport options for locations
 router.get(
-  '/options/:routeId',
+  '/options/:fromLocationId/:toLocationId',
   authenticate,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { routeId } = req.params;
+    const { fromLocationId, toLocationId } = req.params;
     const { date } = req.query;
     
     const options = await TransportPricingService.getTransportOptions(
-      routeId,
+      fromLocationId,
+      toLocationId,
       date ? new Date(date as string) : undefined
     );
     
     res.json({ options });
+  })
+);
+
+// Legacy endpoint for backward compatibility
+router.get(
+  '/options/:routeId',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    res.status(400).json({
+      error: 'Endpoint deprecated',
+      message: 'Please use /options/:fromLocationId/:toLocationId endpoint instead',
+      details: 'The transport system now uses location-based routing'
+    });
   })
 );
 
@@ -184,10 +198,12 @@ router.post(
     }
     
     const validation = await TransportPricingService.validateTransportConfiguration(
-      routeId,
+      undefined, // fromLocationId
+      undefined, // toLocationId
       transportType,
       paxCount,
-      date ? new Date(date) : undefined
+      date ? new Date(date as string) : undefined,
+      routeId // routeId for backward compatibility
     );
     
     res.json(validation);

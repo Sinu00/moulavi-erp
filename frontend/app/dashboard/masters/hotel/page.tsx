@@ -32,11 +32,7 @@ export default function HotelMasterPage() {
   const [formData, setFormData] = useState<CreateHotelMasterRequest>({
     hotelCode: '',
     hotelName: '',
-    destinationId: undefined,
-    category: undefined,
-    capacity: 0,
-    amenities: [],
-    description: ''
+    locationId: ''
   });
 
   useEffect(() => {
@@ -91,11 +87,7 @@ export default function HotelMasterPage() {
       setFormData({
         hotelCode: '',
         hotelName: '',
-        destinationId: undefined,
-        category: undefined,
-        capacity: 0,
-        amenities: [],
-        description: ''
+        locationId: ''
       });
       loadHotels();
     } catch (error) {
@@ -109,11 +101,7 @@ export default function HotelMasterPage() {
     setFormData({
       hotelCode: hotel.hotelCode,
       hotelName: hotel.hotelName,
-      destinationId: hotel.destinationId,
-      category: hotel.category,
-      capacity: hotel.capacity,
-      amenities: hotel.amenities,
-      description: hotel.description || ''
+      locationId: hotel.locationId
     });
     setShowCreateForm(true);
   };
@@ -142,32 +130,15 @@ export default function HotelMasterPage() {
   };
 
   const handleAmenityChange = (amenity: string, checked: boolean) => {
-    if (checked) {
-      setFormData({
-        ...formData,
-        amenities: [...formData.amenities, amenity]
-      });
-    } else {
-      setFormData({
-        ...formData,
-        amenities: formData.amenities.filter(a => a !== amenity)
-      });
-    }
+    // This function is no longer needed
   };
 
   const filteredHotels = hotels.filter(hotel => {
     const matchesSearch = hotel.hotelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         hotel.hotelCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         hotel.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDestination = !selectedDestination || hotel.destinationId === selectedDestination;
-    return matchesSearch && matchesDestination;
+                         hotel.hotelCode.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesLocation = !selectedDestination || hotel.locationId === selectedDestination;
+    return matchesSearch && matchesLocation;
   });
-
-  const commonAmenities = [
-    'WiFi', 'Restaurant', 'Prayer Room', 'Pool', 'Spa', 'Fitness Center',
-    'Business Center', 'Airport Shuttle', 'Room Service', 'Laundry',
-    'Parking', 'Conference Room', 'Garden', 'Terrace'
-  ];
 
   if (!user) {
     return null;
@@ -393,10 +364,10 @@ export default function HotelMasterPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="destinationId">Destination *</Label>
-                  <Select value={formData.destinationId || ''} onValueChange={(value) => setFormData({ ...formData, destinationId: value })}>
+                  <Label htmlFor="locationId">Location *</Label>
+                  <Select value={formData.locationId || ''} onValueChange={(value) => setFormData({ ...formData, locationId: value })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select destination" />
+                      <SelectValue placeholder="Select location" />
                     </SelectTrigger>
                     <SelectContent>
                       {destinations.map((destination) => (
@@ -407,58 +378,6 @@ export default function HotelMasterPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category *</Label>
-                  <Select value={formData.category || ''} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2-star">2 Star</SelectItem>
-                      <SelectItem value="3-star">3 Star</SelectItem>
-                      <SelectItem value="4-star">4 Star</SelectItem>
-                      <SelectItem value="5-star">5 Star</SelectItem>
-                      <SelectItem value="Budget">Budget</SelectItem>
-                      <SelectItem value="Luxury">Luxury</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="capacity">Capacity *</Label>
-                  <Input
-                    id="capacity"
-                    type="number"
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || 0 })}
-                    placeholder="e.g., 500"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Amenities</Label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {commonAmenities.map((amenity) => (
-                    <label key={amenity} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.amenities.includes(amenity)}
-                        onChange={(e) => handleAmenityChange(amenity, e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{amenity}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Optional description"
-                />
               </div>
               <div className="flex justify-end space-x-2">
                 <Button
@@ -470,11 +389,7 @@ export default function HotelMasterPage() {
                     setFormData({
                       hotelCode: '',
                       hotelName: '',
-                      destinationId: undefined,
-                      category: undefined,
-                      capacity: 0,
-                      amenities: [],
-                      description: ''
+                      locationId: ''
                     });
                   }}
                 >
@@ -502,10 +417,10 @@ export default function HotelMasterPage() {
                   <div>
                     <h3 className="font-semibold text-gray-900">{hotel.hotelName}</h3>
                     <p className="text-sm text-gray-600">
-                      {hotel.destination?.destinationName} - {hotel.category}
+                      {hotel.location?.destinationName}
                     </p>
                     <p className="text-xs text-gray-500">
-                      Code: {hotel.hotelCode} | Capacity: {hotel.capacity} rooms
+                      Code: {hotel.hotelCode}
                     </p>
                   </div>
                 </div>
@@ -537,20 +452,6 @@ export default function HotelMasterPage() {
                   </Button>
                 </div>
               </div>
-              {hotel.amenities.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {hotel.amenities.map((amenity) => (
-                    <Badge key={amenity} variant="outline" className="text-xs">
-                      {amenity}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {hotel.description && (
-                <div className="mt-3 text-sm text-gray-600">
-                  {hotel.description}
-                </div>
-              )}
             </CardContent>
           </Card>
         ))}

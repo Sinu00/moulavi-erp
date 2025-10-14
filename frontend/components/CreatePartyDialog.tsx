@@ -124,12 +124,13 @@ export default function CreatePartyDialog({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="sm:max-w-md">
-        <SheetHeader>
+      <SheetContent side="right" className="sm:max-w-md flex flex-col h-full">
+        <SheetHeader className="flex-shrink-0">
           <SheetTitle>{editingParty ? 'Edit Party' : title}</SheetTitle>
         </SheetHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex-1 overflow-y-auto py-4 px-1">
+          <form id="party-form" onSubmit={handleSubmit} className="space-y-4 pr-2">
           <div className="space-y-2">
             <Label htmlFor="party_name">Party Name *</Label>
             <Input
@@ -281,25 +282,27 @@ export default function CreatePartyDialog({
               </Label>
             </div>
           </div>
+          </form>
+        </div>
 
-          <SheetFooter className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-            >
-              {loading ? 'Saving...' : (editingParty ? 'Update Party' : 'Create Party')}
-            </Button>
-          </SheetFooter>
-        </form>
+        <SheetFooter className="flex-shrink-0 flex justify-end space-x-2 pt-4 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="party-form"
+            disabled={loading}
+            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+          >
+            {loading ? 'Saving...' : (editingParty ? 'Update Party' : 'Create Party')}
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

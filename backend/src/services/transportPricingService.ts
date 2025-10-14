@@ -1,7 +1,9 @@
 import { prisma } from '../config/database';
 
 export interface TransportPricingRequest {
-  routeId: string;
+  fromLocationId?: string;
+  toLocationId?: string;
+  routeId?: string; // Keep for backward compatibility
   transportType: string;
   paxCount: number;
   date?: Date;
@@ -28,24 +30,32 @@ export class TransportPricingService {
    * Get transport price for specific configuration
    */
   static async getTransportPrice(request: TransportPricingRequest): Promise<TransportPricingResult> {
-    const { routeId, transportType, paxCount } = request;
+    const { fromLocationId, toLocationId, routeId, transportType, paxCount } = request;
 
     try {
+      // Build where clause based on available parameters
+      const whereClause: any = {
+        vehicleType: transportType,
+        pax: paxCount,
+        isActive: true
+      };
+
+      if (fromLocationId && toLocationId) {
+        whereClause.fromLocationId = fromLocationId;
+        whereClause.toLocationId = toLocationId;
+      }
+
       // Use TransportMaster instead of TransportPricing
       const transport = await prisma.transportMaster.findFirst({
-        where: {
-          vehicleRoute: routeId,
-          vehicleType: transportType,
-          pax: paxCount,
-          isActive: true
-        }
+        where: whereClause
       });
 
       if (!transport) {
+        const routeInfo = fromLocationId && toLocationId ? `from ${fromLocationId} to ${toLocationId}` : `route ${routeId}`;
         return {
           price: null,
           isValid: false,
-          message: `No transport found for ${transportType} with ${paxCount} PAX on route ${routeId}`
+          message: `No transport found for ${transportType} with ${paxCount} PAX on ${routeInfo}`
         };
       }
 
@@ -69,16 +79,22 @@ export class TransportPricingService {
   /**
    * Get all available transport options for a route
    */
-  static async getTransportOptions(routeId: string, date?: Date): Promise<TransportOption[]> {
+  static async getTransportOptions(fromLocationId?: string, toLocationId?: string, date?: Date): Promise<TransportOption[]> {
     try {
+      const whereClause: any = {
+        isActive: true
+      };
+
+      if (fromLocationId && toLocationId) {
+        whereClause.fromLocationId = fromLocationId;
+        whereClause.toLocationId = toLocationId;
+      }
+
       const transportOptions = await prisma.transportMaster.findMany({
-        where: {
-          vehicleRoute: routeId,
-          isActive: true
-        },
+        where: whereClause,
         orderBy: [
           { vehicleType: 'asc' },
-          { pax: 'asc' }
+          { paxCount: 'asc' }
         ]
       });
 
@@ -95,8 +111,8 @@ export class TransportPricingService {
           };
         }
 
-        groupedOptions[transport.vehicleType].paxOptions.push(transport.pax);
-        groupedOptions[transport.vehicleType].pricePerPax[transport.pax] = Number(transport.price);
+        groupedOptions[transport.vehicleType].paxOptions.push(transport.paxCount);
+        groupedOptions[transport.vehicleType].pricePerPax[transport.paxCount] = Number(transport.price);
       }
 
       return Object.values(groupedOptions);
@@ -273,7 +289,9 @@ export class TransportPricingService {
    */
   static async calculateTotalTransportCost(
     bookings: Array<{
-      routeId: string;
+      fromLocationId?: string;
+      toLocationId?: string;
+      routeId?: string;
       transportType: string;
       paxCount: number;
       date: Date;
@@ -283,6 +301,8 @@ export class TransportPricingService {
       const totalCost = await Promise.all(
         bookings.map(async (booking) => {
           const pricing = await this.getTransportPrice({
+            fromLocationId: booking.fromLocationId,
+            toLocationId: booking.toLocationId,
             routeId: booking.routeId,
             transportType: booking.transportType,
             paxCount: booking.paxCount,
@@ -357,27 +377,30 @@ export class TransportPricingService {
    * Validate transport configuration
    */
   static async validateTransportConfiguration(
-    routeId: string,
-    transportType: string,
-    paxCount: number,
-    date?: Date
+    fromLocationId?: string,
+    toLocationId?: string,
+    transportType?: string,
+    paxCount?: number,
+    date?: Date,
+    routeId?: string // Keep for backward compatibility
   ): Promise<{ isValid: boolean; message?: string; alternatives?: TransportOption[] }> {
     const queryDate = date || new Date();
 
     try {
-      // Check if exact configuration exists
-      const exactMatch = await prisma.transportPricing.findFirst({
-        where: {
-          routeId,
-          transportType,
-          paxCount,
-          isActive: true,
-          validFrom: { lte: queryDate },
-          OR: [
-            { validTo: null },
-            { validTo: { gte: queryDate } }
-          ]
-        }
+      // Check if exact configuration exists using TransportMaster
+      const whereClause: any = {
+        vehicleType: transportType,
+        pax: paxCount,
+        isActive: true
+      };
+
+      if (fromLocationId && toLocationId) {
+        whereClause.fromLocationId = fromLocationId;
+        whereClause.toLocationId = toLocationId;
+      }
+
+      const exactMatch = await prisma.transportMaster.findFirst({
+        where: whereClause
       });
 
       if (exactMatch) {
@@ -385,15 +408,16 @@ export class TransportPricingService {
       }
 
       // Get alternatives
-      const alternatives = await this.getTransportOptions(routeId, queryDate);
-      const availableAlternatives = alternatives.filter(option => 
+      const alternatives = await this.getTransportOptions(fromLocationId, toLocationId, queryDate);
+      const availableAlternatives = paxCount ? alternatives.filter(option => 
         option.paxOptions.includes(paxCount) || 
         option.paxOptions.some(pax => Math.abs(pax - paxCount) <= 2)
-      );
+      ) : alternatives;
 
+      const routeInfo = fromLocationId && toLocationId ? `from ${fromLocationId} to ${toLocationId}` : `route ${routeId}`;
       return {
         isValid: false,
-        message: `Transport ${transportType} with ${paxCount} PAX not available for route ${routeId}`,
+        message: `Transport ${transportType} with ${paxCount} PAX not available for ${routeInfo}`,
         alternatives: availableAlternatives
       };
     } catch (error) {

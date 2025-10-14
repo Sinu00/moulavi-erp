@@ -78,13 +78,7 @@ router.post(
       const visaBooking = await tx.umrahVisaBooking.create({
         data: {
           serviceId: service.id,
-          bookingMode: 'group_number',
           groupNumber: `GRP-${Date.now()}`,
-          flightNumber: 'TBD',
-          arrivalDate: new Date(travel_date_from),
-          departureDate: new Date(travel_date_to),
-          arrivalAirport: 'TBD',
-          accommodationType: 'hotel',
           passengerCount: 1,
           status: 'pending'
         }
@@ -95,13 +89,7 @@ router.post(
         data: {
           bookingId: visaBooking.id,
           isLeadPassenger: true,
-          fullName: full_name,
-          passportNumber: passport_number,
-          nationality,
-          passportExpiry: new Date(passport_expiry),
-          dateOfBirth: new Date(date_of_birth),
-          gender: gender as any,
-          phoneNumber: phone_number
+          fullName: full_name
         }
       });
       
