@@ -205,6 +205,24 @@ const requiresTransport = async (airportId: string) => {
   return airport && ['JED', 'MED'].includes(airport.airportCode);
 };
 
+// Helper function to find destination by city with spelling variations
+const findDestinationByCity = async (city: string) => {
+  const cityVariations = [city];
+  if (city === 'Medina') cityVariations.push('Madinah');
+  if (city === 'Madinah') cityVariations.push('Medina');
+  if (city === 'Mecca') cityVariations.push('Makkah');
+  if (city === 'Makkah') cityVariations.push('Mecca');
+  
+  return await prisma.destinationMaster.findFirst({
+    where: {
+      city: {
+        in: cityVariations,
+      },
+      isActive: true,
+    },
+  });
+};
+
 // POST /api/umrah-visa/step1 - Step 1: Group Number and Group Name
 router.post('/step1', authenticate, async (req, res) => {
   try {
@@ -614,12 +632,7 @@ router.get('/transport-options/:airportId', authenticate, async (req, res) => {
     }
 
     // Find the destination that matches the airport's city
-    const fromDestination = await prisma.destinationMaster.findFirst({
-      where: {
-        city: airport.city,
-        isActive: true,
-      },
-    });
+    const fromDestination = await findDestinationByCity(airport.city);
 
     if (!fromDestination) {
       console.warn(`No destination found for airport city: ${airport.city}`);
