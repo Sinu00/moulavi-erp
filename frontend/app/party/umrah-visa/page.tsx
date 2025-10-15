@@ -800,136 +800,335 @@ export default function UmrahVisaNewPage() {
               </div>
             )}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="arrivalDate">Arrival Date *</Label>
-                <Input
-                  id="arrivalDate"
-                  type="date"
-                  value={step2Data.arrivalDate}
-                  onChange={(e) => {
-                    setStep2Data(prev => ({ ...prev, arrivalDate: e.target.value }));
-                    calculateDuration(e.target.value, step2Data.departureDate);
-                  }}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="arrivalTime">Arrival Time *</Label>
-                <Input
-                  id="arrivalTime"
-                  type="time"
-                  value={step2Data.arrivalTime}
-                  onChange={(e) => {
-                    setStep2Data(prev => ({ ...prev, arrivalTime: e.target.value }));
-                  }}
-                  disabled={isLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="arrivalAirport">Arrival Airport *</Label>
-                <Select 
-                  value={step2Data.arrivalAirportId} 
-                  onValueChange={async (value) => {
-                    setStep2Data(prev => ({ ...prev, arrivalAirportId: value }));
-                    await loadTransportOptions(value);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select arrival airport" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {airports.map((airport) => (
-                      <SelectItem key={airport.id} value={airport.id}>
-                        {airport.airportCode} - {airport.airportName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="arrivalFlightNumber">Arrival Flight Number *</Label>
-                <Input
-                  id="arrivalFlightNumber"
-                  placeholder="e.g., SV-1234"
-                  value={step2Data.arrivalFlightNumber}
-                  onChange={(e) => {
-                    const formatted = formatFlightNumber(e.target.value);
-                    setStep2Data(prev => ({ ...prev, arrivalFlightNumber: formatted }));
-                  }}
-                  disabled={isLoading}
-                  maxLength={7}
-                />
-                <p className="text-xs text-gray-500">Format: XX-1234 (2 letters, dash, 1-4 numbers)</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="departureDate">Departure Date *</Label>
-                <Input
-                  id="departureDate"
-                  type="date"
-                  value={step2Data.departureDate}
-                  onChange={(e) => {
-                    setStep2Data(prev => ({ ...prev, departureDate: e.target.value }));
-                    calculateDuration(step2Data.arrivalDate, e.target.value);
-                  }}
-                  disabled={isLoading}
-                />
+            {/* Travel Details Table */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium text-gray-900">Travel Details</h4>
+                  <p className="text-sm text-gray-600">Enter your arrival and departure information</p>
+                </div>
                 {durationDays > 0 && (
-                  <div className={`text-sm ${durationError ? 'text-red-600' : 'text-green-600'}`}>
+                  <div className={`text-sm font-medium ${durationError ? 'text-red-600' : 'text-green-600'}`}>
                     {durationError || `✓ Travel duration: ${durationDays} day${durationDays > 1 ? 's' : ''}`}
                   </div>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="departureTime">Departure Time *</Label>
-                <Input
-                  id="departureTime"
-                  type="time"
-                  value={step2Data.departureTime}
-                  onChange={(e) => {
-                    setStep2Data(prev => ({ ...prev, departureTime: e.target.value }));
-                  }}
-                  disabled={isLoading}
-                />
+              {/* Desktop Table View */}
+              <div className="hidden lg:block">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                          Type
+                        </th>
+                        <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                          Airport
+                        </th>
+                        <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                          Flight Number
+                        </th>
+                        <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                          Date
+                        </th>
+                        <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                          Time
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Arrival Row */}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border border-gray-200 p-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span className="font-medium text-green-700">Arrival</span>
+                          </div>
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Select 
+                            value={step2Data.arrivalAirportId} 
+                            onValueChange={async (value) => {
+                              setStep2Data(prev => ({ ...prev, arrivalAirportId: value }));
+                              await loadTransportOptions(value);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select arrival airport" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {airports.map((airport) => (
+                                <SelectItem key={airport.id} value={airport.id}>
+                                  {airport.airportCode} - {airport.airportName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Input
+                            placeholder="e.g., SV-1234"
+                            value={step2Data.arrivalFlightNumber}
+                            onChange={(e) => {
+                              const formatted = formatFlightNumber(e.target.value);
+                              setStep2Data(prev => ({ ...prev, arrivalFlightNumber: formatted }));
+                            }}
+                            disabled={isLoading}
+                            maxLength={7}
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Input
+                            type="date"
+                            value={step2Data.arrivalDate}
+                            onChange={(e) => {
+                              setStep2Data(prev => ({ ...prev, arrivalDate: e.target.value }));
+                              calculateDuration(e.target.value, step2Data.departureDate);
+                            }}
+                            disabled={isLoading}
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Input
+                            type="time"
+                            value={step2Data.arrivalTime}
+                            onChange={(e) => {
+                              setStep2Data(prev => ({ ...prev, arrivalTime: e.target.value }));
+                            }}
+                            disabled={isLoading}
+                            className="w-full"
+                          />
+                        </td>
+                      </tr>
+
+                      {/* Departure Row */}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border border-gray-200 p-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <span className="font-medium text-red-700">Departure</span>
+                          </div>
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Select 
+                            value={step2Data.departureAirportId} 
+                            onValueChange={(value) => setStep2Data(prev => ({ ...prev, departureAirportId: value }))}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select departure airport" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {airports.map((airport) => (
+                                <SelectItem key={airport.id} value={airport.id}>
+                                  {airport.airportCode} - {airport.airportName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Input
+                            placeholder="e.g., SV-1234"
+                            value={step2Data.departureFlightNumber}
+                            onChange={(e) => {
+                              const formatted = formatFlightNumber(e.target.value);
+                              setStep2Data(prev => ({ ...prev, departureFlightNumber: formatted }));
+                            }}
+                            disabled={isLoading}
+                            maxLength={7}
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Input
+                            type="date"
+                            value={step2Data.departureDate}
+                            onChange={(e) => {
+                              setStep2Data(prev => ({ ...prev, departureDate: e.target.value }));
+                              calculateDuration(step2Data.arrivalDate, e.target.value);
+                            }}
+                            disabled={isLoading}
+                            className="w-full"
+                          />
+                        </td>
+                        <td className="border border-gray-200 p-3">
+                          <Input
+                            type="time"
+                            value={step2Data.departureTime}
+                            onChange={(e) => {
+                              setStep2Data(prev => ({ ...prev, departureTime: e.target.value }));
+                            }}
+                            disabled={isLoading}
+                            className="w-full"
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="departureAirport">Departure Airport *</Label>
-                <Select 
-                  value={step2Data.departureAirportId} 
-                  onValueChange={(value) => setStep2Data(prev => ({ ...prev, departureAirportId: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select departure airport" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {airports.map((airport) => (
-                      <SelectItem key={airport.id} value={airport.id}>
-                        {airport.airportCode} - {airport.airportName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Mobile Card View */}
+              <div className="lg:hidden">
+                <div className="space-y-4">
+                  {/* Arrival Card */}
+                  <Card className="p-4">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <h5 className="font-medium text-green-700">Arrival Details</h5>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-2">
+                        <Label>Date *</Label>
+                        <Input
+                          type="date"
+                          value={step2Data.arrivalDate}
+                          onChange={(e) => {
+                            setStep2Data(prev => ({ ...prev, arrivalDate: e.target.value }));
+                            calculateDuration(e.target.value, step2Data.departureDate);
+                          }}
+                          disabled={isLoading}
+                        />
+                      </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="departureFlightNumber">Departure Flight Number *</Label>
-                <Input
-                  id="departureFlightNumber"
-                  placeholder="e.g., SV-1234"
-                  value={step2Data.departureFlightNumber}
-                  onChange={(e) => {
-                    const formatted = formatFlightNumber(e.target.value);
-                    setStep2Data(prev => ({ ...prev, departureFlightNumber: formatted }));
-                  }}
-                  disabled={isLoading}
-                  maxLength={7}
-                />
+                      <div className="space-y-2">
+                        <Label>Time *</Label>
+                        <Input
+                          type="time"
+                          value={step2Data.arrivalTime}
+                          onChange={(e) => {
+                            setStep2Data(prev => ({ ...prev, arrivalTime: e.target.value }));
+                          }}
+                          disabled={isLoading}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Airport *</Label>
+                        <Select 
+                          value={step2Data.arrivalAirportId} 
+                          onValueChange={async (value) => {
+                            setStep2Data(prev => ({ ...prev, arrivalAirportId: value }));
+                            await loadTransportOptions(value);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select arrival airport" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {airports.map((airport) => (
+                              <SelectItem key={airport.id} value={airport.id}>
+                                {airport.airportCode} - {airport.airportName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Flight Number *</Label>
+                        <Input
+                          placeholder="e.g., SV-1234"
+                          value={step2Data.arrivalFlightNumber}
+                          onChange={(e) => {
+                            const formatted = formatFlightNumber(e.target.value);
+                            setStep2Data(prev => ({ ...prev, arrivalFlightNumber: formatted }));
+                          }}
+                          disabled={isLoading}
+                          maxLength={7}
+                        />
+                        <p className="text-xs text-gray-500">Format: XX-1234 (2 letters, dash, 1-4 numbers)</p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Departure Card */}
+                  <Card className="p-4">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <h5 className="font-medium text-red-700">Departure Details</h5>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-2">
+                        <Label>Date *</Label>
+                        <Input
+                          type="date"
+                          value={step2Data.departureDate}
+                          onChange={(e) => {
+                            setStep2Data(prev => ({ ...prev, departureDate: e.target.value }));
+                            calculateDuration(step2Data.arrivalDate, e.target.value);
+                          }}
+                          disabled={isLoading}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Time *</Label>
+                        <Input
+                          type="time"
+                          value={step2Data.departureTime}
+                          onChange={(e) => {
+                            setStep2Data(prev => ({ ...prev, departureTime: e.target.value }));
+                          }}
+                          disabled={isLoading}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Airport *</Label>
+                        <Select 
+                          value={step2Data.departureAirportId} 
+                          onValueChange={(value) => setStep2Data(prev => ({ ...prev, departureAirportId: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select departure airport" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {airports.map((airport) => (
+                              <SelectItem key={airport.id} value={airport.id}>
+                                {airport.airportCode} - {airport.airportName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Flight Number *</Label>
+                        <Input
+                          placeholder="e.g., SV-1234"
+                          value={step2Data.departureFlightNumber}
+                          onChange={(e) => {
+                            const formatted = formatFlightNumber(e.target.value);
+                            setStep2Data(prev => ({ ...prev, departureFlightNumber: formatted }));
+                          }}
+                          disabled={isLoading}
+                          maxLength={7}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Duration Summary */}
+                  {durationDays > 0 && (
+                    <Card className="p-4 bg-blue-50 border-blue-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-5 w-5 text-blue-600" />
+                          <span className="font-medium text-blue-900">Travel Duration</span>
+                        </div>
+                        <div className={`text-lg font-bold ${durationError ? 'text-red-600' : 'text-blue-600'}`}>
+                          {durationError || `${durationDays} day${durationDays > 1 ? 's' : ''}`}
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1210,108 +1409,277 @@ export default function UmrahVisaNewPage() {
             {step3Data.accommodationType === 'hotel' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-gray-900">Hotel Bookings</h4>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Hotel Bookings</h4>
+                    <p className="text-sm text-gray-600">Add hotels for your accommodation</p>
+                  </div>
                   <Button type="button" variant="outline" size="sm" onClick={addHotelBooking}>
                     <Hotel className="h-4 w-4 mr-2" />
                     Add Hotel
                   </Button>
                 </div>
                 
-                {step3Data.hotelBookings?.map((booking, index) => (
-                  <Card key={index} className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h5 className="font-medium">Hotel {index + 1}</h5>
-                      {step3Data.hotelBookings!.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => removeHotelBooking(index)}
-                        >
-                          Remove
-                        </Button>
-                      )}
+                {step3Data.hotelBookings && step3Data.hotelBookings.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Desktop Table View */}
+                    <div className="hidden lg:block">
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                                #
+                              </th>
+                              <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                                Location
+                              </th>
+                              <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                                Hotel
+                              </th>
+                              <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                                Check-in
+                              </th>
+                              <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                                Check-out
+                              </th>
+                              <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                                Duration
+                              </th>
+                              <th className="border border-gray-200 p-3 text-center text-sm font-medium text-gray-700">
+                                Action
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {step3Data.hotelBookings.map((booking, index) => {
+                              const location = locations.find(l => l.id === booking.locationId);
+                              const hotel = hotels.find(h => h.id === booking.hotelId);
+                              const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
+                              const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+                              const duration = checkIn && checkOut ? Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                              
+                              return (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="border border-gray-200 p-3 font-medium text-gray-900">
+                                    {index + 1}
+                                  </td>
+                                  <td className="border border-gray-200 p-3">
+                                    <Select 
+                                      value={booking.locationId} 
+                                      onValueChange={(value) => {
+                                        const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                        updatedBookings[index].locationId = value;
+                                        updatedBookings[index].hotelId = ''; // Reset hotel selection
+                                        setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                        loadHotels(value);
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select location" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {locations.map((location) => (
+                                          <SelectItem key={location.id} value={location.id}>
+                                            {location.destinationName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                  <td className="border border-gray-200 p-3">
+                                    <Select 
+                                      value={booking.hotelId} 
+                                      onValueChange={(value) => {
+                                        const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                        updatedBookings[index].hotelId = value;
+                                        setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select hotel" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {hotels.filter(h => h.locationId === booking.locationId).map((hotel) => (
+                                          <SelectItem key={hotel.id} value={hotel.id}>
+                                            {hotel.hotelName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                  <td className="border border-gray-200 p-3">
+                                    <Input
+                                      type="date"
+                                      value={booking.checkInDate}
+                                      onChange={(e) => {
+                                        const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                        updatedBookings[index].checkInDate = e.target.value;
+                                        setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                      }}
+                                      className="w-full"
+                                    />
+                                  </td>
+                                  <td className="border border-gray-200 p-3">
+                                    <Input
+                                      type="date"
+                                      value={booking.checkOutDate}
+                                      onChange={(e) => {
+                                        const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                        updatedBookings[index].checkOutDate = e.target.value;
+                                        setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                      }}
+                                      className="w-full"
+                                    />
+                                  </td>
+                                  <td className="border border-gray-200 p-3">
+                                    <div className="text-sm text-gray-600">
+                                      {duration > 0 ? `${duration} night${duration > 1 ? 's' : ''}` : '-'}
+                                    </div>
+                                  </td>
+                                  <td className="border border-gray-200 p-3 text-center">
+                                    {step3Data.hotelBookings!.length > 1 && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => removeHotelBooking(index)}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      >
+                                        Remove
+                                      </Button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Location *</Label>
-                        <Select 
-                          value={booking.locationId} 
-                          onValueChange={(value) => {
-                            const updatedBookings = [...(step3Data.hotelBookings || [])];
-                            updatedBookings[index].locationId = value;
-                            updatedBookings[index].hotelId = ''; // Reset hotel selection
-                            setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
-                            loadHotels(value);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select location" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {locations.map((location) => (
-                              <SelectItem key={location.id} value={location.id}>
-                                {location.destinationName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
 
-                      <div className="space-y-2">
-                        <Label>Hotel *</Label>
-                        <Select 
-                          value={booking.hotelId} 
-                          onValueChange={(value) => {
-                            const updatedBookings = [...(step3Data.hotelBookings || [])];
-                            updatedBookings[index].hotelId = value;
-                            setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select hotel" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {hotels.filter(h => h.locationId === booking.locationId).map((hotel) => (
-                              <SelectItem key={hotel.id} value={hotel.id}>
-                                {hotel.hotelName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    {/* Mobile Card View */}
+                    <div className="lg:hidden">
+                      {step3Data.hotelBookings.map((booking, index) => {
+                        const location = locations.find(l => l.id === booking.locationId);
+                        const hotel = hotels.find(h => h.id === booking.hotelId);
+                        const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
+                        const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+                        const duration = checkIn && checkOut ? Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                        
+                        return (
+                          <Card key={index} className="p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h5 className="font-medium">Hotel {index + 1}</h5>
+                              {step3Data.hotelBookings!.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeHotelBooking(index)}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Location *</Label>
+                                  <Select 
+                                    value={booking.locationId} 
+                                    onValueChange={(value) => {
+                                      const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                      updatedBookings[index].locationId = value;
+                                      updatedBookings[index].hotelId = ''; // Reset hotel selection
+                                      setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                      loadHotels(value);
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select location" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {locations.map((location) => (
+                                        <SelectItem key={location.id} value={location.id}>
+                                          {location.destinationName}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
 
-                      <div className="space-y-2">
-                        <Label>Check-in Date *</Label>
-                        <Input
-                          type="date"
-                          value={booking.checkInDate}
-                          onChange={(e) => {
-                            const updatedBookings = [...(step3Data.hotelBookings || [])];
-                            updatedBookings[index].checkInDate = e.target.value;
-                            setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
-                          }}
-                        />
-                      </div>
+                                <div className="space-y-2">
+                                  <Label>Hotel *</Label>
+                                  <Select 
+                                    value={booking.hotelId} 
+                                    onValueChange={(value) => {
+                                      const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                      updatedBookings[index].hotelId = value;
+                                      setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select hotel" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {hotels.filter(h => h.locationId === booking.locationId).map((hotel) => (
+                                        <SelectItem key={hotel.id} value={hotel.id}>
+                                          {hotel.hotelName}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
 
-                      <div className="space-y-2">
-                        <Label>Check-out Date *</Label>
-                        <Input
-                          type="date"
-                          value={booking.checkOutDate}
-                          onChange={(e) => {
-                            const updatedBookings = [...(step3Data.hotelBookings || [])];
-                            updatedBookings[index].checkOutDate = e.target.value;
-                            setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
-                          }}
-                        />
-                      </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label>Check-in Date *</Label>
+                                  <Input
+                                    type="date"
+                                    value={booking.checkInDate}
+                                    onChange={(e) => {
+                                      const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                      updatedBookings[index].checkInDate = e.target.value;
+                                      setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                    }}
+                                  />
+                                </div>
+
+                                <div className="space-y-2">
+                                  <Label>Check-out Date *</Label>
+                                  <Input
+                                    type="date"
+                                    value={booking.checkOutDate}
+                                    onChange={(e) => {
+                                      const updatedBookings = [...(step3Data.hotelBookings || [])];
+                                      updatedBookings[index].checkOutDate = e.target.value;
+                                      setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
+                                    }}
+                                  />
+                                </div>
+                              </div>
+
+                              {duration > 0 && (
+                                <div className="text-sm text-gray-600 bg-blue-50 p-2 rounded">
+                                  Duration: {duration} night{duration > 1 ? 's' : ''}
+                                </div>
+                              )}
+                            </div>
+                          </Card>
+                        );
+                      })}
                     </div>
-                  </Card>
-                )) || (
+                  </div>
+                ) : (
                   <div className="text-center py-8">
-                    <p className="text-gray-500 mb-4">No hotel bookings added yet</p>
+                    <div className="text-gray-400 mb-4">
+                      <Hotel className="h-12 w-12 mx-auto" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No hotel bookings added</h3>
+                    <p className="text-gray-500 mb-4">Add your first hotel booking to get started</p>
                     <Button type="button" variant="outline" onClick={addHotelBooking}>
                       <Hotel className="h-4 w-4 mr-2" />
                       Add First Hotel
