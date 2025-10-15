@@ -12,13 +12,25 @@ import Sidebar from '@/components/Sidebar';
 import PartyStatsCards from '@/components/PartyStatsCards';
 import PartyTable from '@/components/PartyTable';
 import CreatePartyDialog from '@/components/CreatePartyDialog';
+import ViewPartyDialog from '@/components/ViewPartyDialog';
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
 import { useParties } from '@/hooks/useParties';
+import { Party } from '@/types';
 import { Plus, Menu, Trash2, Download } from 'lucide-react';
 
 export default function PartyMasterPage() {
   const router = useRouter();
   const user = getUser();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editingParty, setEditingParty] = useState<Party | null>(null);
+  const [viewingParty, setViewingParty] = useState<Party | null>(null);
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState<{
+    open: boolean;
+    loading: boolean;
+  }>({
+    open: false,
+    loading: false
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
@@ -26,12 +38,13 @@ export default function PartyMasterPage() {
   const {
     parties,
     loading,
-    search,
+    searchTerm,
     page,
     pagination,
     selectedParties,
     filterType,
-    handleSearchChange,
+    totalStats,
+    setSearchTerm,
     handleFilterChange,
     handlePageChange,
     handleSelectParty,
@@ -50,23 +63,52 @@ export default function PartyMasterPage() {
 
   const handlePartyCreated = () => {
     setShowCreateDialog(false);
+    setEditingParty(null);
     refreshParties();
     toast.success('Party created successfully!');
   };
 
-  const handleBulkDeleteClick = async () => {
+  const handlePartyUpdated = () => {
+    setEditingParty(null);
+    refreshParties();
+    toast.success('Party updated successfully!');
+  };
+
+  const handleEditParty = (party: Party) => {
+    setEditingParty(party);
+    setShowCreateDialog(true);
+  };
+
+  const handleViewParty = (party: Party) => {
+    setViewingParty(party);
+  };
+
+  const handleCloseDialog = () => {
+    setShowCreateDialog(false);
+    setEditingParty(null);
+  };
+
+  const handleBulkDeleteClick = () => {
     if (selectedParties.length === 0) {
       toast.error('Please select parties to delete');
       return;
     }
 
-    if (!confirm(`Are you sure you want to delete ${selectedParties.length} party(ies)? This action cannot be undone.`)) {
-      return;
-    }
+    setBulkDeleteDialog({
+      open: true,
+      loading: false
+    });
+  };
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleteDialog(prev => ({ ...prev, loading: true }));
 
     const success = await handleBulkDelete();
     if (success) {
       toast.success(`${selectedParties.length} party(ies) deleted successfully!`);
+      setBulkDeleteDialog({ open: false, loading: false });
+    } else {
+      setBulkDeleteDialog(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -131,6 +173,7 @@ export default function PartyMasterPage() {
             parties={parties}
             pagination={pagination}
             loading={loading}
+            totalStats={totalStats}
           />
 
           {/* Party Management */}
@@ -166,38 +209,67 @@ export default function PartyMasterPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <PartyTable
-                parties={parties}
-                loading={loading}
-                pagination={pagination}
-                search={search}
-                filterType={filterType}
-                selectedParties={selectedParties}
-                onSearchChange={handleSearchChange}
-                onFilterChange={handleFilterChange}
-                onSelectParty={handleSelectParty}
-                onSelectAll={handleSelectAll}
-                onBulkDelete={handleBulkDeleteClick}
-                onPartyDeleted={handlePartyDeleted}
-                onPageChange={handlePageChange}
-              />
+               <PartyTable
+                 parties={parties}
+                 loading={loading}
+                 pagination={pagination}
+                 searchTerm={searchTerm}
+                 filterType={filterType}
+                 selectedParties={selectedParties}
+                 setSearchTerm={setSearchTerm}
+                 onFilterChange={handleFilterChange}
+                 onSelectParty={handleSelectParty}
+                 onSelectAll={handleSelectAll}
+                 onBulkDelete={handleBulkDeleteClick}
+                 onPartyDeleted={handlePartyDeleted}
+                 onPageChange={handlePageChange}
+                 onEditParty={handleEditParty}
+                 onViewParty={handleViewParty}
+               />
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Create Party Dialog */}
+      {/* Create/Edit Party Dialog */}
       <CreatePartyDialog
         open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
+        onOpenChange={handleCloseDialog}
+        editingParty={editingParty}
+        title={editingParty ? 'Edit Party' : 'Create New Party'}
         onSubmit={async (partyData) => {
           try {
-            await partyAPI.create(partyData);
-            handlePartyCreated();
+            if (editingParty) {
+              await partyAPI.update(editingParty.id, partyData);
+              handlePartyUpdated();
+            } else {
+              await partyAPI.create(partyData);
+              handlePartyCreated();
+            }
           } catch (error) {
             throw error; // Re-throw to let the dialog handle the error display
           }
         }}
+      />
+
+      {/* View Party Dialog */}
+      <ViewPartyDialog
+        open={!!viewingParty}
+        onOpenChange={(open) => !open && setViewingParty(null)}
+        party={viewingParty}
+        onEdit={handleEditParty}
+      />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={bulkDeleteDialog.open}
+        onOpenChange={(open) => setBulkDeleteDialog(prev => ({ ...prev, open }))}
+        title="Delete Parties"
+        message="Are you sure you want to delete the selected parties? This will permanently remove all associated data."
+        onConfirm={confirmBulkDelete}
+        loading={bulkDeleteDialog.loading}
+        type="bulk"
+        count={selectedParties.length}
       />
     </div>
   );

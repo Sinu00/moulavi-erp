@@ -5,6 +5,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest, CreateUserRequest, UpdateUserRequest } from '../types';
 import { prisma } from '../config/database';
 import { hashPassword } from '../utils/password';
+import { AuditService } from '../services/auditService';
 
 const router = Router();
 
@@ -51,6 +52,22 @@ router.post(
         role,
         isActive: is_active
       }
+    });
+    
+    // Log audit trail
+    await AuditService.logAudit({
+      entityType: 'user',
+      entityId: user.id,
+      action: 'create',
+      newValues: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive
+      },
+      changedBy: req.user!.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
     });
     
     // Remove password from response
@@ -202,6 +219,28 @@ router.put(
       }
     });
     
+    // Log audit trail
+    await AuditService.logAudit({
+      entityType: 'user',
+      entityId: id,
+      action: 'update',
+      oldValues: {
+        name: existingUser.name,
+        email: existingUser.email,
+        role: existingUser.role,
+        isActive: existingUser.isActive
+      },
+      newValues: {
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isActive: updatedUser.isActive
+      },
+      changedBy: req.user!.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    
     res.json({ 
       user: updatedUser,
       message: 'User updated successfully'
@@ -230,6 +269,22 @@ router.delete(
     if (req.user && req.user.id === id) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
+    
+    // Log audit trail before deletion
+    await AuditService.logAudit({
+      entityType: 'user',
+      entityId: id,
+      action: 'delete',
+      oldValues: {
+        name: existingUser.name,
+        email: existingUser.email,
+        role: existingUser.role,
+        isActive: existingUser.isActive
+      },
+      changedBy: req.user!.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
     
     await prisma.user.delete({
       where: { id }

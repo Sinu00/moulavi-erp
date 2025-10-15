@@ -9,48 +9,73 @@ import { toast } from 'sonner';
 import { partyAPI } from '@/lib/api';
 import { Search, Edit, Trash2, Eye, Download } from 'lucide-react';
 import { Party, PaginationInfo } from '@/types';
+import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 
 interface PartyTableProps {
   parties: Party[];
   loading: boolean;
   pagination: PaginationInfo | null;
-  search: string;
+  searchTerm: string;
   filterType: 'all' | 'direct' | 'b2b';
   selectedParties: string[];
-  onSearchChange: (value: string) => void;
+  setSearchTerm: (value: string) => void;
   onFilterChange: (type: 'all' | 'direct' | 'b2b') => void;
   onSelectParty: (partyId: string) => void;
   onSelectAll: () => void;
   onBulkDelete: () => void;
   onPartyDeleted: () => void;
   onPageChange: (page: number) => void;
+  onEditParty: (party: Party) => void;
+  onViewParty: (party: Party) => void;
 }
 
 export default function PartyTable({
   parties,
   loading,
   pagination,
-  search,
+  searchTerm,
   filterType,
   selectedParties,
-  onSearchChange,
+  setSearchTerm,
   onFilterChange,
   onSelectParty,
   onSelectAll,
   onBulkDelete,
   onPartyDeleted,
-  onPageChange
+  onPageChange,
+  onEditParty,
+  onViewParty
 }: PartyTableProps) {
-  const handleDeleteParty = async (partyId: string) => {
-    if (!confirm('Are you sure you want to delete this party? This action cannot be undone.')) {
-      return;
-    }
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    party: Party | null;
+    loading: boolean;
+  }>({
+    open: false,
+    party: null,
+    loading: false
+  });
+
+  const handleDeleteParty = (party: Party) => {
+    setDeleteDialog({
+      open: true,
+      party,
+      loading: false
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDialog.party) return;
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
 
     try {
-      await partyAPI.delete(partyId);
+      await partyAPI.delete(deleteDialog.party.id);
       toast.success('Party deleted successfully!');
       onPartyDeleted();
+      setDeleteDialog({ open: false, party: null, loading: false });
     } catch (error) {
+      setDeleteDialog(prev => ({ ...prev, loading: false }));
       // Error handling is done by the API interceptor
     }
   };
@@ -165,7 +190,7 @@ export default function PartyTable({
         </div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">No parties found</h3>
         <p className="text-gray-500">
-          {search ? 'Try adjusting your search terms' : 'Get started by creating your first party'}
+          {searchTerm ? 'Try adjusting your search terms' : 'Get started by creating your first party'}
         </p>
       </div>
     );
@@ -179,8 +204,8 @@ export default function PartyTable({
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
             placeholder="Search by name, email, or contact..."
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -268,7 +293,7 @@ export default function PartyTable({
             </div>
             <div className="col-span-2">
               <Badge variant="outline">
-                {party.accountCurrency}
+                {party.accountCurrency?.currencyCode || 'N/A'}
               </Badge>
             </div>
             <div className="col-span-2">
@@ -276,24 +301,27 @@ export default function PartyTable({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => toast.info('View party details coming soon')}
+                  onClick={() => onViewParty(party)}
                   className="h-8 w-8 p-0"
+                  title="View party details"
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => toast.info('Edit party coming soon')}
+                  onClick={() => onEditParty(party)}
                   className="h-8 w-8 p-0"
+                  title="Edit party"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleDeleteParty(party.id)}
+                  onClick={() => handleDeleteParty(party)}
                   className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="Delete party"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -352,24 +380,27 @@ export default function PartyTable({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => toast.info('View party details coming soon')}
+                    onClick={() => onViewParty(party)}
                     className="h-8 w-8 p-0"
+                    title="View party details"
                   >
                     <Eye className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => toast.info('Edit party coming soon')}
+                    onClick={() => onEditParty(party)}
                     className="h-8 w-8 p-0"
+                    title="Edit party"
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeleteParty(party.id)}
+                    onClick={() => handleDeleteParty(party)}
                     className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    title="Delete party"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -403,7 +434,7 @@ export default function PartyTable({
                       {party.customerType.toUpperCase()}
                     </Badge>
                     <Badge variant="outline" className="text-xs">
-                      {party.accountCurrency}
+                      {party.accountCurrency?.currencyCode || 'N/A'}
                     </Badge>
                   </div>
                   {party.loginRequired && (
@@ -449,6 +480,18 @@ export default function PartyTable({
           </Button>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}
+        title="Delete Party"
+        message="Are you sure you want to delete this party? This will permanently remove all associated data."
+        itemName={deleteDialog.party?.partyName}
+        onConfirm={confirmDelete}
+        loading={deleteDialog.loading}
+        type="single"
+      />
     </div>
   );
 }

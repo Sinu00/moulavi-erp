@@ -57,7 +57,7 @@ interface UmrahVisaBooking {
   groupNumber?: string;
   groupName?: string;
   passengerCount: number;
-  status: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  status: 'group_processing' | 'group_assigned' | 'documents_downloaded' | 'booking_success' | 'cancelled';
   createdAt: string;
   updatedAt: string;
   passengers: UmrahPassenger[];
@@ -87,10 +87,7 @@ export default function PartyDashboardPage() {
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
-    processing: 0,
     completed: 0,
-    approved: 0,
-    rejected: 0,
   });
 
   useEffect(() => {
@@ -149,11 +146,10 @@ export default function PartyDashboardPage() {
       // Calculate stats using booking status
       setStats({
         total: bookingsData.length,
-        pending: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'pending').length,
-        processing: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'processing').length,
-        completed: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'completed').length,
-        approved: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'approved').length,
-        rejected: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'rejected').length,
+        pending: bookingsData.filter((b: UmrahVisaBooking) => 
+          ['group_processing', 'group_assigned', 'documents_downloaded'].includes(b.status)
+        ).length,
+        completed: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'booking_success').length,
       });
     } catch (error) {
       console.error('Error loading bookings:', error);
@@ -161,10 +157,7 @@ export default function PartyDashboardPage() {
       setStats({
         total: 0,
         pending: 0,
-        processing: 0,
         completed: 0,
-        approved: 0,
-        rejected: 0,
       });
     } finally {
       clearTimeout(timeoutId);
@@ -184,20 +177,20 @@ export default function PartyDashboardPage() {
     }
 
     const statusConfig = {
-      pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock },
-      processing: { color: 'bg-blue-100 text-blue-800', icon: RefreshCw },
-      approved: { color: 'bg-green-100 text-green-800', icon: CheckCircle },
-      rejected: { color: 'bg-red-100 text-red-800', icon: XCircle },
-      completed: { color: 'bg-purple-100 text-purple-800', icon: CheckCircle },
+      group_processing: { color: 'bg-gray-100 text-gray-800', icon: Clock, label: 'Processing' },
+      group_assigned: { color: 'bg-blue-100 text-blue-800', icon: Users, label: 'Assigned' },
+      documents_downloaded: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Downloaded' },
+      booking_success: { color: 'bg-red-100 text-red-800', icon: CheckCircle, label: 'Success' },
+      cancelled: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Cancelled' },
     };
 
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.group_processing;
     const Icon = config.icon;
 
     return (
       <Badge className={`${config.color} border-0`}>
         <Icon className="h-3 w-3 mr-1" />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {config.label}
       </Badge>
     );
   };
@@ -209,31 +202,18 @@ export default function PartyDashboardPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'pending':
-        return <Clock className="h-4 w-4 text-yellow-600" />;
-      case 'processing':
-        return <FileText className="h-4 w-4 text-blue-600" />;
-      case 'completed':
+      case 'group_processing':
+        return <Clock className="h-4 w-4 text-gray-600" />;
+      case 'group_assigned':
+        return <Users className="h-4 w-4 text-blue-600" />;
+      case 'documents_downloaded':
         return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'booking_success':
+        return <CheckCircle className="h-4 w-4 text-red-600" />;
       case 'cancelled':
         return <XCircle className="h-4 w-4 text-red-600" />;
       default:
         return <FileText className="h-4 w-4" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'processing':
-        return 'bg-blue-100 text-blue-800';
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -253,415 +233,240 @@ export default function PartyDashboardPage() {
   };
 
   if (!user) {
-    return null;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Modern Header */}
-        <div className="mb-8">
-          <div className="bg-white rounded-2xl shadow-sm border border-white/20 backdrop-blur-sm p-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="flex items-center space-x-4">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center">
-                  <Building className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
-                    {user.name}
-                  </h1>
-                  <p className="text-gray-600 mt-1">
-                    Manage your Services and track their progress
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                  <Bell className="h-4 w-4 mr-2" />
-                  Notifications
-                </Button>
-                <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-                <div className="h-6 w-px bg-gray-300" />
-                <div className="flex items-center space-x-2 text-sm bg-gray-50 rounded-lg px-3 py-2">
-                  <User className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium text-gray-900">{user.name}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {user.role}
-                  </Badge>
-                </div>
-                <Button variant="ghost" size="sm" onClick={handleLogout} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </div>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col fixed h-screen">
+        {/* Sidebar Header */}
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center space-x-3">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center shadow-md">
+              <Building className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">{user.name}</h1>
+              <p className="text-xs text-gray-500">Party Dashboard</p>
             </div>
           </div>
         </div>
 
-        {/* Enhanced Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-          {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="bg-white/60 backdrop-blur-sm border-white/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-16" />
-                      <Skeleton className="h-8 w-12" />
-                    </div>
-                    <Skeleton className="h-10 w-10 rounded-full" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          ) : (
-            <>
-              <Card className="bg-white/60 backdrop-blur-sm border-white/20 hover:shadow-lg transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Requests</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                      <p className="text-xs text-gray-500 mt-1">All time</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
-                      <FileText className="h-6 w-6 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-white/20 hover:shadow-lg transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Pending</p>
-                      <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-                      <p className="text-xs text-yellow-600 mt-1">Awaiting review</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center">
-                      <Clock className="h-6 w-6 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-white/20 hover:shadow-lg transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Processing</p>
-                      <p className="text-2xl font-bold text-blue-600">{stats.processing}</p>
-                      <p className="text-xs text-blue-600 mt-1">In progress</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
-                      <Activity className="h-6 w-6 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-white/20 hover:shadow-lg transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Approved</p>
-                      <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
-                      <p className="text-xs text-green-600 mt-1">Ready to go</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center">
-                      <CheckCircle className="h-6 w-6 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-white/20 hover:shadow-lg transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Completed</p>
-                      <p className="text-2xl font-bold text-purple-600">{stats.completed}</p>
-                      <p className="text-xs text-purple-600 mt-1">Finished</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/60 backdrop-blur-sm border-white/20 hover:shadow-lg transition-all duration-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Rejected</p>
-                      <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
-                      <p className="text-xs text-red-600 mt-1">Need attention</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center">
-                      <XCircle className="h-6 w-6 text-white" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-
-        {/* Available Services */}
-        <Card className="mb-8 bg-white/60 backdrop-blur-sm border-white/20">
-          <CardHeader>
-            <div className="flex items-center space-x-3">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center">
-                <Plus className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-xl">Available Services</CardTitle>
-                <CardDescription>Start a new service request with just one click</CardDescription>
-              </div>
+        {/* Sidebar Navigation */}
+        <div className="flex-1 p-4">
+          <nav className="space-y-2">
+            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Dashboard
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div
-                onClick={() => router.push('/party/umrah-visa')}
-                className="group relative overflow-hidden border rounded-2xl p-6 hover:shadow-xl transition-all duration-300 cursor-pointer bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 hover:scale-105"
-              >
-
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Umrah Visa</h3>
-                    <p className="text-gray-600 text-sm leading-relaxed">
-                      Complete Umrah visa application with document verification, flight booking assistance, and accommodation arrangements
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <div className="flex items-center space-x-1">
-                      <Clock className="h-4 w-4" />
-                      <span>2-3 days processing</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Users className="h-4 w-4" />
-                      <span>Group bookings</span>
-                    </div>
-                  </div>
-                  <Button className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Apply for Umrah Visa
-                  </Button>
-                </div>
-              </div>
-
-              <div className="relative overflow-hidden border rounded-2xl p-6 bg-gradient-to-br from-gray-50 to-gray-100 opacity-75">
-                <div className="absolute top-4 right-4">
-                  <div className="h-12 w-12 rounded-xl bg-gray-300 flex items-center justify-center">
-                    <Building className="h-6 w-6 text-gray-500" />
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-500 mb-2">More Services</h3>
-                    <p className="text-gray-500 text-sm leading-relaxed">
-                      Additional travel and visa services will be available soon. Stay tuned for updates!
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-400">
-                    <div className="flex items-center space-x-1">
-                      <Clock className="h-4 w-4" />
-                      <span>Coming soon</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <AlertCircle className="h-4 w-4" />
-                      <span>In development</span>
-                    </div>
-                  </div>
-                  <Button disabled variant="outline" className="w-full">
-                    <AlertCircle className="h-4 w-4 mr-2" />
-                    Coming Soon
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Umrah Visa Bookings */}
-        <Card className="bg-white/60 backdrop-blur-sm border-white/20">
-          <CardHeader>
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="px-3 py-2 bg-red-50 rounded-lg border border-red-200">
               <div className="flex items-center space-x-3">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center">
                   <FileText className="h-4 w-4 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl">Your Umrah Visa Bookings</CardTitle>
-                  <CardDescription>Track and manage your visa applications</CardDescription>
+                  <div className="text-sm font-medium text-gray-900">Overview</div>
+                  <div className="text-xs text-gray-500">Dashboard home</div>
                 </div>
-              </div>
-              
-              {/* Search and Filter Controls */}
-              <div className="flex flex-col sm:flex-row gap-3 min-w-0 lg:min-w-96">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search bookings..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-white/80 border-white/20"
-                  />
-                </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full sm:w-40 bg-white/80 border-white/20">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="processing">Processing</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="border rounded-lg p-3 sm:p-4">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4 space-y-3 sm:space-y-0">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-full" />
-                          <div className="flex-1">
-                            <Skeleton className="h-5 w-48 mb-2" />
-                            <Skeleton className="h-4 w-32" />
-                          </div>
+            
+            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6">
+              Services
+            </div>
+            <button 
+              onClick={() => router.push('/party/umrah-visa')}
+              className="w-full px-3 py-2 text-left hover:bg-gray-50 rounded-lg transition-colors"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <Plane className="h-4 w-4 text-gray-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Umrah Visa</div>
+                  <div className="text-xs text-gray-500">Apply for visa</div>
+                </div>
+              </div>
+            </button>
+          </nav>
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+              <User className="h-4 w-4 text-gray-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-gray-900 truncate">{user.name}</div>
+              <div className="text-xs text-gray-500">{user.email}</div>
+            </div>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout} 
+            className="w-full border-gray-300 text-gray-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col ml-64">
+        {/* Top Header */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
+              <p className="text-sm text-gray-600">Welcome back, {user.name}</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Badge variant="secondary" className="bg-red-100 text-red-700">
+                {user.role}
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="flex-1 p-6">
+          {/* Stats Overview */}
+          <div className="mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {loading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                    <div className="text-center">
+                      <Skeleton className="h-8 w-12 mx-auto mb-2" />
+                      <Skeleton className="h-4 w-16 mx-auto" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</div>
+                      <div className="text-sm text-red-600 font-medium">Total Applications</div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats.pending}</div>
+                      <div className="text-sm text-red-600 font-medium">Pending Applications</div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats.completed}</div>
+                      <div className="text-sm text-red-600 font-medium">Completed Applications</div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Applications */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Recent Applications</h2>
+                <p className="text-sm text-gray-600">Your latest applications</p>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {loading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <Skeleton className="h-10 w-10 rounded-lg" />
+                        <div>
+                          <Skeleton className="h-4 w-32 mb-2" />
+                          <Skeleton className="h-3 w-24" />
                         </div>
                       </div>
-                      <Skeleton className="h-6 w-20" />
+                      <Skeleton className="h-6 w-16" />
                     </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 pb-4 border-b">
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                    </div>
-                    <Skeleton className="h-10 w-24" />
-                  </div>
-                ))}
-              </div>
-            ) : filteredBookings.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="h-20 w-20 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center mx-auto mb-6">
-                  {bookings.length === 0 ? (
-                    <FileText className="h-10 w-10 text-gray-400" />
-                  ) : (
-                    <Search className="h-10 w-10 text-gray-400" />
-                  )}
+                  ))}
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                  {bookings.length === 0 ? 'No bookings yet' : 'No matching bookings'}
-                </h3>
-                <p className="text-gray-500 mb-6 max-w-md mx-auto">
-                  {bookings.length === 0 
-                    ? 'Get started by applying for your first Umrah visa using the service above'
-                    : 'Try adjusting your search terms or filters to find what you\'re looking for'
-                  }
-                </p>
-                {bookings.length === 0 && (
+              ) : filteredBookings.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <FileText className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No applications yet</h3>
+                  <p className="text-gray-500 mb-6">Get started by applying for your first Umrah visa</p>
                   <Button 
                     onClick={() => router.push('/party/umrah-visa')}
-                    className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0"
+                    className="bg-red-600 hover:bg-red-700 text-white"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Apply for Umrah Visa
                   </Button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredBookings.map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="group relative bg-white/90 backdrop-blur-sm border border-white/30 rounded-xl p-4 hover:shadow-lg transition-all duration-300 hover:border-indigo-200 aspect-[3.5/2] flex flex-col justify-between"
-                  >
-                    {/* Card Header */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                          <Building className="h-5 w-5 text-white" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredBookings.slice(0, 5).map((booking) => (
+                    <div
+                      key={booking.id}
+                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center">
+                          <Building className="h-5 w-5 text-gray-600" />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="font-bold text-gray-900 truncate text-sm">
-                            {booking.groupName || 'Umrah Booking'}
+                        <div>
+                          <h3 className="font-medium text-gray-900">
+                            {booking.groupName || 'Umrah Application'}
                           </h3>
-                          <p className="text-xs text-gray-500 truncate">
-                            {booking.groupNumber || 'No Group Number'}
+                          <p className="text-sm text-gray-500">
+                            {booking.groupNumber || 'No group'} • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
                           </p>
                         </div>
                       </div>
-                      <div className="flex-shrink-0">
+                      <div className="flex items-center space-x-3">
                         {getStatusBadge(booking.status)}
+                        <Button
+                          onClick={() => handleViewBooking(booking.id)}
+                          size="sm"
+                          variant="ghost"
+                          className="text-gray-600 hover:text-red-600 hover:bg-red-50"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-
-                    {/* Essential Info */}
-                    <div className="space-y-2 mb-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500 flex items-center">
-                          <Hash className="h-3 w-3 mr-1" />
-                          Group Number
-                        </span>
-                        <span className="font-medium text-gray-900 truncate ml-2">
-                          {booking.groupNumber || 'Not Assigned'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500 flex items-center">
-                          <Users className="h-3 w-3 mr-1" />
-                          Passengers
-                        </span>
-                        <span className="font-medium text-gray-900">
-                          {booking.passengerCount}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500 flex items-center">
-                          <Calendar className="h-3 w-3 mr-1" />
-                          Created
-                        </span>
-                        <span className="font-medium text-gray-900 truncate ml-2">
-                          {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
-                        </span>
-                      </div>
+                  ))}
+                  
+                  {filteredBookings.length > 5 && (
+                    <div className="text-center pt-4">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-gray-600 hover:text-red-600 hover:border-red-200"
+                      >
+                        View All Applications ({filteredBookings.length})
+                      </Button>
                     </div>
-
-                    {/* Action Button */}
-                    <Button
-                      onClick={() => handleViewBooking(booking.id)}
-                      size="sm"
-                      className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 text-xs h-8"
-                    >
-                      <Eye className="h-3 w-3 mr-1" />
-                      View Details
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* View Dialog */}
@@ -673,4 +478,5 @@ export default function PartyDashboardPage() {
     </div>
   );
 }
+
 

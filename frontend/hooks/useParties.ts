@@ -5,38 +5,70 @@ import { Party, PaginationInfo } from '@/types';
 export function useParties() {
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [selectedParties, setSelectedParties] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<'all' | 'direct' | 'b2b'>('all');
+  const [totalStats, setTotalStats] = useState<{
+    total: number;
+    direct: number;
+    b2b: number;
+    withLogin: number;
+  }>({
+    total: 0,
+    direct: 0,
+    b2b: 0,
+    withLogin: 0
+  });
 
   const loadParties = useCallback(async () => {
-    setLoading(true);
     try {
-      const response = await partyAPI.getAll({
-        page,
-        limit: 10,
-        search: search || undefined,
+      setLoading(true);
+      // Load all parties without pagination for client-side filtering
+      const response = await partyAPI.getAll({ page: 1, limit: 1000 });
+      setParties(response.data.parties || []);
+      
+      // Calculate total stats
+      const allParties = response.data.parties || [];
+      setTotalStats({
+        total: response.data.pagination.total,
+        direct: allParties.filter((p: Party) => p.customerType === 'direct').length,
+        b2b: allParties.filter((p: Party) => p.customerType === 'b2b').length,
+        withLogin: allParties.filter((p: Party) => p.loginRequired).length
       });
-      setParties(response.data.parties);
-      setPagination(response.data.pagination);
     } catch (error) {
       setParties([]);
-      setPagination(null);
+      console.error('Error loading parties:', error);
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
-
-  useEffect(() => {
-    loadParties();
-  }, [loadParties]);
-
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value);
-    setPage(1);
   }, []);
+
+  // Client-side filtering like user master
+  const filteredParties = parties.filter(party => {
+    const matchesSearch = !searchTerm || 
+      party.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      party.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (party.contactNumber && party.contactNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (party.whatsappNumber && party.whatsappNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesFilter = filterType === 'all' || party.customerType === filterType;
+    
+    return matchesSearch && matchesFilter;
+  });
+
+  // Paginate the filtered results
+  const itemsPerPage = 10;
+  const startIndex = (page - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedParties = filteredParties.slice(startIndex, endIndex);
+  
+  const pagination = {
+    page,
+    totalPages: Math.ceil(filteredParties.length / itemsPerPage),
+    total: filteredParties.length,
+    limit: itemsPerPage
+  };
 
   const handleFilterChange = useCallback((type: 'all' | 'direct' | 'b2b') => {
     setFilterType(type);
@@ -57,11 +89,11 @@ export function useParties() {
 
   const handleSelectAll = useCallback(() => {
     setSelectedParties(prev => 
-      prev.length === parties.length 
+      prev.length === paginatedParties.length 
         ? [] 
-        : parties.map(p => p.id)
+        : paginatedParties.map(p => p.id)
     );
-  }, [parties]);
+  }, [paginatedParties]);
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedParties.length === 0) {
@@ -86,18 +118,23 @@ export function useParties() {
     loadParties();
   }, [loadParties]);
 
+  useEffect(() => {
+    loadParties();
+  }, [loadParties]);
+
   return {
     // Data
-    parties,
+    parties: paginatedParties,
     loading,
-    search,
+    searchTerm,
     page,
     pagination,
     selectedParties,
     filterType,
+    totalStats,
     
     // Actions
-    handleSearchChange,
+    setSearchTerm,
     handleFilterChange,
     handlePageChange,
     handleSelectParty,

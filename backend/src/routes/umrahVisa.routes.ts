@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { z } from 'zod';
+import { AuditService } from '../services/auditService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -67,6 +68,24 @@ router.get('/bookings', authenticate, async (req, res) => {
               documents: true,
             },
           },
+          tripInfo: {
+            include: {
+              updatedByUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              documentsDownloadedByUser: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
         },
       }),
       prisma.umrahVisaBooking.count({ where }),
@@ -107,9 +126,23 @@ const step1Schema = z.object({
 
 const step2Schema = z.object({
   arrivalDate: z.string().transform((str) => new Date(str)),
+  arrivalTime: z.string().transform((str) => {
+    // Convert time string to DateTime (using today's date with the time)
+    const today = new Date();
+    const [hours, minutes] = str.split(':');
+    today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return today;
+  }),
   arrivalAirportId: z.string().uuid(),
   arrivalFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
   departureDate: z.string().transform((str) => new Date(str)),
+  departureTime: z.string().transform((str) => {
+    // Convert time string to DateTime (using today's date with the time)
+    const today = new Date();
+    const [hours, minutes] = str.split(':');
+    today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return today;
+  }),
   departureAirportId: z.string().uuid(),
   departureFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
   transportBookings: z.array(z.object({
@@ -197,6 +230,7 @@ router.post('/step1', authenticate, async (req, res) => {
         serviceId: service.id,
         groupNumber: validatedData.groupNumber,
         groupName: validatedData.groupName,
+        hasGroupNumber: !!(validatedData.groupNumber && validatedData.groupName), // Set to true if both are provided
         passengerCount: 1, // Default, will be updated in step 3
       },
     });
@@ -255,9 +289,11 @@ router.post('/step2/:bookingId', authenticate, async (req, res) => {
       data: {
         bookingId,
         arrivalDate: validatedData.arrivalDate,
+        arrivalTime: validatedData.arrivalTime,
         arrivalAirportId: validatedData.arrivalAirportId,
         arrivalFlightNumber: validatedData.arrivalFlightNumber,
         departureDate: validatedData.departureDate,
+        departureTime: validatedData.departureTime,
         departureAirportId: validatedData.departureAirportId,
         departureFlightNumber: validatedData.departureFlightNumber,
       },
@@ -376,14 +412,28 @@ router.post('/step4/:bookingId', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
     const validatedData = step4Schema.parse(req.body);
+    const user = (req as any).user;
 
-    // Check if booking exists
+    // Check if booking exists with all related data
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
+      include: {
+        service: {
+          include: {
+            party: true,
+          },
+        },
+        travelDetails: true,
+        accommodationDetails: true,
+      },
     });
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (!booking.travelDetails) {
+      return res.status(400).json({ error: 'Travel details are required before adding passengers' });
     }
 
     // Ensure exactly one lead passenger
@@ -392,12 +442,15 @@ router.post('/step4/:bookingId', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Exactly one lead passenger is required' });
     }
 
+    // Determine initial status based on hasGroupNumber
+    const initialStatus = booking.hasGroupNumber ? 'group_assigned' : 'group_processing';
+
     // Update booking with passenger count and status
-    await prisma.umrahVisaBooking.update({
+    const updatedBooking = await prisma.umrahVisaBooking.update({
       where: { id: bookingId },
       data: {
         passengerCount: validatedData.passengerCount,
-        status: 'pending',
+        status: initialStatus,
       },
     });
 
@@ -414,12 +467,44 @@ router.post('/step4/:bookingId', authenticate, async (req, res) => {
       )
     );
 
+    // Create TripInfo entry
+    const tripInfo = await prisma.tripInfo.create({
+      data: {
+        bookingId,
+        groupNumber: booking.groupNumber,
+        groupName: booking.groupName,
+        partyName: booking.service.party.partyName,
+        arrivalDate: booking.travelDetails.arrivalDate,
+        departureDate: booking.travelDetails.departureDate,
+        iqamaNumber: booking.accommodationDetails?.iqamaNumber,
+        iqamaHolderName: booking.accommodationDetails?.iqamaName,
+        iqamaHolderDob: booking.accommodationDetails?.iqamaDob,
+        iqamaHolderMobile: booking.accommodationDetails?.iqamaMobile,
+        iqamaNationalShortAddress: booking.accommodationDetails?.iqamaNationalShortAddress,
+        updatedBy: user.id,
+        status: initialStatus,
+      },
+    });
+
+    // Create status history entry
+    await prisma.bookingStatusHistory.create({
+      data: {
+        bookingId,
+        oldStatus: null,
+        newStatus: initialStatus,
+        changedBy: user.id,
+        reason: 'Booking created',
+      },
+    });
+
     res.json({
       message: 'Booking completed successfully',
       data: {
         bookingId,
         passengerCount: validatedData.passengerCount,
         passengers,
+        tripInfo,
+        status: initialStatus,
       },
     });
   } catch (error) {
@@ -597,6 +682,406 @@ router.get('/hotels/:locationId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error fetching hotels:', error);
     res.status(500).json({ error: 'Failed to fetch hotels' });
+  }
+});
+
+// ============================================
+// TRIP INFO & WORKFLOW ENDPOINTS
+// ============================================
+
+// POST /api/umrah-visa/:bookingId/add-group-data - Add group data (Admin/Staff only)
+router.post('/:bookingId/add-group-data', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Only admin/staff can add group data
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can add group data' });
+    }
+
+    const { groupNumber, groupName } = req.body;
+
+    if (!groupNumber || !groupName) {
+      return res.status(400).json({ error: 'Group number and group name are required' });
+    }
+
+    // Check if booking exists
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: { tripInfo: true },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (!booking.tripInfo) {
+      return res.status(404).json({ error: 'Trip info not found' });
+    }
+
+    if (booking.tripInfo.status !== 'group_processing') {
+      return res.status(400).json({ error: 'Group data can only be added when status is group_processing' });
+    }
+
+    // Update booking and trip info
+    const [updatedBooking, updatedTripInfo] = await prisma.$transaction([
+      prisma.umrahVisaBooking.update({
+        where: { id: bookingId },
+        data: {
+          groupNumber,
+          groupName,
+          hasGroupNumber: true,
+          status: 'group_assigned',
+        },
+      }),
+      prisma.tripInfo.update({
+        where: { bookingId },
+        data: {
+          groupNumber,
+          groupName,
+          status: 'group_assigned',
+          updatedBy: user.id,
+        },
+      }),
+      prisma.bookingStatusHistory.create({
+        data: {
+          bookingId,
+          oldStatus: 'group_processing',
+          newStatus: 'group_assigned',
+          changedBy: user.id,
+          reason: 'Group data added',
+        },
+      }),
+    ]);
+
+    res.json({
+      message: 'Group data added successfully',
+      data: {
+        booking: updatedBooking,
+        tripInfo: updatedTripInfo,
+      },
+    });
+  } catch (error) {
+    console.error('Error adding group data:', error);
+    res.status(500).json({ error: 'Failed to add group data' });
+  }
+});
+
+// POST /api/umrah-visa/:bookingId/download-documents - Download documents and track
+router.post('/:bookingId/download-documents', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Only admin/staff can download documents
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can download documents' });
+    }
+
+    // Get booking with all passenger documents
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        tripInfo: true,
+        passengers: {
+          include: {
+            documents: {
+              where: { isDeleted: false },
+            },
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (!booking.tripInfo) {
+      return res.status(404).json({ error: 'Trip info not found' });
+    }
+
+    if (booking.tripInfo.status !== 'group_assigned') {
+      return res.status(400).json({ 
+        error: 'Documents can only be downloaded when status is group_assigned',
+        currentStatus: booking.tripInfo.status 
+      });
+    }
+
+    // Check if documents have already been downloaded
+    if (booking.tripInfo.documentsDownloadCount > 0) {
+      return res.status(400).json({ 
+        error: 'Documents have already been downloaded. Please request admin permission for re-download.',
+        downloadCount: booking.tripInfo.documentsDownloadCount,
+        lastDownloadedAt: booking.tripInfo.documentsDownloadedAt,
+        lastDownloadedBy: booking.tripInfo.documentsDownloadedBy,
+      });
+    }
+
+    // Collect all documents
+    const allDocuments = booking.passengers.flatMap(p => p.documents);
+
+    // For testing: Skip document check
+    // if (allDocuments.length === 0) {
+    //   return res.status(400).json({ error: 'No documents found for this booking' });
+    // }
+
+    // Update trip info - mark as downloaded and change status
+    const updatedTripInfo = await prisma.$transaction([
+      prisma.tripInfo.update({
+        where: { bookingId },
+        data: {
+          documentsDownloadCount: { increment: 1 },
+          documentsDownloadedAt: new Date(),
+          documentsDownloadedBy: user.id,
+          status: 'documents_downloaded',
+          updatedBy: user.id,
+        },
+      }),
+      prisma.umrahVisaBooking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'documents_downloaded',
+        },
+      }),
+      prisma.bookingStatusHistory.create({
+        data: {
+          bookingId,
+          oldStatus: 'group_assigned',
+          newStatus: 'documents_downloaded',
+          changedBy: user.id,
+          reason: 'Documents downloaded',
+        },
+      }),
+    ]);
+
+    res.json({
+      message: 'Documents download tracked successfully',
+      data: {
+        documents: allDocuments,
+        tripInfo: updatedTripInfo[0],
+      },
+    });
+  } catch (error) {
+    console.error('Error tracking document download:', error);
+    res.status(500).json({ error: 'Failed to track document download' });
+  }
+});
+
+// POST /api/umrah-visa/:bookingId/upload-confirmation - Upload confirmation image
+router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Only admin/staff can upload confirmation
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can upload confirmation' });
+    }
+
+    const { confirmationImagePath } = req.body;
+
+    if (!confirmationImagePath) {
+      return res.status(400).json({ error: 'Confirmation image path is required' });
+    }
+
+    // Check if booking exists
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: { tripInfo: true },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (!booking.tripInfo) {
+      return res.status(404).json({ error: 'Trip info not found' });
+    }
+
+    if (booking.tripInfo.status !== 'documents_downloaded') {
+      return res.status(400).json({ 
+        error: 'Confirmation can only be uploaded when status is documents_downloaded',
+        currentStatus: booking.tripInfo.status 
+      });
+    }
+
+    // Update trip info with confirmation image and change status to booking_success
+    const [updatedTripInfo] = await prisma.$transaction([
+      prisma.tripInfo.update({
+        where: { bookingId },
+        data: {
+          confirmationImagePath,
+          confirmationUploadedAt: new Date(),
+          status: 'booking_success',
+          updatedBy: user.id,
+        },
+      }),
+      prisma.umrahVisaBooking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'booking_success',
+        },
+      }),
+      prisma.bookingStatusHistory.create({
+        data: {
+          bookingId,
+          oldStatus: 'documents_downloaded',
+          newStatus: 'booking_success',
+          changedBy: user.id,
+          reason: 'Confirmation image uploaded',
+        },
+      }),
+    ]);
+
+    res.json({
+      message: 'Confirmation uploaded successfully',
+      data: {
+        tripInfo: updatedTripInfo,
+      },
+    });
+  } catch (error) {
+    console.error('Error uploading confirmation:', error);
+    res.status(500).json({ error: 'Failed to upload confirmation' });
+  }
+});
+
+// GET /api/umrah-visa/:bookingId/available-actions - Get available actions based on status
+router.get('/:bookingId/available-actions', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Get booking with trip info
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: { tripInfo: true },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (!booking.tripInfo) {
+      return res.status(404).json({ error: 'Trip info not found' });
+    }
+
+    const status = booking.tripInfo.status;
+    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
+
+    let availableActions: any[] = [];
+
+    switch (status) {
+      case 'group_processing':
+        if (isAdminOrStaff) {
+          availableActions.push({
+            action: 'add_group_data',
+            label: 'Add Group Data',
+            description: 'Assign group number and name to this booking',
+            endpoint: `/api/umrah-visa/${bookingId}/add-group-data`,
+            method: 'POST',
+          });
+        }
+        break;
+
+      case 'group_assigned':
+        if (isAdminOrStaff) {
+          availableActions.push({
+            action: 'download_documents',
+            label: 'Download Documents',
+            description: 'Download passenger documents (can be done once)',
+            endpoint: `/api/umrah-visa/${bookingId}/download-documents`,
+            method: 'POST',
+            warning: booking.tripInfo.documentsDownloadCount > 0 
+              ? 'Documents already downloaded. Contact admin for re-download.' 
+              : null,
+          });
+        }
+        break;
+
+      case 'documents_downloaded':
+        if (isAdminOrStaff) {
+          availableActions.push({
+            action: 'upload_confirmation',
+            label: 'Upload Confirmation Image',
+            description: 'Upload booking confirmation image',
+            endpoint: `/api/umrah-visa/${bookingId}/upload-confirmation`,
+            method: 'POST',
+          });
+        }
+        break;
+
+      case 'booking_success':
+        availableActions.push({
+          action: 'book_package',
+          label: 'Book Package',
+          description: 'Proceed to book package (functionality coming soon)',
+          endpoint: `/api/umrah-visa/${bookingId}/book-package`,
+          method: 'POST',
+          disabled: true,
+        });
+        break;
+
+      case 'cancelled':
+        // No actions available for cancelled bookings
+        break;
+    }
+
+    res.json({
+      bookingId,
+      currentStatus: status,
+      availableActions,
+      tripInfo: booking.tripInfo,
+    });
+  } catch (error) {
+    console.error('Error fetching available actions:', error);
+    res.status(500).json({ error: 'Failed to fetch available actions' });
+  }
+});
+
+// GET /api/umrah-visa/:bookingId/trip-info - Get trip info details
+router.get('/:bookingId/trip-info', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    const tripInfo = await prisma.tripInfo.findUnique({
+      where: { bookingId },
+      include: {
+        booking: {
+          include: {
+            service: {
+              include: {
+                party: true,
+              },
+            },
+          },
+        },
+        updatedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        documentsDownloadedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!tripInfo) {
+      return res.status(404).json({ error: 'Trip info not found' });
+    }
+
+    res.json(tripInfo);
+  } catch (error) {
+    console.error('Error fetching trip info:', error);
+    res.status(500).json({ error: 'Failed to fetch trip info' });
   }
 });
 

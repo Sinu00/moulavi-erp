@@ -146,6 +146,8 @@ export const umrahVisaAPI = {
   
   getBookings: (params?: any) => api.get('/umrah-visa/bookings', { params }),
   
+  getPartyBookings: (params?: any) => api.get('/umrah-visa/bookings', { params }),
+  
   getBookingById: (id: string) => api.get(`/umrah-visa/booking/${id}`),
   
   updateBookingStatus: (id: string, status: string, notes?: string) =>
@@ -183,12 +185,8 @@ export const transportMasterAPI = {
   
   getById: (id: string) => api.get(`/transport-masters/${id}`),
   
-  getByRoute: (route: string) => api.get(`/transport-masters/by-route/${route}`),
-  
-  getPricing: (route: string, vehicleType: string, pax: number) =>
-    api.get('/transport-masters/pricing', { 
-      params: { route, vehicleType, pax } 
-    }),
+  getByLocations: (fromLocationId: string, toLocationId: string) => 
+    api.get(`/transport-masters/by-locations/${fromLocationId}/${toLocationId}`),
   
   update: (id: string, data: any) => api.put(`/transport-masters/${id}`, data),
   
@@ -205,6 +203,13 @@ export const countryMasterAPI = {
   update: (id: string, data: any) => api.put(`/country-masters/${id}`, data),
   delete: (id: string) => api.delete(`/country-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/country-masters/${id}/toggle-status`),
+};
+
+// Notifications API
+export const notificationAPI = {
+  getAll: (params?: any) => api.get('/notifications', { params }),
+  markAsRead: (notificationIds: string[]) => api.post('/notifications/mark-read', { notificationIds }),
+  getStats: () => api.get('/notifications/stats'),
 };
 
 export const currencyMasterAPI = {
@@ -237,15 +242,6 @@ export const hotelMasterAPI = {
   toggleStatus: (id: string) => api.patch(`/hotel-masters/${id}/toggle-status`),
 };
 
-export const serviceTypeMasterAPI = {
-  create: (data: any) => api.post('/service-type-masters', data),
-  getAll: (params?: any) => api.get('/service-type-masters', { params }),
-  getActive: (params?: any) => api.get('/service-type-masters/active', { params }),
-  getById: (id: string) => api.get(`/service-type-masters/${id}`),
-  update: (id: string, data: any) => api.put(`/service-type-masters/${id}`, data),
-  delete: (id: string) => api.delete(`/service-type-masters/${id}`),
-  toggleStatus: (id: string) => api.patch(`/service-type-masters/${id}/toggle-status`),
-};
 
 export const userRoleMasterAPI = {
   create: (data: any) => api.post('/user-role-masters', data),
@@ -255,6 +251,17 @@ export const userRoleMasterAPI = {
   update: (id: string, data: any) => api.put(`/user-role-masters/${id}`, data),
   delete: (id: string) => api.delete(`/user-role-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/user-role-masters/${id}/toggle-status`),
+};
+
+export const airportMasterAPI = {
+  create: (data: any) => api.post('/airport-masters', data),
+  getAll: (params?: any) => api.get('/airport-masters', { params }),
+  getActive: () => api.get('/airport-masters/active'),
+  getById: (id: string) => api.get(`/airport-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/airport-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/airport-masters/${id}`),
+  search: (query: string, limit?: number) => api.get(`/airport-masters/search/${query}`, { params: { limit } }),
+  validateFlight: (flightNumber: string) => api.post('/airport-masters/validate-flight', { flightNumber }),
 };
 
 export const airportRouteMasterAPI = {

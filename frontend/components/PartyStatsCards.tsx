@@ -9,9 +9,15 @@ interface PartyStatsCardsProps {
   parties: Party[];
   pagination: PaginationInfo | null;
   loading: boolean;
+  totalStats: {
+    total: number;
+    direct: number;
+    b2b: number;
+    withLogin: number;
+  };
 }
 
-export default function PartyStatsCards({ parties, pagination, loading }: PartyStatsCardsProps) {
+export default function PartyStatsCards({ parties, pagination, loading, totalStats }: PartyStatsCardsProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -39,7 +45,7 @@ export default function PartyStatsCards({ parties, pagination, loading }: PartyS
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Parties</p>
-              <p className="text-2xl font-bold text-gray-900">{pagination?.total || 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{totalStats.total}</p>
             </div>
             <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
               <Plus className="h-5 w-5 text-blue-600" />
@@ -53,9 +59,7 @@ export default function PartyStatsCards({ parties, pagination, loading }: PartyS
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Direct Clients</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {parties.filter(p => p.customer_type === 'direct').length}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{totalStats.direct}</p>
             </div>
             <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
               <Eye className="h-5 w-5 text-green-600" />
@@ -69,9 +73,7 @@ export default function PartyStatsCards({ parties, pagination, loading }: PartyS
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">B2B Clients</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {parties.filter(p => p.customer_type === 'b2b').length}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{totalStats.b2b}</p>
             </div>
             <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center">
               <Filter className="h-5 w-5 text-purple-600" />
@@ -85,9 +87,7 @@ export default function PartyStatsCards({ parties, pagination, loading }: PartyS
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">With Login</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {parties.filter(p => p.login_required).length}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{totalStats.withLogin}</p>
             </div>
             <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
               <Upload className="h-5 w-5 text-orange-600" />

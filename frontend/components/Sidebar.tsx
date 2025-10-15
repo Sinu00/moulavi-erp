@@ -45,6 +45,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   const user = getUser();
   const [mastersOpen, setMastersOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
+  const [umrahVisaOpen, setUmrahVisaOpen] = useState(false);
 
   // Auto-expand Masters tab when on any masters page
   useEffect(() => {
@@ -57,6 +58,13 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   useEffect(() => {
     if (pathname.startsWith('/dashboard/services/')) {
       setServicesOpen(true);
+    }
+  }, [pathname]);
+
+  // Auto-expand Umrah Visa tab when on any umrah-visa page
+  useEffect(() => {
+    if (pathname.startsWith('/dashboard/umrah-visa/')) {
+      setUmrahVisaOpen(true);
     }
   }, [pathname]);
 
@@ -82,27 +90,20 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Currency Master', icon: DollarSign, path: '/dashboard/masters/currency' },
     { name: 'Destination Master', icon: MapPin, path: '/dashboard/masters/destination' },
     { name: 'Hotel Master', icon: Building, path: '/dashboard/masters/hotel' },
-    { name: 'Service Type Master', icon: Settings, path: '/dashboard/masters/service-type' },
-    { name: 'User Role Master', icon: Shield, path: '/dashboard/masters/user-role' },
     { name: 'Airport Master', icon: Plane, path: '/dashboard/masters/airport' },
-    { name: 'Airport Route Master', icon: Plane, path: '/dashboard/masters/airport-route' },
     { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
     { name: 'Transport Master', icon: Truck, path: '/dashboard/masters/transport' },
-    { name: 'Wakala Master', icon: Building2, path: '/dashboard/masters/wakala' },
-    { name: 'Doc Types Master', icon: FileType, path: '/dashboard/masters/doc-types' },
-    { name: 'Post Category Master', icon: Tag, path: '/dashboard/masters/post-category' },
-    { name: 'Visa Master', icon: Award, path: '/dashboard/masters/visa' },
-    { name: 'Bank Master', icon: CreditCard, path: '/dashboard/masters/bank' },
-    { name: 'Certificate Master', icon: Award, path: '/dashboard/masters/certificate' },
-    { name: 'Aircraft Master', icon: Plane, path: '/dashboard/masters/aircraft' },
     { name: 'Expense Master', icon: Receipt, path: '/dashboard/masters/expense' },
     { name: 'Income Master', icon: TrendingUp, path: '/dashboard/masters/income' },
-    { name: 'Block List', icon: XCircle, path: '/dashboard/masters/block-list' },
   ];
 
   const serviceItems = [
-    { name: 'Umrah Visa', icon: Award, path: '/dashboard/services/umrah-visa' },
     { name: 'Bus Booking', icon: Award, path: '/dashboard/services/bus-booking' },
+  ];
+
+  const umrahVisaItems = [
+    { name: 'Bookings', icon: FileText, path: '/dashboard/umrah-visa/bookings' },
+    { name: 'Trip Info', icon: MapPin, path: '/dashboard/umrah-visa/trip-info' },
   ];
 
   const menuItems = [
@@ -179,12 +180,69 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
             );
           })}
 
+          {/* Umrah Visa Section */}
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                if (collapsed) {
+                  toast.info('Expand sidebar to access Umrah Visa');
+                } else {
+                  setUmrahVisaOpen(!umrahVisaOpen);
+                }
+              }}
+              className={cn(
+                "flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                collapsed ? 'justify-center' : 'justify-between',
+                pathname.startsWith('/dashboard/umrah-visa/')
+                  ? 'bg-indigo-50 text-indigo-600 shadow-sm border-l-2 border-indigo-600'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900',
+                umrahVisaOpen && !collapsed && !pathname.startsWith('/dashboard/umrah-visa/') && 'bg-gray-50'
+              )}
+              title={collapsed ? "Umrah Visa" : undefined}
+            >
+              <div className={cn("flex items-center", collapsed ? '' : 'space-x-3')}>
+                <Award className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span>Umrah Visa</span>}
+              </div>
+              {!collapsed && (
+                <div className={cn("transition-transform duration-200", umrahVisaOpen && "rotate-90")}>
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              )}
+            </button>
+
+            {/* Umrah Visa Submenu */}
+            {(umrahVisaOpen || pathname.startsWith('/dashboard/umrah-visa/')) && !collapsed && (
+              <div className="ml-4 mt-1 space-y-1 border-l-2 border-indigo-200 pl-2 animate-in slide-in-from-top-2 duration-200">
+                {umrahVisaItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.path;
+                  
+                  return (
+                    <button
+                      key={item.name}
+                      onClick={() => router.push(item.path)}
+                      className={cn(
+                        'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
+                        isActive
+                          ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600 shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-2 hover:border-gray-300'
+                      )}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      <span>{item.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Services Section */}
           <div className="pt-2">
             <button
               onClick={() => {
                 if (collapsed) {
-                  // When collapsed, don't expand sidebar, just show toast
                   toast.info('Expand sidebar to access Services');
                 } else {
                   setServicesOpen(!servicesOpen);
@@ -193,7 +251,6 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
               className={cn(
                 "flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 collapsed ? 'justify-center' : 'justify-between',
-                // Highlight Services tab when any sub-tab is active
                 pathname.startsWith('/dashboard/services/')
                   ? 'bg-indigo-50 text-indigo-600 shadow-sm border-l-2 border-indigo-600'
                   : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900',
@@ -222,13 +279,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                   return (
                     <button
                       key={item.name}
-                      onClick={() => {
-                        if (item.path === '/dashboard/services/umrah-visa') {
-                          router.push(item.path);
-                        } else {
-                          toast.info(`${item.name} coming soon`);
-                        }
-                      }}
+                      onClick={() => toast.info(`${item.name} coming soon`)}
                       className={cn(
                         'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
                         isActive
@@ -298,6 +349,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                             item.path === '/dashboard/masters/hotel' ||
                             item.path === '/dashboard/masters/service-type' ||
                             item.path === '/dashboard/masters/user-role' ||
+                            item.path === '/dashboard/masters/airport' ||
                             item.path === '/dashboard/masters/airport-route') {
                           router.push(item.path);
                         } else {

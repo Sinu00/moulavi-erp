@@ -431,7 +431,7 @@ export default function AirportRouteMasterPage() {
                       <SelectItem value="none">No destination</SelectItem>
                       {destinations.map((destination) => (
                         <SelectItem key={destination.id} value={destination.id}>
-                          {destination.destinationName} - {destination.city}
+                          {destination.destinationName}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -447,7 +447,7 @@ export default function AirportRouteMasterPage() {
                       <SelectItem value="none">No destination</SelectItem>
                       {destinations.map((destination) => (
                         <SelectItem key={destination.id} value={destination.id}>
-                          {destination.destinationName} - {destination.city}
+                          {destination.destinationName}
                         </SelectItem>
                       ))}
                     </SelectContent>

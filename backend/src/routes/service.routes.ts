@@ -80,7 +80,7 @@ router.post(
           serviceId: service.id,
           groupNumber: `GRP-${Date.now()}`,
           passengerCount: 1,
-          status: 'pending'
+          status: 'group_processing'
         }
       });
 

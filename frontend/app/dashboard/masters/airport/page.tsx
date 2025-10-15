@@ -5,14 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
+import { useAirportMaster } from '@/hooks/useAirportMaster';
 import Sidebar from '@/components/Sidebar';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, Plane, Menu } from 'lucide-react';
+import AirportCard from '@/components/airport/AirportCard';
+import AirportForm from '@/components/airport/AirportForm';
+import AirportDeleteConfirmationModal from '@/components/airport/AirportDeleteConfirmationModal';
+import { Plus, Search, Plane, Menu } from 'lucide-react';
 
 interface AirportMaster {
   id: string;
@@ -30,6 +31,7 @@ interface CreateAirportMasterRequest {
   airportName: string;
   city: string;
   country: string;
+  isActive?: boolean;
 }
 
 export default function AirportMasterPage() {
@@ -37,17 +39,35 @@ export default function AirportMasterPage() {
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [airports, setAirports] = useState<AirportMaster[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingAirport, setEditingAirport] = useState<AirportMaster | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [airportToDelete, setAirportToDelete] = useState<AirportMaster | null>(null);
   const [formData, setFormData] = useState<CreateAirportMasterRequest>({
     airportCode: '',
     airportName: '',
     city: '',
-    country: ''
+    country: '',
+    isActive: true
   });
+
+  const [mounted, setMounted] = useState(false);
+
+  const {
+    airports,
+    loading,
+    searchTerm,
+    setSearchTerm,
+    filteredAirports,
+    createAirport,
+    updateAirport,
+    deleteAirport,
+    toggleAirportStatus
+  } = useAirportMaster();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -56,60 +76,15 @@ export default function AirportMasterPage() {
     }
   }, [user, router]);
 
-  useEffect(() => {
-    if (user && hasRole(['admin', 'staff'])) {
-      loadAirports();
-    }
-  }, []);
-
-  const loadAirports = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/airport-masters', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      const data = await response.json();
-      setAirports(data.airports || []);
-    } catch (error) {
-      toast.error('Failed to load airports');
-      console.error('Error loading airports:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    try {
-      const url = editingAirport 
-        ? `/api/airport-masters/${editingAirport.id}`
-        : '/api/airport-masters';
-      
-      const method = editingAirport ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        toast.success(editingAirport ? 'Airport updated successfully' : 'Airport created successfully');
-        loadAirports();
-        resetForm();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to save airport');
-      }
-    } catch (error) {
-      toast.error('Failed to save airport');
-      console.error('Error saving airport:', error);
+    const success = editingAirport 
+      ? await updateAirport(editingAirport.id, formData)
+      : await createAirport(formData);
+    
+    if (success) {
+      resetForm();
     }
   };
 
@@ -119,35 +94,30 @@ export default function AirportMasterPage() {
       airportCode: airport.airportCode,
       airportName: airport.airportName,
       city: airport.city,
-      country: airport.country
+      country: airport.country,
+      isActive: airport.isActive
     });
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (airport: AirportMaster) => {
-    if (!confirm(`Are you sure you want to delete ${airport.airportName}?`)) {
-      return;
-    }
+  const handleDeleteClick = (airport: AirportMaster) => {
+    setAirportToDelete(airport);
+    setShowDeleteModal(true);
+  };
 
-    try {
-      const response = await fetch(`/api/airport-masters/${airport.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+  const handleDeleteConfirm = async () => {
+    if (!airportToDelete) return;
 
-      if (response.ok) {
-        toast.success('Airport deleted successfully');
-        loadAirports();
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to delete airport');
-      }
-    } catch (error) {
-      toast.error('Failed to delete airport');
-      console.error('Error deleting airport:', error);
+    const success = await deleteAirport(airportToDelete.id);
+    if (success) {
+      setShowDeleteModal(false);
+      setAirportToDelete(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setAirportToDelete(null);
   };
 
   const resetForm = () => {
@@ -155,18 +125,17 @@ export default function AirportMasterPage() {
       airportCode: '',
       airportName: '',
       city: '',
-      country: ''
+      country: '',
+      isActive: true
     });
     setEditingAirport(null);
     setShowCreateForm(false);
   };
 
-  const filteredAirports = airports.filter(airport =>
-    airport.airportCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    airport.airportName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    airport.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    airport.country.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+
+  if (!mounted) {
+    return null; // Prevent hydration mismatch
+  }
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -278,39 +247,13 @@ export default function AirportMasterPage() {
               ) : (
                 <div className="space-y-4">
                   {filteredAirports.map((airport) => (
-                    <div key={airport.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                      <div className="flex items-center space-x-4">
-                        <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                          <Plane className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{airport.airportName}</h3>
-                          <p className="text-sm text-gray-500">
-                            {airport.airportCode} • {airport.city}, {airport.country}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={airport.isActive ? "default" : "secondary"}>
-                          {airport.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(airport)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(airport)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                    <AirportCard
+                      key={airport.id}
+                      airport={airport}
+                      onEdit={handleEdit}
+                      onDelete={handleDeleteClick}
+                      onToggleStatus={toggleAirportStatus}
+                    />
                   ))}
                 </div>
               )}
@@ -320,75 +263,38 @@ export default function AirportMasterPage() {
       </div>
 
       {/* Create/Edit Form */}
-      <Sheet open={showCreateForm} onOpenChange={setShowCreateForm}>
+      <Sheet open={showCreateForm} onOpenChange={(open) => {
+        setShowCreateForm(open);
+        if (!open) {
+          resetForm();
+        }
+      }}>
         <SheetContent side="right" className="w-96">
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold">
-                {editingAirport ? 'Edit Airport' : 'Add New Airport'}
-              </h2>
-              <p className="text-sm text-gray-500">
-                {editingAirport ? 'Update airport information' : 'Enter airport details'}
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="airportCode">Airport Code *</Label>
-                <Input
-                  id="airportCode"
-                  placeholder="e.g., JED"
-                  value={formData.airportCode}
-                  onChange={(e) => setFormData(prev => ({ ...prev, airportCode: e.target.value.toUpperCase() }))}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="airportName">Airport Name *</Label>
-                <Input
-                  id="airportName"
-                  placeholder="e.g., King Abdulaziz International Airport"
-                  value={formData.airportName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, airportName: e.target.value }))}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="city">City *</Label>
-                <Input
-                  id="city"
-                  placeholder="e.g., Jeddah"
-                  value={formData.city}
-                  onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="country">Country *</Label>
-                <Input
-                  id="country"
-                  placeholder="e.g., Saudi Arabia"
-                  value={formData.country}
-                  onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
-                  required
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-4">
-                <Button type="submit" className="flex-1">
-                  {editingAirport ? 'Update' : 'Create'}
-                </Button>
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </div>
+          <SheetHeader>
+            <SheetTitle>
+              {editingAirport ? 'Edit Airport' : 'Add New Airport'}
+            </SheetTitle>
+            <SheetDescription>
+              {editingAirport ? 'Update airport information' : 'Add a new airport to the system'}
+            </SheetDescription>
+          </SheetHeader>
+          <AirportForm
+            formData={formData}
+            editingAirport={editingAirport}
+            onFormDataChange={setFormData}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+          />
         </SheetContent>
       </Sheet>
+
+      {/* Delete Confirmation Modal */}
+      <AirportDeleteConfirmationModal
+        isOpen={showDeleteModal}
+        airport={airportToDelete}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </div>
   );
 }

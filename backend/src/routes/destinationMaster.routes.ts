@@ -12,6 +12,7 @@ const createDestinationMasterValidation = [
   body('destinationName').isString().notEmpty().trim(),
   body('city').isString().notEmpty().trim(),
   body('country').isString().notEmpty().trim(),
+  body('isActive').isBoolean().optional(),
 ];
 
 const updateDestinationMasterValidation = [
@@ -19,7 +20,6 @@ const updateDestinationMasterValidation = [
   body('destinationName').isString().notEmpty().trim().optional(),
   body('city').isString().notEmpty().trim().optional(),
   body('country').isString().notEmpty().trim().optional(),
-  body('description').isString().optional(),
   body('isActive').isBoolean().optional(),
 ];
 
@@ -39,7 +39,7 @@ router.post(
       });
     }
 
-    const { destinationCode, destinationName, city, country } = req.body as CreateDestinationMasterRequest;
+    const { destinationCode, destinationName, city, country, isActive } = req.body as CreateDestinationMasterRequest;
 
     const existingDestination = await prisma.destinationMaster.findUnique({
       where: { destinationCode },
@@ -55,6 +55,7 @@ router.post(
         destinationName,
         city,
         country,
+        isActive: isActive ?? true,
       },
     });
 

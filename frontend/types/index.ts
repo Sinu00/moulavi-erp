@@ -40,6 +40,16 @@ export interface UpdateUserRequest {
 }
 
 // Party Types
+export interface CurrencyMaster {
+  id: string;
+  currencyCode: string;
+  currencyName: string;
+  symbol: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Party {
   id: string;
   partyName: string;
@@ -49,10 +59,14 @@ export interface Party {
   address?: string;
   gstNumber?: string;
   customerType: 'direct' | 'b2b';
-  accountCurrency: 'SAR' | 'INR' | 'AED';
+  accountCurrencyId: string;
+  accountCurrency?: CurrencyMaster;
   isSupplier: boolean;
   isCustomer: boolean;
   loginRequired: boolean;
+  emailNotification: boolean;
+  smsNotification: boolean;
+  marketingNotification: boolean;
   userId?: string;
   createdBy: string;
   createdAt: string;
@@ -67,11 +81,22 @@ export interface CreatePartyRequest {
   address?: string;
   gst_number?: string;
   customer_type: 'direct' | 'b2b';
-  account_currency: 'SAR' | 'INR' | 'AED';
+  account_currency_id: string;
   is_supplier?: boolean;
   is_customer?: boolean;
   login_required?: boolean;
+  email_notification?: boolean;
+  sms_notification?: boolean;
+  marketing_notification?: boolean;
 }
+
+// Umrah Visa Status Type
+export type UmrahVisaStatus = 
+  | 'group_processing' 
+  | 'group_assigned' 
+  | 'documents_downloaded' 
+  | 'booking_success' 
+  | 'cancelled';
 
 // Service Types
 export interface Service {
@@ -84,7 +109,7 @@ export interface Service {
   createdAt: string;
   updatedAt: string;
   // Additional fields for party services
-  umrahVisaStatus?: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  umrahVisaStatus?: UmrahVisaStatus;
   umrahVisaDetail?: UmrahVisaDetails | null;
   documents?: Document[];
 }
@@ -132,6 +157,7 @@ export interface UmrahVisaBooking {
   bookingMode: BookingMode;
   groupNumber?: string;
   groupName?: string;
+  hasGroupNumber?: boolean;
   flightNumber: string;
   arrivalDate: string;
   departureDate: string;
@@ -149,11 +175,66 @@ export interface UmrahVisaBooking {
   iqamaName?: string;
   iqamaDob?: string;
   iqamaMobile?: string;
+  iqamaNationalShortAddress?: string;
   passengerCount: number;
-  status?: 'pending' | 'processing' | 'approved' | 'rejected' | 'completed';
+  status?: UmrahVisaStatus;
   passengers?: UmrahPassenger[];
+  tripInfo?: TripInfo;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// Trip Info Types
+export interface TripInfo {
+  id: string;
+  bookingId: string;
+  groupNumber?: string;
+  groupName?: string;
+  partyName: string;
+  arrivalDate: string;
+  departureDate: string;
+  iqamaNumber?: string;
+  iqamaHolderName?: string;
+  iqamaHolderDob?: string;
+  iqamaHolderMobile?: string;
+  iqamaNationalShortAddress?: string;
+  documentsDownloadCount: number;
+  documentsDownloadedAt?: string;
+  documentsDownloadedBy?: string;
+  confirmationImagePath?: string;
+  confirmationUploadedAt?: string;
+  updatedBy: string;
+  status: UmrahVisaStatus;
+  createdAt: string;
+  updatedAt: string;
+  updatedByUser?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  documentsDownloadedByUser?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+// Available Actions Type
+export interface AvailableAction {
+  action: string;
+  label: string;
+  description: string;
+  endpoint: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  warning?: string | null;
+  disabled?: boolean;
+}
+
+export interface AvailableActionsResponse {
+  bookingId: string;
+  currentStatus: UmrahVisaStatus;
+  availableActions: AvailableAction[];
+  tripInfo: TripInfo;
 }
 
 export interface CreateUmrahVisaBookingRequest {
@@ -242,26 +323,40 @@ export interface DashboardStats {
 // Transport Master Types
 export interface TransportMaster {
   id: string;
-  vehicleRoute: string;
+  fromLocationId: string;
+  toLocationId: string;
   vehicleType: string;
-  pax: number;
+  paxCount: number;
   price: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  fromLocation?: {
+    id: string;
+    destinationName: string;
+    city: string;
+  };
+  toLocation?: {
+    id: string;
+    destinationName: string;
+    city: string;
+  };
 }
 
 export interface CreateTransportMasterRequest {
-  vehicleRoute: string;
+  fromLocationId: string;
+  toLocationId: string;
   vehicleType: string;
-  pax: number;
+  paxCount: number;
   price: number;
+  isActive?: boolean;
 }
 
 export interface UpdateTransportMasterRequest {
-  vehicleRoute?: string;
+  fromLocationId?: string;
+  toLocationId?: string;
   vehicleType?: string;
-  pax?: number;
+  paxCount?: number;
   price?: number;
   isActive?: boolean;
 }
@@ -319,7 +414,6 @@ export interface DestinationMaster {
   destinationName: string;
   city: string;
   country: string;
-  description?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -330,7 +424,7 @@ export interface CreateDestinationMasterRequest {
   destinationName: string;
   city: string;
   country: string;
-  description?: string;
+  isActive?: boolean;
 }
 
 export interface UpdateDestinationMasterRequest {
@@ -338,7 +432,6 @@ export interface UpdateDestinationMasterRequest {
   destinationName?: string;
   city?: string;
   country?: string;
-  description?: string;
   isActive?: boolean;
 }
 
@@ -371,32 +464,6 @@ export interface UpdateHotelMasterRequest {
   isActive?: boolean;
 }
 
-// Service Type Master Types
-export interface ServiceTypeMaster {
-  id: string;
-  serviceCode: string;
-  serviceName: string;
-  category: string;
-  description?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateServiceTypeMasterRequest {
-  serviceCode: string;
-  serviceName: string;
-  category?: string;
-  description?: string;
-}
-
-export interface UpdateServiceTypeMasterRequest {
-  serviceCode?: string;
-  serviceName?: string;
-  category?: string;
-  description?: string;
-  isActive?: boolean;
-}
 
 // User Role Master Types
 export interface UserRoleMaster {

@@ -11,6 +11,7 @@ const createHotelMasterValidation = [
   body('hotelCode').isString().notEmpty().trim().isLength({ min: 2, max: 20 }),
   body('hotelName').isString().notEmpty().trim(),
   body('locationId').isString().notEmpty().trim(),
+  body('isActive').isBoolean().optional(),
 ];
 
 const updateHotelMasterValidation = [
@@ -27,7 +28,7 @@ router.post(
   authorize('admin', 'staff'),
   createHotelMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { hotelCode, hotelName, locationId } = req.body as CreateHotelMasterRequest;
+    const { hotelCode, hotelName, locationId, isActive } = req.body as CreateHotelMasterRequest;
 
     const existingHotel = await prisma.hotelMaster.findUnique({
       where: { hotelCode },
@@ -51,6 +52,7 @@ router.post(
         hotelCode,
         hotelName,
         locationId,
+        isActive: isActive ?? true,
       },
     });
 

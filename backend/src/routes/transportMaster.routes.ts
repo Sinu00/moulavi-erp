@@ -13,6 +13,7 @@ const createTransportMasterValidation = [
   body('vehicleType').isString().notEmpty().trim(),
   body('paxCount').isInt({ min: 1 }),
   body('price').isDecimal({ decimal_digits: '0,2' }),
+  body('isActive').isBoolean().optional(),
 ];
 
 const updateTransportMasterValidation = [
@@ -31,7 +32,7 @@ router.post(
   authorize('admin'),
   createTransportMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { fromLocationId, toLocationId, vehicleType, paxCount, price } = req.body;
+    const { fromLocationId, toLocationId, vehicleType, paxCount, price, isActive } = req.body;
     
     // Check if combination already exists
     const existingTransport = await prisma.transportMaster.findUnique({
@@ -58,7 +59,8 @@ router.post(
         toLocationId,
         vehicleType,
         paxCount,
-        price: parseFloat(price)
+        price: parseFloat(price),
+        isActive: isActive ?? true
       }
     });
     

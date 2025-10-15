@@ -12,16 +12,48 @@ const router = Router();
 // Validation middleware
 const createPartyValidation = [
   body('party_name').isString().notEmpty().trim(),
-  body('email').isEmail().normalizeEmail(),
-  body('contact_number').optional().isString(),
-  body('whatsapp_number').optional().isString(),
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .custom((value) => {
+      // Email domain validation for business emails
+      const businessDomains = [
+        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+        'company.com', 'business.com', 'corp.com', 'enterprise.com'
+      ];
+      const domain = value.split('@')[1]?.toLowerCase();
+      
+      // Allow common business domains and custom domains
+      if (domain && !businessDomains.includes(domain)) {
+        // For custom domains, check if it looks like a business domain
+        if (domain.includes('.') && domain.length > 3) {
+          return true; // Allow custom business domains
+        }
+      }
+      return true; // Allow all valid email formats for now
+    }),
+  body('contact_number')
+    .optional()
+    .isString()
+    .matches(/^[+]?[0-9]{10,15}$/, 'g')
+    .withMessage('Contact number must be 10-15 digits, optionally starting with +'),
+  body('whatsapp_number')
+    .optional()
+    .isString()
+    .matches(/^[+]?[0-9]{10,15}$/, 'g')
+    .withMessage('WhatsApp number must be 10-15 digits, optionally starting with +'),
   body('address').optional().isString(),
   body('gst_number').optional().isString(),
-  body('customer_type').isIn(['direct', 'b2b']),
-  body('account_currency').isIn(['SAR', 'INR', 'AED']),
+  body('customer_type')
+    .isIn(['direct', 'b2b'])
+    .withMessage('Customer type must be either direct or b2b'),
+  body('account_currency_id').isUUID().withMessage('Valid currency ID is required'),
   body('is_supplier').optional().isBoolean(),
   body('is_customer').optional().isBoolean(),
   body('login_required').optional().isBoolean(),
+  body('email_notification').optional().isBoolean(),
+  body('sms_notification').optional().isBoolean(),
+  body('marketing_notification').optional().isBoolean(),
 ];
 
 // Create party
@@ -39,10 +71,13 @@ router.post(
       address,
       gst_number,
       customer_type,
-      account_currency,
+      account_currency_id,
       is_supplier = false,
       is_customer = true,
       login_required = false,
+      email_notification = true,
+      sms_notification = true,
+      marketing_notification = false,
     } = req.body;
     
     // Check if party email already exists
@@ -92,10 +127,13 @@ router.post(
         address,
         gstNumber: gst_number,
         customerType: customer_type,
-        accountCurrency: account_currency,
+        accountCurrencyId: account_currency_id,
         isSupplier: is_supplier,
         isCustomer: is_customer,
         loginRequired: login_required,
+        emailNotification: email_notification,
+        smsNotification: sms_notification,
+        marketingNotification: marketing_notification,
         userId,
         createdBy: req.user!.id
       }
@@ -167,7 +205,10 @@ router.get(
         where,
         skip,
         take: limitNum,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          accountCurrency: true
+        }
       }),
       prisma.party.count({ where })
     ]);
@@ -195,7 +236,10 @@ router.get(
     }
     
     const party = await prisma.party.findUnique({
-      where: { userId: req.user!.id }
+      where: { userId: req.user!.id },
+      include: {
+        accountCurrency: true
+      }
     });
     
     if (!party) {
@@ -215,7 +259,10 @@ router.get(
     const { id } = req.params;
     
     const party = await prisma.party.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        accountCurrency: true
+      }
     });
     
     if (!party) {
@@ -240,9 +287,12 @@ router.put(
       address,
       gst_number,
       customer_type,
-      account_currency,
+      account_currency_id,
       is_supplier,
       is_customer,
+      email_notification,
+      sms_notification,
+      marketing_notification,
     } = req.body;
     
     const updateData: any = {};
@@ -253,9 +303,12 @@ router.put(
     if (address !== undefined) updateData.address = address;
     if (gst_number !== undefined) updateData.gstNumber = gst_number;
     if (customer_type !== undefined) updateData.customerType = customer_type;
-    if (account_currency !== undefined) updateData.accountCurrency = account_currency;
+    if (account_currency_id !== undefined) updateData.accountCurrencyId = account_currency_id;
     if (is_supplier !== undefined) updateData.isSupplier = is_supplier;
     if (is_customer !== undefined) updateData.isCustomer = is_customer;
+    if (email_notification !== undefined) updateData.emailNotification = email_notification;
+    if (sms_notification !== undefined) updateData.smsNotification = sms_notification;
+    if (marketing_notification !== undefined) updateData.marketingNotification = marketing_notification;
     
     const party = await prisma.party.update({
       where: { id },

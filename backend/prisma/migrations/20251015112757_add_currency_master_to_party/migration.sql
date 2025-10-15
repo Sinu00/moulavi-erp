@@ -1,0 +1,1 @@
+-- Empty migration - database already updated manually

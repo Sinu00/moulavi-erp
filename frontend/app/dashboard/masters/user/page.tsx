@@ -4,27 +4,77 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
+import { useUserMaster } from '@/hooks/useUserMaster';
 import Sidebar from '@/components/Sidebar';
+import UserForm from '@/components/user/UserForm';
+import UserStatsCards from '@/components/user/UserStatsCards';
 import UserTable from '@/components/UserTable';
-import CreateUserDialog from '@/components/CreateUserDialog';
-import { useUsers } from '@/hooks/useUsers';
-import { User, CreateUserRequest } from '@/types';
-import { Plus, Menu, Users as UsersIcon } from 'lucide-react';
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
+import { Plus, Menu, Trash2, Download, Users as UsersIcon } from 'lucide-react';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'staff' | 'party';
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface CreateUserRequest {
+  name: string;
+  email: string;
+  password?: string;
+  role: 'admin' | 'staff' | 'party';
+  isActive?: boolean;
+}
 
 export default function UserMasterPage() {
   const router = useRouter();
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [viewingUser, setViewingUser] = useState<User | null>(null);
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState<{
+    open: boolean;
+    loading: boolean;
+  }>({
+    open: false,
+    loading: false
+  });
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [filterRole, setFilterRole] = useState<'all' | 'admin' | 'staff' | 'party'>('all');
+  const [formData, setFormData] = useState<CreateUserRequest>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'staff',
+    isActive: true
+  });
+  const [mounted, setMounted] = useState(false);
+
+  const {
+    users,
+    loading,
+    error,
+    searchTerm,
+    setSearchTerm,
+    filteredUsers,
+    createUser,
+    updateUser,
+    deleteUser
+  } = useUserMaster();
   
-  const { users, loading, error, createUser, updateUser, deleteUser } = useUsers();
-  
-  // CRITICAL: Always check authentication first
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
       router.push('/');
@@ -32,40 +82,137 @@ export default function UserMasterPage() {
     }
   }, [user, router]);
 
-  if (!user) {
-    return null; // Prevent flash of content
-  }
-
-  const handleCreateUser = async (userData: CreateUserRequest) => {
-    await createUser(userData);
-  };
-
-  const handleEditUser = (user: User) => {
-    setEditingUser(user);
-    setCreateDialogOpen(true);
-  };
-
-  const handleUpdateUser = async (userData: CreateUserRequest) => {
-    if (!editingUser) return;
-    await updateUser(editingUser.id, userData);
-    setEditingUser(null);
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      try {
-        await deleteUser(userId);
-        toast.success('User deleted successfully');
-      } catch (error: any) {
-        toast.error(error.response?.data?.error || 'Failed to delete user');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const success = editingUser 
+      ? await updateUser(editingUser.id, formData)
+      : await createUser(formData);
+    
+    if (success) {
+      if (editingUser) {
+        handleUserUpdated();
+      } else {
+        handleUserCreated();
       }
     }
   };
 
-  const handleCloseDialog = () => {
-    setCreateDialogOpen(false);
+  // Filter users based on role
+  const filteredUsersByRole = filteredUsers.filter(user => {
+    if (filterRole === 'all') return true;
+    return user.role === filterRole;
+  });
+
+  const handleUserCreated = () => {
+    setShowCreateForm(false);
     setEditingUser(null);
+    toast.success('User created successfully!');
   };
+
+  const handleUserUpdated = () => {
+    setEditingUser(null);
+    setShowCreateForm(false);
+    toast.success('User updated successfully!');
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user);
+    setFormData({
+      name: user.name,
+      email: user.email,
+      password: '',
+      role: user.role,
+      isActive: user.isActive || true
+    });
+    setShowCreateForm(true);
+  };
+
+  const handleViewUser = (user: User) => {
+    setViewingUser(user);
+  };
+
+  const handleSelectUser = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedUsers.length === filteredUsersByRole.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(filteredUsersByRole.map(user => user.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedUsers.length === 0) {
+      toast.error('Please select users to delete');
+      return false;
+    }
+
+    try {
+      for (const userId of selectedUsers) {
+        await deleteUser(userId);
+      }
+      setSelectedUsers([]);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    if (selectedUsers.length === 0) {
+      toast.error('Please select users to delete');
+      return;
+    }
+
+    setBulkDeleteDialog({
+      open: true,
+      loading: false
+    });
+  };
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleteDialog(prev => ({ ...prev, loading: true }));
+
+    const success = await handleBulkDelete();
+    if (success) {
+      toast.success(`${selectedUsers.length} user(s) deleted successfully!`);
+      setBulkDeleteDialog({ open: false, loading: false });
+    } else {
+      setBulkDeleteDialog(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleUserDeleted = () => {
+    // Refresh users list
+    window.location.reload();
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      password: '',
+      role: 'staff',
+      isActive: true
+    });
+    setEditingUser(null);
+    setShowCreateForm(false);
+  };
+
+  if (!mounted) {
+    return null; // Prevent hydration mismatch
+  }
+
+  if (!user) {
+    return null; // Prevent flash of content
+  }
 
   return (
     <div className="flex h-screen bg-gray-50/50">
@@ -109,12 +256,11 @@ export default function UserMasterPage() {
             
             {hasRole(['admin']) && (
               <Button 
-                onClick={() => setCreateDialogOpen(true)}
-                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                size="sm"
+                onClick={() => setShowCreateForm(true)}
+                className="flex items-center gap-2"
               >
-                <Plus className="h-4 w-4 lg:mr-2" />
-                <span className="hidden lg:inline">Add New User</span>
+                <Plus className="h-4 w-4" />
+                Add User
               </Button>
             )}
           </div>
@@ -122,97 +268,97 @@ export default function UserMasterPage() {
 
         <div className="p-4 lg:p-8 space-y-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <UsersIcon className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Users</p>
-                    <p className="text-2xl font-bold text-gray-900">{users.length}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                    <UsersIcon className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Active Users</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {users.filter(u => u.isActive).length}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                    <UsersIcon className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Admin Users</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {users.filter(u => u.role === 'admin').length}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <UserStatsCards users={users} />
 
-          {/* Users Table */}
+          {/* User Management */}
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-xl font-semibold">Users</CardTitle>
-              <p className="text-sm text-gray-500 mt-1">
-                Manage all system users and their access levels
-              </p>
-            </CardHeader>
-            <CardContent>
-              {error ? (
-                <div className="text-center py-12">
-                  <div className="text-red-500 mb-4">
-                    <UsersIcon className="h-12 w-12 mx-auto mb-2" />
-                    <p className="text-lg font-medium">Error loading users</p>
-                    <p className="text-sm">{error}</p>
-                  </div>
-                  <Button onClick={() => window.location.reload()}>
-                    Try Again
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-semibold">User Management</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Manage system users and their permissions
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedUsers.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBulkDeleteClick}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedUsers.length})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toast.info('Export functionality coming soon')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
                   </Button>
                 </div>
-              ) : (
-                <UserTable
-                  users={users}
-                  loading={loading}
-                  onEdit={handleEditUser}
-                  onDelete={handleDeleteUser}
-                  onSearch={(search) => {
-                    // Search is handled by the useUsers hook
-                  }}
-                />
-              )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <UserTable
+                users={filteredUsersByRole}
+                loading={loading}
+                searchTerm={searchTerm}
+                filterRole={filterRole}
+                selectedUsers={selectedUsers}
+                setSearchTerm={setSearchTerm}
+                onFilterChange={setFilterRole}
+                onSelectUser={handleSelectUser}
+                onSelectAll={handleSelectAll}
+                onBulkDelete={handleBulkDeleteClick}
+                onUserDeleted={handleUserDeleted}
+                onEditUser={handleEditUser}
+                onViewUser={handleViewUser}
+              />
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Create/Edit User Dialog */}
-      <CreateUserDialog
-        open={createDialogOpen}
-        onOpenChange={handleCloseDialog}
-        onSubmit={editingUser ? handleUpdateUser : handleCreateUser}
-        editingUser={editingUser}
-        title={editingUser ? 'Edit User' : 'Create New User'}
+      {/* Create/Edit Form */}
+      <Sheet open={showCreateForm} onOpenChange={(open) => {
+        setShowCreateForm(open);
+        if (!open) {
+          resetForm();
+        }
+      }}>
+        <SheetContent side="right" className="w-96">
+          <SheetHeader>
+            <SheetTitle>
+              {editingUser ? 'Edit User' : 'Add New User'}
+            </SheetTitle>
+            <SheetDescription>
+              {editingUser ? 'Update user information and permissions' : 'Create a new system user'}
+            </SheetDescription>
+          </SheetHeader>
+          <UserForm
+            formData={formData}
+            editingUser={editingUser}
+            onFormDataChange={setFormData}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={bulkDeleteDialog.open}
+        onOpenChange={(open) => setBulkDeleteDialog(prev => ({ ...prev, open }))}
+        title="Delete Users"
+        message="Are you sure you want to delete the selected users? This will permanently remove all associated data."
+        onConfirm={confirmBulkDelete}
+        loading={bulkDeleteDialog.loading}
+        type="bulk"
+        count={selectedUsers.length}
       />
     </div>
   );

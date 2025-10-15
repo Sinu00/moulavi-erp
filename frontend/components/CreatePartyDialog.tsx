@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useCurrencyMaster } from '@/hooks/useCurrencyMaster';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,12 +33,16 @@ export default function CreatePartyDialog({
     whatsapp_number: '',
     address: '',
     gst_number: '',
-    customer_type: 'direct' as 'direct' | 'b2b',
-    account_currency: 'INR' as 'SAR' | 'INR' | 'AED',
+    customer_type: '' as 'direct' | 'b2b' | '',
+    account_currency_id: '',
     is_supplier: false,
     is_customer: true,
-    login_required: false
+    login_required: false,
+    email_notification: true,
+    sms_notification: true,
+    marketing_notification: false
   });
+  const { currencies, loading: currenciesLoading } = useCurrencyMaster();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -53,10 +58,13 @@ export default function CreatePartyDialog({
           address: editingParty.address || '',
           gst_number: editingParty.gstNumber || '',
           customer_type: editingParty.customerType,
-          account_currency: editingParty.accountCurrency,
+          account_currency_id: editingParty.accountCurrencyId,
           is_supplier: editingParty.isSupplier,
           is_customer: editingParty.isCustomer,
-          login_required: editingParty.loginRequired
+          login_required: editingParty.loginRequired,
+          email_notification: editingParty.emailNotification,
+          sms_notification: editingParty.smsNotification,
+          marketing_notification: editingParty.marketingNotification
         });
       } else {
         setFormData({
@@ -66,11 +74,14 @@ export default function CreatePartyDialog({
           whatsapp_number: '',
           address: '',
           gst_number: '',
-          customer_type: 'direct',
-          account_currency: 'INR',
+          customer_type: '',
+          account_currency_id: currencies.length > 0 ? currencies[0].id : '',
           is_supplier: false,
           is_customer: true,
-          login_required: false
+          login_required: false,
+          email_notification: true,
+          sms_notification: true,
+          marketing_notification: false
         });
       }
       setErrors({});
@@ -88,6 +99,24 @@ export default function CreatePartyDialog({
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
+    }
+
+    if (!formData.customer_type) {
+      newErrors.customer_type = 'Customer type is required';
+    }
+
+    if (!formData.account_currency_id) {
+      newErrors.account_currency_id = 'Account currency is required';
+    }
+
+    // Validate contact number format if provided
+    if (formData.contact_number && !/^[+]?[0-9]{10,15}$/.test(formData.contact_number)) {
+      newErrors.contact_number = 'Contact number must be 10-15 digits, optionally starting with +';
+    }
+
+    // Validate WhatsApp number format if provided
+    if (formData.whatsapp_number && !/^[+]?[0-9]{10,15}$/.test(formData.whatsapp_number)) {
+      newErrors.whatsapp_number = 'WhatsApp number must be 10-15 digits, optionally starting with +';
     }
 
     setErrors(newErrors);
@@ -169,7 +198,11 @@ export default function CreatePartyDialog({
               value={formData.contact_number}
               onChange={(e) => handleInputChange('contact_number', e.target.value)}
               placeholder="+91 1234567890"
+              className={errors.contact_number ? 'border-red-500' : ''}
             />
+            {errors.contact_number && (
+              <p className="text-sm text-red-500">{errors.contact_number}</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -180,7 +213,11 @@ export default function CreatePartyDialog({
               value={formData.whatsapp_number}
               onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
               placeholder="+91 1234567890"
+              className={errors.whatsapp_number ? 'border-red-500' : ''}
             />
+            {errors.whatsapp_number && (
+              <p className="text-sm text-red-500">{errors.whatsapp_number}</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -211,7 +248,7 @@ export default function CreatePartyDialog({
               value={formData.customer_type}
               onValueChange={(value) => handleInputChange('customer_type', value)}
             >
-              <SelectTrigger>
+              <SelectTrigger className={errors.customer_type ? 'border-red-500' : ''}>
                 <SelectValue placeholder="Select customer type" />
               </SelectTrigger>
               <SelectContent>
@@ -219,23 +256,35 @@ export default function CreatePartyDialog({
                 <SelectItem value="b2b">B2B</SelectItem>
               </SelectContent>
             </Select>
+            {errors.customer_type && (
+              <p className="text-sm text-red-500">{errors.customer_type}</p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="account_currency">Account Currency *</Label>
+            <Label htmlFor="account_currency_id">Account Currency *</Label>
             <Select
-              value={formData.account_currency}
-              onValueChange={(value) => handleInputChange('account_currency', value)}
+              value={formData.account_currency_id}
+              onValueChange={(value) => handleInputChange('account_currency_id', value)}
             >
-              <SelectTrigger>
+              <SelectTrigger className={errors.account_currency_id ? 'border-red-500' : ''}>
                 <SelectValue placeholder="Select currency" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="INR">INR</SelectItem>
-                <SelectItem value="SAR">SAR</SelectItem>
-                <SelectItem value="AED">AED</SelectItem>
+                {currenciesLoading ? (
+                  <SelectItem value="loading" disabled>Loading currencies...</SelectItem>
+                ) : (
+                  currencies.map((currency) => (
+                    <SelectItem key={currency.id} value={currency.id}>
+                      {currency.currencyCode} - {currency.currencyName}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {errors.account_currency_id && (
+              <p className="text-sm text-red-500">{errors.account_currency_id}</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -280,6 +329,48 @@ export default function CreatePartyDialog({
               <Label htmlFor="login_required" className="cursor-pointer">
                 Create login account for party
               </Label>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Notification Preferences</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="email_notification"
+                  checked={formData.email_notification}
+                  onChange={(e) => handleInputChange('email_notification', e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="email_notification" className="cursor-pointer">
+                  Email Notifications
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="sms_notification"
+                  checked={formData.sms_notification}
+                  onChange={(e) => handleInputChange('sms_notification', e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="sms_notification" className="cursor-pointer">
+                  SMS Notifications
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="marketing_notification"
+                  checked={formData.marketing_notification}
+                  onChange={(e) => handleInputChange('marketing_notification', e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="marketing_notification" className="cursor-pointer">
+                  Marketing Notifications
+                </Label>
+              </div>
             </div>
           </div>
           </form>

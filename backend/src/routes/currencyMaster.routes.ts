@@ -1,200 +1,202 @@
 import { Router, Response } from 'express';
-import { body, param } from 'express-validator';
-import { asyncHandler } from '../middleware/errorHandler';
+import { body } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth';
-import { prisma } from '../config/database';
-import { AuthRequest, CreateCurrencyMasterRequest, UpdateCurrencyMasterRequest } from '../types';
+import { asyncHandler } from '../middleware/errorHandler';
+import prisma from '../lib/prisma';
+import type { AuthRequest } from '../types';
 
 const router = Router();
 
-const createCurrencyMasterValidation = [
-  body('currencyCode').isString().notEmpty().trim().isLength({ min: 3, max: 3 }),
-  body('currencyName').isString().notEmpty().trim(),
-  body('symbol').isString().notEmpty().trim(),
+// Validation middleware for creating currency
+const createCurrencyValidation = [
+  body('currencyCode').isString().notEmpty().trim().withMessage('Currency code is required'),
+  body('currencyName').isString().notEmpty().trim().withMessage('Currency name is required'),
+  body('symbol').isString().notEmpty().trim().withMessage('Currency symbol is required'),
 ];
 
-const updateCurrencyMasterValidation = [
-  body('currencyCode').isString().notEmpty().trim().isLength({ min: 3, max: 3 }).optional(),
-  body('currencyName').isString().notEmpty().trim().optional(),
-  body('symbol').isString().notEmpty().trim().optional(),
-  body('isActive').isBoolean().optional(),
-];
-
-// Create Currency Master
+// Create new currency
 router.post(
   '/',
   authenticate,
   authorize('admin', 'staff'),
-  createCurrencyMasterValidation,
+  createCurrencyValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { currencyCode, currencyName, symbol } = req.body as CreateCurrencyMasterRequest;
+    const { currencyCode, currencyName, symbol } = req.body;
 
-    const existingCurrency = await prisma.currencyMaster.findUnique({
-      where: { currencyCode },
+    // Check if currency code already exists
+    const existingCurrency = await prisma.currencyMaster.findFirst({
+      where: { 
+        currencyCode: currencyCode.toUpperCase(),
+        isActive: true 
+      }
     });
 
     if (existingCurrency) {
-      return res.status(400).json({ error: 'Currency with this code already exists' });
+      return res.status(400).json({ 
+        error: 'Currency with this code already exists' 
+      });
     }
 
-    const currencyMaster = await prisma.currencyMaster.create({
+    const currency = await prisma.currencyMaster.create({
       data: {
-        currencyCode,
+        currencyCode: currencyCode.toUpperCase(),
         currencyName,
         symbol,
-      },
+        isActive: true
+      }
     });
 
-    res.status(201).json({ currencyMaster });
+    res.status(201).json({
+      success: true,
+      data: currency,
+      message: 'Currency created successfully'
+    });
   })
 );
 
-// Get all Currency Masters
+// Get all currencies
 router.get(
   '/',
   authenticate,
-  authorize('admin', 'staff', 'party'),
+  authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = '1', limit = '10', search, isActive } = req.query;
-
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
+    const { page = 1, limit = 1000, search } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
 
     const where: any = {};
+    
     if (search) {
       where.OR = [
-        { currencyName: { contains: search, mode: 'insensitive' } },
-        { currencyCode: { contains: search, mode: 'insensitive' } },
-        { symbol: { contains: search, mode: 'insensitive' } },
+        { currencyCode: { contains: search as string, mode: 'insensitive' } },
+        { currencyName: { contains: search as string, mode: 'insensitive' } },
+        { symbol: { contains: search as string, mode: 'insensitive' } },
       ];
     }
-    if (isActive !== undefined) {
-      where.isActive = String(isActive).toLowerCase() === 'true';
-    }
 
-    const [currencyMasters, total] = await Promise.all([
+    const [currencies, total] = await Promise.all([
       prisma.currencyMaster.findMany({
         where,
         skip,
-        take: limitNum,
-        orderBy: { currencyName: 'asc' },
+        take: Number(limit),
+        orderBy: { currencyCode: 'asc' },
       }),
       prisma.currencyMaster.count({ where }),
     ]);
 
     res.json({
-      currencyMasters,
+      success: true,
+      data: currencies,
       pagination: {
-        page: pageNum,
-        limit: limitNum,
+        page: Number(page),
+        limit: Number(limit),
         total,
-        totalPages: Math.ceil(total / limitNum),
+        pages: Math.ceil(total / Number(limit)),
       },
     });
   })
 );
 
-// Get active currencies for dropdowns
-router.get(
-  '/active',
-  authenticate,
-  authorize('admin', 'staff', 'party'),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const currencyMasters = await prisma.currencyMaster.findMany({
-      where: { isActive: true },
-      orderBy: { currencyName: 'asc' },
-      select: {
-        id: true,
-        currencyCode: true,
-        currencyName: true,
-        symbol: true,
-      },
-    });
-
-    res.json({ currencyMasters });
-  })
-);
-
-// Get Currency Master by ID
+// Get currency by ID
 router.get(
   '/:id',
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const currencyMaster = await prisma.currencyMaster.findUnique({
-      where: { id },
+
+    const currency = await prisma.currencyMaster.findUnique({
+      where: { id }
     });
 
-    if (!currencyMaster) {
-      return res.status(404).json({ error: 'Currency Master not found' });
+    if (!currency) {
+      return res.status(404).json({ error: 'Currency not found' });
     }
 
-    res.json({ currencyMaster });
+    res.json({
+      success: true,
+      data: currency
+    });
   })
 );
 
-// Update Currency Master
+// Update currency
 router.put(
   '/:id',
   authenticate,
   authorize('admin', 'staff'),
-  updateCurrencyMasterValidation,
+  createCurrencyValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const { currencyCode, currencyName, symbol, isActive } = req.body as UpdateCurrencyMasterRequest;
+    const { currencyCode, currencyName, symbol } = req.body;
 
-    const currencyMaster = await prisma.currencyMaster.update({
-      where: { id },
-      data: {
-        currencyCode,
-        currencyName,
-        symbol,
-        isActive,
-      },
+    // Check if currency exists
+    const existingCurrency = await prisma.currencyMaster.findUnique({
+      where: { id }
     });
 
-    res.json({ currencyMaster });
+    if (!existingCurrency) {
+      return res.status(404).json({ error: 'Currency not found' });
+    }
+
+    // Check if currency code already exists (excluding current currency)
+    const duplicateCurrency = await prisma.currencyMaster.findFirst({
+      where: { 
+        currencyCode: currencyCode.toUpperCase(),
+        isActive: true,
+        id: { not: id }
+      }
+    });
+
+    if (duplicateCurrency) {
+      return res.status(400).json({ 
+        error: 'Currency with this code already exists' 
+      });
+    }
+
+    const updatedCurrency = await prisma.currencyMaster.update({
+      where: { id },
+      data: {
+        currencyCode: currencyCode.toUpperCase(),
+        currencyName,
+        symbol
+      }
+    });
+
+    res.json({
+      success: true,
+      data: updatedCurrency,
+      message: 'Currency updated successfully'
+    });
   })
 );
 
-// Toggle Currency Master status
-router.patch(
-  '/:id/toggle-status',
+// Delete currency
+router.delete(
+  '/:id',
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const currencyMaster = await prisma.currencyMaster.findUnique({
-      where: { id },
+
+    const currency = await prisma.currencyMaster.findUnique({
+      where: { id }
     });
 
-    if (!currencyMaster) {
-      return res.status(404).json({ error: 'Currency Master not found' });
+    if (!currency) {
+      return res.status(404).json({ error: 'Currency not found' });
     }
 
-    const updatedCurrencyMaster = await prisma.currencyMaster.update({
-      where: { id },
-      data: { isActive: !currencyMaster.isActive },
-    });
-
-    res.json({ currencyMaster: updatedCurrencyMaster });
-  })
-);
-
-// Delete Currency Master
-router.delete(
-  '/:id',
-  authenticate,
-  authorize('admin'),
-  asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { id } = req.params;
+    // Hard delete
     await prisma.currencyMaster.delete({
       where: { id },
     });
-    res.status(204).send(); // No Content
+
+    res.json({
+      success: true,
+      message: 'Currency deleted successfully'
+    });
   })
 );
+
 
 export default router;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -14,12 +14,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getUser, hasRole } from '@/lib/auth';
+import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { partyAPI } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-import Navbar from '@/components/Navbar';
-import { ArrowLeft, Check, User, FileText, Calendar, ChevronRight, ChevronLeft, Plane, Home, Users, MapPin, Hotel } from 'lucide-react';
+import { ArrowLeft, Check, User, FileText, Calendar, ChevronRight, ChevronLeft, Plane, Home, Users, MapPin, Hotel, Building, LogOut } from 'lucide-react';
 
 // Flight number validation regex: 2 letters + dash + up to 4 numbers (e.g., SV-1234)
 const FLIGHT_NUMBER_REGEX = /^[A-Z]{2}-\d{1,4}$/;
@@ -32,9 +31,11 @@ interface Step1Data {
 
 interface Step2Data {
   arrivalDate: string;
+  arrivalTime: string;
   arrivalAirportId: string;
   arrivalFlightNumber: string;
   departureDate: string;
+  departureTime: string;
   departureAirportId: string;
   departureFlightNumber: string;
   transportBookings?: Array<{
@@ -89,9 +90,11 @@ export default function UmrahVisaNewPage() {
   });
   const [step2Data, setStep2Data] = useState<Step2Data>({
     arrivalDate: '',
+    arrivalTime: '',
     arrivalAirportId: '',
     arrivalFlightNumber: '',
     departureDate: '',
+    departureTime: '',
     departureAirportId: '',
     departureFlightNumber: '',
   });
@@ -115,7 +118,7 @@ export default function UmrahVisaNewPage() {
     {
       id: 1,
       title: 'Booking Mode',
-      description: 'Choose booking type and passenger count',
+      description: 'Choose booking type',
       icon: Users,
     },
     {
@@ -313,12 +316,12 @@ export default function UmrahVisaNewPage() {
   };
 
   const validateStep2 = () => {
-    if (!step2Data.arrivalDate || !step2Data.arrivalAirportId || !step2Data.arrivalFlightNumber) {
+    if (!step2Data.arrivalDate || !step2Data.arrivalTime || !step2Data.arrivalAirportId || !step2Data.arrivalFlightNumber) {
       toast.error('Please fill in all required arrival details');
       return false;
     }
 
-    if (!step2Data.departureDate || !step2Data.departureAirportId || !step2Data.departureFlightNumber) {
+    if (!step2Data.departureDate || !step2Data.departureTime || !step2Data.departureAirportId || !step2Data.departureFlightNumber) {
       toast.error('Please fill in all required departure details');
       return false;
     }
@@ -628,6 +631,28 @@ export default function UmrahVisaNewPage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        await fetch(`${API_URL}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch (error) {
+      // Logout should continue even if API call fails
+    } finally {
+      removeUser();
+      toast.success('Logged out successfully');
+      router.push('/');
+    }
+  };
+
   const addPassenger = () => {
     // Check if iqama and already at limit
     if (step3Data.accommodationType === 'iqama' && step4Data.passengers.length >= 5) {
@@ -685,18 +710,18 @@ export default function UmrahVisaNewPage() {
                 <div 
                   className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
                     step1Data.bookingMode === 'group_number' 
-                      ? 'border-blue-500 bg-blue-50' 
+                      ? 'border-red-500 bg-red-50' 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   onClick={() => setStep1Data(prev => ({ ...prev, bookingMode: 'group_number' }))}
                 >
                   <div className="flex items-center space-x-3">
                     <div className={`w-4 h-4 rounded-full border-2 ${
-                      step1Data.bookingMode === 'group_number' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                      step1Data.bookingMode === 'group_number' ? 'border-red-500 bg-red-500' : 'border-gray-300'
                     }`} />
                     <div>
                       <h3 className="font-medium">Group Number</h3>
-                      <p className="text-sm text-gray-500">I have a group number assigned</p>
+                      <p className="text-sm text-gray-500">I have a masar login</p>
                     </div>
                   </div>
                 </div>
@@ -704,18 +729,18 @@ export default function UmrahVisaNewPage() {
                 <div 
                   className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
                     step1Data.bookingMode === 'travel_details' 
-                      ? 'border-blue-500 bg-blue-50' 
+                      ? 'border-red-500 bg-red-50' 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   onClick={() => setStep1Data(prev => ({ ...prev, bookingMode: 'travel_details' }))}
                 >
                   <div className="flex items-center space-x-3">
                     <div className={`w-4 h-4 rounded-full border-2 ${
-                      step1Data.bookingMode === 'travel_details' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                      step1Data.bookingMode === 'travel_details' ? 'border-red-500 bg-red-500' : 'border-gray-300'
                     }`} />
                     <div>
                       <h3 className="font-medium">Travel Details</h3>
-                      <p className="text-sm text-gray-500">Individual booking with travel info</p>
+                      <p className="text-sm text-gray-500">Booking with travel info</p>
                     </div>
                   </div>
                 </div>
@@ -757,19 +782,19 @@ export default function UmrahVisaNewPage() {
         return (
           <div className="space-y-6">
             {step1Data.bookingMode === 'group_number' && (
-              <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="bg-red-50 p-4 rounded-lg">
                 <div className="flex items-center space-x-2 mb-2">
-                  <Users className="h-5 w-5 text-blue-600" />
-                  <h3 className="font-medium text-blue-900">Group Booking</h3>
+                  <Users className="h-5 w-5 text-red-600" />
+                  <h3 className="font-medium text-red-900">Group Booking</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-blue-700 font-medium">Group Number:</span>
-                    <span className="ml-2 text-blue-800">{step1Data.groupNumber}</span>
+                    <span className="text-red-700 font-medium">Group Number:</span>
+                    <span className="ml-2 text-red-800">{step1Data.groupNumber}</span>
                   </div>
                   <div>
-                    <span className="text-blue-700 font-medium">Group Name:</span>
-                    <span className="ml-2 text-blue-800">{step1Data.groupName}</span>
+                    <span className="text-red-700 font-medium">Group Name:</span>
+                    <span className="ml-2 text-red-800">{step1Data.groupName}</span>
                   </div>
                 </div>
               </div>
@@ -785,6 +810,19 @@ export default function UmrahVisaNewPage() {
                   onChange={(e) => {
                     setStep2Data(prev => ({ ...prev, arrivalDate: e.target.value }));
                     calculateDuration(e.target.value, step2Data.departureDate);
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="arrivalTime">Arrival Time *</Label>
+                <Input
+                  id="arrivalTime"
+                  type="time"
+                  value={step2Data.arrivalTime}
+                  onChange={(e) => {
+                    setStep2Data(prev => ({ ...prev, arrivalTime: e.target.value }));
                   }}
                   disabled={isLoading}
                 />
@@ -848,6 +886,19 @@ export default function UmrahVisaNewPage() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="departureTime">Departure Time *</Label>
+                <Input
+                  id="departureTime"
+                  type="time"
+                  value={step2Data.departureTime}
+                  onChange={(e) => {
+                    setStep2Data(prev => ({ ...prev, departureTime: e.target.value }));
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="departureAirport">Departure Airport *</Label>
                 <Select 
                   value={step2Data.departureAirportId} 
@@ -885,61 +936,192 @@ export default function UmrahVisaNewPage() {
             {/* Transport Options */}
             {transportOptions.length > 0 && (
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900">Transport Options</h4>
-                <p className="text-sm text-gray-600">
-                  Transport selection is required for Jeddah/Medina airports
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Transport Options</h4>
+                    <p className="text-sm text-gray-600">
+                      Transport selection is required for Jeddah/Medina airports
+                    </p>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    From: {transportOptions[0]?.fromLocation?.destinationName}
+                  </div>
+                </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {transportOptions.map((option, index) => (
-                    <Card key={index} className="p-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h5 className="font-medium">{option.vehicleType}</h5>
-                            <p className="text-sm text-gray-600">
-                              {option.fromLocation.destinationName} → {option.toLocation.destinationName}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium text-green-600">
-                              {Number(option.price).toFixed(2)} SAR
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {option.paxCount} passengers
-                            </p>
-                          </div>
-                        </div>
+                {/* Matrix Table View */}
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+                          Destination
+                        </th>
+                        {Array.from(new Set(transportOptions.map(opt => opt.vehicleType))).map(vehicleType => {
+                          const sampleOption = transportOptions.find(opt => opt.vehicleType === vehicleType);
+                          return (
+                            <th key={vehicleType} className="border border-gray-200 p-3 text-center text-sm font-medium text-gray-700">
+                              <div>{vehicleType}</div>
+                              <div className="text-xs text-gray-500">({sampleOption?.paxCount} pax)</div>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from(new Set(transportOptions.map(opt => opt.toLocation.destinationName))).map(destination => {
+                        const destinationOptions = transportOptions.filter(opt => opt.toLocation.destinationName === destination);
+                        const vehicleTypes = Array.from(new Set(transportOptions.map(opt => opt.vehicleType)));
                         
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => {
-                            // Add transport booking to step2Data
-                            const newTransportBooking = {
-                              fromLocationId: option.fromLocationId,
-                              toLocationId: option.toLocationId,
-                              vehicleType: option.vehicleType,
-                              paxCount: option.paxCount,
-                              price: Number(option.price),
-                              travelDate: step2Data.arrivalDate, // Use arrival date as default
-                            };
+                        return (
+                          <tr key={destination} className="hover:bg-gray-50">
+                            <td className="border border-gray-200 p-3 font-medium text-gray-900">
+                              {destination}
+                            </td>
+                            {vehicleTypes.map(vehicleType => {
+                              const option = destinationOptions.find(opt => opt.vehicleType === vehicleType);
+                              const isSelected = step2Data.transportBookings?.some(
+                                booking => booking.toLocationId === option?.toLocationId && 
+                                          booking.vehicleType === vehicleType
+                              );
+                              
+                              return (
+                                <td 
+                                  key={vehicleType} 
+                                  className={`border border-gray-200 p-3 text-center cursor-pointer transition-all duration-200 ${
+                                    option 
+                                      ? isSelected 
+                                        ? 'bg-green-100 border-green-300 hover:bg-green-200' 
+                                        : 'hover:bg-blue-50 hover:border-blue-300'
+                                      : 'bg-gray-50'
+                                  }`}
+                                  onClick={() => {
+                                    if (option) {
+                                      if (isSelected) {
+                                        // Remove if already selected
+                                        setStep2Data(prev => ({
+                                          ...prev,
+                                          transportBookings: prev.transportBookings?.filter(
+                                            booking => !(booking.toLocationId === option.toLocationId && 
+                                                       booking.vehicleType === vehicleType)
+                                          ) || []
+                                        }));
+                                        toast.success(`Removed ${option.vehicleType} from ${destination}`);
+                                      } else {
+                                        // Add new selection
+                                        const newTransportBooking = {
+                                          fromLocationId: option.fromLocationId,
+                                          toLocationId: option.toLocationId,
+                                          vehicleType: option.vehicleType,
+                                          paxCount: option.paxCount,
+                                          price: Number(option.price),
+                                          travelDate: step2Data.arrivalDate,
+                                        };
+                                        
+                                        setStep2Data(prev => ({
+                                          ...prev,
+                                          transportBookings: [...(prev.transportBookings || []), newTransportBooking]
+                                        }));
+                                        
+                                        toast.success(`Selected ${option.vehicleType} to ${destination}`);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  {option ? (
+                                    <div className="space-y-1">
+                                      <div className={`font-medium ${isSelected ? 'text-green-700' : 'text-green-600'}`}>
+                                        {Number(option.price).toFixed(2)} SAR
+                                      </div>
+                                      <div className={`text-xs ${isSelected ? 'text-green-600' : 'text-gray-500'}`}>
+                                        {isSelected ? '✓ Selected' : 'Click to select'}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 text-sm">-</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="lg:hidden">
+                  {Array.from(new Set(transportOptions.map(opt => opt.toLocation.destinationName))).map(destination => {
+                    const destinationOptions = transportOptions.filter(opt => opt.toLocation.destinationName === destination);
+                    
+                    return (
+                      <Card key={destination} className="p-4 mb-4">
+                        <h5 className="font-medium text-gray-900 mb-3">{destination}</h5>
+                        <div className="space-y-2">
+                          {destinationOptions.map((option, index) => {
+                            const isSelected = step2Data.transportBookings?.some(
+                              booking => booking.toLocationId === option.toLocationId && 
+                                        booking.vehicleType === option.vehicleType
+                            );
                             
-                            setStep2Data(prev => ({
-                              ...prev,
-                              transportBookings: [...(prev.transportBookings || []), newTransportBooking]
-                            }));
-                            
-                            toast.success(`Added ${option.vehicleType} transport`);
-                          }}
-                        >
-                          Select This Transport
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
+                            return (
+                              <div 
+                                key={index} 
+                                className={`flex justify-between items-center p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                                  isSelected 
+                                    ? 'bg-green-100 border-2 border-green-300' 
+                                    : 'bg-gray-50 border-2 border-transparent hover:bg-blue-50 hover:border-blue-300'
+                                }`}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    // Remove if already selected
+                                    setStep2Data(prev => ({
+                                      ...prev,
+                                      transportBookings: prev.transportBookings?.filter(
+                                        booking => !(booking.toLocationId === option.toLocationId && 
+                                                   booking.vehicleType === option.vehicleType)
+                                      ) || []
+                                    }));
+                                    toast.success(`Removed ${option.vehicleType} from ${destination}`);
+                                  } else {
+                                    // Add new selection
+                                    const newTransportBooking = {
+                                      fromLocationId: option.fromLocationId,
+                                      toLocationId: option.toLocationId,
+                                      vehicleType: option.vehicleType,
+                                      paxCount: option.paxCount,
+                                      price: Number(option.price),
+                                      travelDate: step2Data.arrivalDate,
+                                    };
+                                    
+                                    setStep2Data(prev => ({
+                                      ...prev,
+                                      transportBookings: [...(prev.transportBookings || []), newTransportBooking]
+                                    }));
+                                    
+                                    toast.success(`Selected ${option.vehicleType} to ${destination}`);
+                                  }
+                                }}
+                              >
+                                <div>
+                                  <div className="font-medium">{option.vehicleType}</div>
+                                  <div className="text-sm text-gray-600">{option.paxCount} passengers</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className={`font-medium ${isSelected ? 'text-green-700' : 'text-green-600'}`}>
+                                    {Number(option.price).toFixed(2)} SAR
+                                  </div>
+                                  <div className={`text-xs ${isSelected ? 'text-green-600' : 'text-gray-500'}`}>
+                                    {isSelected ? '✓ Selected' : 'Tap to select'}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
                 
                 {/* Show selected transport bookings */}
@@ -988,14 +1170,14 @@ export default function UmrahVisaNewPage() {
                 <div 
                   className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
                     step3Data.accommodationType === 'hotel' 
-                      ? 'border-blue-500 bg-blue-50' 
+                      ? 'border-red-500 bg-red-50' 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   onClick={() => setStep3Data(prev => ({ ...prev, accommodationType: 'hotel' }))}
                 >
                   <div className="flex items-center space-x-3">
                     <div className={`w-4 h-4 rounded-full border-2 ${
-                      step3Data.accommodationType === 'hotel' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                      step3Data.accommodationType === 'hotel' ? 'border-red-500 bg-red-500' : 'border-gray-300'
                     }`} />
                     <div>
                       <h3 className="font-medium">Hotel Booking</h3>
@@ -1007,14 +1189,14 @@ export default function UmrahVisaNewPage() {
                 <div 
                   className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
                     step3Data.accommodationType === 'iqama' 
-                      ? 'border-blue-500 bg-blue-50' 
+                      ? 'border-red-500 bg-red-50' 
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                   onClick={() => setStep3Data(prev => ({ ...prev, accommodationType: 'iqama' }))}
                 >
                   <div className="flex items-center space-x-3">
                     <div className={`w-4 h-4 rounded-full border-2 ${
-                      step3Data.accommodationType === 'iqama' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                      step3Data.accommodationType === 'iqama' ? 'border-red-500 bg-red-500' : 'border-gray-300'
                     }`} />
                     <div>
                       <h3 className="font-medium">Iqama Sponsor</h3>
@@ -1412,125 +1594,219 @@ export default function UmrahVisaNewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col fixed h-screen">
+        {/* Sidebar Header */}
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center space-x-3">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center shadow-md">
+              <Building className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">{user.name}</h1>
+              <p className="text-xs text-gray-500">Party Dashboard</p>
+            </div>
+          </div>
+        </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/party/dashboard')}
-          className="mb-6"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Dashboard
-        </Button>
+        {/* Sidebar Navigation */}
+        <div className="flex-1 p-4">
+          <nav className="space-y-2">
+            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Dashboard
+            </div>
+            <button 
+              onClick={() => router.push('/party/dashboard')}
+              className="w-full px-3 py-2 text-left hover:bg-gray-50 rounded-lg transition-colors"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <FileText className="h-4 w-4 text-gray-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Overview</div>
+                  <div className="text-xs text-gray-500">Dashboard home</div>
+                </div>
+              </div>
+            </button>
+            
+            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6">
+              Services
+            </div>
+            <div className="px-3 py-2 bg-red-50 rounded-lg border border-red-200">
+              <div className="flex items-center space-x-3">
+                <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center">
+                  <Plane className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Umrah Visa</div>
+                  <div className="text-xs text-gray-500">Apply for visa</div>
+                </div>
+              </div>
+            </div>
+          </nav>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">New Umrah Visa Application</CardTitle>
-            <CardDescription>
-              Complete the steps below to apply for your Umrah visa using our new streamlined process
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Step Progress */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between">
-                {steps.map((step, index) => {
-                  const Icon = step.icon;
-                  const isCompleted = completedSteps.includes(step.id);
-                  const isCurrent = currentStep === step.id;
-                  const isAccessible = step.id <= currentStep || completedSteps.includes(step.id);
-                  
-                  return (
-                    <div key={step.id} className="flex items-center">
-                      <div className="flex flex-col items-center">
-                        <button
-                          onClick={() => goToStep(step.id)}
-                          disabled={!isAccessible}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
-                            isCompleted
-                              ? 'bg-green-500 border-green-500 text-white'
-                              : isCurrent
-                              ? 'bg-blue-500 border-blue-500 text-white'
-                              : isAccessible
-                              ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
-                              : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <Check className="h-5 w-5" />
-                          ) : (
-                            <Icon className="h-5 w-5" />
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+              <User className="h-4 w-4 text-gray-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-gray-900 truncate">{user.name}</div>
+              <div className="text-xs text-gray-500">{user.email}</div>
+            </div>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout} 
+            className="w-full border-gray-300 text-gray-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col ml-64">
+        {/* Fixed Top Header */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 fixed top-0 right-0 left-64 z-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Umrah Visa Application</h2>
+              <p className="text-sm text-gray-600">Complete the steps below to apply for your Umrah visa</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Scrollable Main Content Area */}
+        <div className="flex-1 p-6 pt-24 overflow-y-auto">
+          <div className="max-w-4xl mx-auto">
+            <Card className="shadow-sm border border-gray-100">
+              <CardContent className="p-6">
+                {/* Step Progress */}
+                <div className="mb-8">
+                  <div className="grid grid-cols-4 gap-4">
+                    {steps.map((step, index) => {
+                      const Icon = step.icon;
+                      const isCompleted = completedSteps.includes(step.id);
+                      const isCurrent = currentStep === step.id;
+                      const isAccessible = step.id <= currentStep || completedSteps.includes(step.id);
+                      
+                      return (
+                        <div key={step.id} className="flex flex-col items-center relative">
+                          {/* Progress Line */}
+                          {index < steps.length - 1 && (
+                            <div className={`absolute top-6 left-1/2 w-full h-0.5 ${
+                              completedSteps.includes(step.id) ? 'bg-red-400' : 'bg-gray-200'
+                            }`} style={{ transform: 'translateX(50%)' }} />
                           )}
-                        </button>
-                        <div className="mt-2 text-center">
-                          <p className={`text-sm font-medium ${
-                            isCurrent ? 'text-blue-600' : isCompleted ? 'text-green-600' : 'text-gray-500'
-                          }`}>
-                            {step.title}
-                          </p>
-                          <p className="text-xs text-gray-400">{step.description}</p>
+                          
+                          <button
+                            onClick={() => goToStep(step.id)}
+                            disabled={!isAccessible}
+                            className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all shadow-sm relative z-0 ${
+                              isCompleted
+                                ? 'bg-red-400 border-red-400 text-white'
+                                : isCurrent
+                                ? 'bg-red-500 border-red-500 text-white'
+                                : isAccessible
+                                ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                                : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <Check className="h-6 w-6" />
+                            ) : (
+                              <Icon className="h-6 w-6" />
+                            )}
+                          </button>
+                          
+                          <div className="mt-4 text-center px-2">
+                            <p className={`text-sm font-medium mb-1 ${
+                              isCurrent ? 'text-red-600' : isCompleted ? 'text-red-600' : 'text-gray-500'
+                            }`}>
+                              {step.title}
+                            </p>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                              {step.description}
+                            </p>
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Step Content */}
+                <div className="mb-8">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <div className="flex items-center space-x-3 mb-6">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
+                        {React.createElement(steps[currentStep - 1].icon, { className: "h-5 w-5 text-red-600" })}
                       </div>
-                      {index < steps.length - 1 && (
-                        <div className={`flex-1 h-0.5 mx-4 ${
-                          completedSteps.includes(step.id) ? 'bg-green-500' : 'bg-gray-200'
-                        }`} />
-                      )}
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {steps[currentStep - 1].title}
+                        </h3>
+                        <p className="text-sm text-gray-600">{steps[currentStep - 1].description}</p>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                    {renderStepContent()}
+                  </div>
+                </div>
 
-            {/* Step Content */}
-            <div className="mb-8">
-              <div className="bg-white rounded-lg border p-6">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">
-                  {steps[currentStep - 1].title}
-                </h3>
-                {renderStepContent()}
-              </div>
-            </div>
+                {/* Navigation Buttons */}
+                <div className="flex justify-between pt-6 border-t border-gray-200">
+                  <div className="flex space-x-3">
+                    {currentStep > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={prevStep}
+                        disabled={isLoading}
+                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-2" />
+                        Previous
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.push('/party/dashboard')}
+                      disabled={isLoading}
+                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
 
-            {/* Navigation Buttons */}
-            <div className="flex justify-between pt-4 border-t">
-              <div className="flex space-x-3">
-                {currentStep > 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={prevStep}
-                    disabled={isLoading}
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-2" />
-                    Previous
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/party/dashboard')}
-                  disabled={isLoading}
-                >
-                  Cancel
-                </Button>
-              </div>
-
-              <div className="flex space-x-3">
-                <Button
-                  type="button"
-                  onClick={nextStep}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Processing...' : currentStep < steps.length ? 'Next' : 'Submit Application'}
-                  {currentStep < steps.length && <ChevronRight className="h-4 w-4 ml-2" />}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="flex space-x-3">
+                    <Button
+                      type="button"
+                      onClick={nextStep}
+                      disabled={isLoading}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      {isLoading ? 'Processing...' : currentStep < steps.length ? 'Next' : 'Submit Application'}
+                      {currentStep < steps.length && <ChevronRight className="h-4 w-4 ml-2" />}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

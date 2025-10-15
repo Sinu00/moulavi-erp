@@ -145,6 +145,7 @@ export interface CreateTransportMasterRequest {
   vehicleType: string;
   paxCount: number;
   price: number;
+  isActive?: boolean;
 }
 
 export interface UpdateTransportMasterRequest {
@@ -175,7 +176,8 @@ export interface CreateDestinationMasterRequest {
   destinationCode: string;
   destinationName: string;
   city: string;
-  country?: string; // Defaults to "Saudi Arabia"
+  country: string;
+  isActive?: boolean;
 }
 
 export interface UpdateDestinationMasterRequest {
@@ -191,6 +193,7 @@ export interface CreateHotelMasterRequest {
   hotelCode: string;
   hotelName: string;
   locationId: string;
+  isActive?: boolean;
 }
 
 export interface UpdateHotelMasterRequest {
@@ -200,19 +203,4 @@ export interface UpdateHotelMasterRequest {
   isActive?: boolean;
 }
 
-// Service Type Master Types
-export interface CreateServiceTypeMasterRequest {
-  serviceCode: string;
-  serviceName: string;
-  category: string;
-  description?: string;
-}
-
-export interface UpdateServiceTypeMasterRequest {
-  serviceCode?: string;
-  serviceName?: string;
-  category?: string;
-  description?: string;
-  isActive?: boolean;
-}
 

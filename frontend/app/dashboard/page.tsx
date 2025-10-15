@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
 import { partyAPI, serviceAPI } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
+import NotificationDropdown from '@/components/NotificationDropdown';
 import { Users, FileText, TrendingUp, Activity, Menu } from 'lucide-react';
 import CreatePartyDialog from '@/components/CreatePartyDialog';
 import PartyList from '@/components/PartyList';
@@ -110,6 +111,11 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
+              {/* Notifications - Only for admin/staff */}
+              {hasRole(['admin', 'staff']) && (
+                <NotificationDropdown />
+              )}
+              
               <div className="hidden sm:flex items-center space-x-3">
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">

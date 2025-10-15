@@ -13,8 +13,18 @@ async function seedAll() {
     // 1. Seed Currency Master (SAR, INR)
     console.log('1️⃣ Seeding Currency Master...');
     const currencies = [
-      { currencyCode: 'SAR', currencyName: 'Saudi Riyal', symbol: 'SR' },
-      { currencyCode: 'INR', currencyName: 'Indian Rupee', symbol: '₹' }
+      { 
+        currencyCode: 'SAR', 
+        currencyName: 'Saudi Riyal', 
+        symbol: 'SR',
+        isActive: true
+      },
+      { 
+        currencyCode: 'INR', 
+        currencyName: 'Indian Rupee', 
+        symbol: '₹',
+        isActive: true
+      }
     ];
     for (const currency of currencies) {
       await prisma.currencyMaster.upsert({
@@ -25,30 +35,40 @@ async function seedAll() {
     }
     console.log(`✅ Created ${currencies.length} currencies\n`);
 
-    // 2. Seed Service Type Master
-    console.log('2️⃣ Seeding Service Type Master...');
-    const services = [
-      { serviceCode: 'UMRAH_VISA', serviceName: 'Umrah Visa', category: 'Visa', description: 'Umrah pilgrimage visa service' },
-      { serviceCode: 'HAJJ_VISA', serviceName: 'Hajj Visa', category: 'Visa', description: 'Hajj pilgrimage visa service' },
-      { serviceCode: 'TOURIST_VISA', serviceName: 'Tourist Visa', category: 'Visa', description: 'General tourist visa service' }
+    // 2. Seed Country Master (Saudi Arabia, India)
+    console.log('2️⃣ Seeding Country Master...');
+    const countries = [
+      { 
+        countryCode: 'SAU', 
+        countryName: 'Saudi Arabia', 
+        currencyCode: 'SAR',
+        isActive: true
+      },
+      { 
+        countryCode: 'IND', 
+        countryName: 'India', 
+        currencyCode: 'INR',
+        isActive: true
+      }
     ];
-    for (const service of services) {
-      await prisma.serviceTypeMaster.upsert({
-        where: { serviceCode: service.serviceCode },
-        update: service,
-        create: service
+    for (const country of countries) {
+      await prisma.countryMaster.upsert({
+        where: { countryCode: country.countryCode },
+        update: country,
+        create: country
       });
     }
-    console.log(`✅ Created ${services.length} service types\n`);
+    console.log(`✅ Created ${countries.length} countries\n`);
+
 
     // 3. Seed Destination Master (Saudi cities)
     console.log('3️⃣ Seeding Destination Master...');
     const destinations = [
-      { destinationCode: 'MAK', destinationName: 'Makkah', city: 'Makkah', country: 'Saudi Arabia' },
-      { destinationCode: 'MED', destinationName: 'Madinah', city: 'Madinah', country: 'Saudi Arabia' },
-      { destinationCode: 'JED', destinationName: 'Jeddah', city: 'Jeddah', country: 'Saudi Arabia' },
-      { destinationCode: 'RUH', destinationName: 'Riyadh', city: 'Riyadh', country: 'Saudi Arabia' },
-      { destinationCode: 'TAF', destinationName: 'Taif', city: 'Taif', country: 'Saudi Arabia' }
+      { destinationCode: 'MAK', destinationName: 'Makkah (Holy City)', city: 'Makkah', country: 'Saudi Arabia' },
+      { destinationCode: 'MED', destinationName: 'Madinah (Prophet\'s City)', city: 'Madinah', country: 'Saudi Arabia' },
+      { destinationCode: 'JED', destinationName: 'Jeddah (Port City)', city: 'Jeddah', country: 'Saudi Arabia' },
+      { destinationCode: 'RUH', destinationName: 'Riyadh (Capital)', city: 'Riyadh', country: 'Saudi Arabia' },
+      { destinationCode: 'TAF', destinationName: 'Taif (Mountain City)', city: 'Taif', country: 'Saudi Arabia' }
     ];
     for (const dest of destinations) {
       await prisma.destinationMaster.upsert({
@@ -59,7 +79,7 @@ async function seedAll() {
     }
     console.log(`✅ Created ${destinations.length} destinations\n`);
 
-    // 4. Seed Airport Master (Saudi airports)
+    // 5. Seed Airport Master (Saudi airports)
     console.log('4️⃣ Seeding Airport Master...');
     
     // Delete related records first to avoid foreign key constraints
@@ -83,7 +103,7 @@ async function seedAll() {
     await prisma.airportMaster.createMany({ data: airports });
     console.log(`✅ Created ${airports.length} airports\n`);
 
-    // 5. Seed Hotel Master
+    // 6. Seed Hotel Master
     console.log('5️⃣ Seeding Hotel Master...');
     const makkah = await prisma.destinationMaster.findUnique({ where: { destinationCode: 'MAK' } });
     const madinah = await prisma.destinationMaster.findUnique({ where: { destinationCode: 'MED' } });
@@ -116,7 +136,7 @@ async function seedAll() {
     }
     console.log(`✅ Created ${hotels.length} hotels\n`);
 
-    // 6. Seed Transport Master
+    // 7. Seed Transport Master
     console.log('6️⃣ Seeding Transport Master...');
     
     // Delete related records first
@@ -170,6 +190,7 @@ async function seedAll() {
     console.log('🎉 All master data seeded successfully!\n');
     console.log('📊 Summary:');
     console.log(`   - ${currencies.length} Currencies`);
+    console.log(`   - ${countries.length} Countries`);
     console.log(`   - ${services.length} Service Types`);
     console.log(`   - ${destinations.length} Destinations`);
     console.log(`   - ${airports.length} Airports`);

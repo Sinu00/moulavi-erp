@@ -1,40 +1,88 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
+import { useTransportMaster } from '@/hooks/useTransportMaster';
 import Sidebar from '@/components/Sidebar';
-import { Plus, Menu, Edit, Trash2, Eye, EyeOff, Truck } from 'lucide-react';
-import { transportMasterAPI } from '@/lib/api';
-import { TransportMaster, CreateTransportMasterRequest, UpdateTransportMasterRequest } from '@/types';
+import TransportCard from '@/components/transport/TransportCard';
+import TransportForm from '@/components/transport/TransportForm';
+import TransportDeleteConfirmationModal from '@/components/transport/TransportDeleteConfirmationModal';
+import { Plus, Search, Truck, Menu } from 'lucide-react';
+
+interface TransportMaster {
+  id: string;
+  fromLocationId: string;
+  toLocationId: string;
+  vehicleType: string;
+  paxCount: number;
+  price: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  fromLocation?: {
+    id: string;
+    destinationName: string;
+    city: string;
+  };
+  toLocation?: {
+    id: string;
+    destinationName: string;
+    city: string;
+  };
+}
+
+interface CreateTransportMasterRequest {
+  fromLocationId: string;
+  toLocationId: string;
+  vehicleType: string;
+  paxCount: number;
+  price: number;
+  isActive?: boolean;
+}
 
 export default function TransportMasterPage() {
   const router = useRouter();
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [transportMasters, setTransportMasters] = useState<TransportMaster[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTransport, setEditingTransport] = useState<TransportMaster | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transportToDelete, setTransportToDelete] = useState<TransportMaster | null>(null);
   const [formData, setFormData] = useState<CreateTransportMasterRequest>({
+    fromLocationId: '',
+    toLocationId: '',
     vehicleType: '',
-    vehicleRoute: '',
-    pax: 0,
+    paxCount: 0,
     price: 0,
-    description: ''
+    isActive: true
   });
 
-  // CRITICAL: Always check authentication first
+  const [mounted, setMounted] = useState(false);
+
+  const {
+    transports,
+    destinations,
+    loading,
+    searchTerm,
+    setSearchTerm,
+    filteredTransports,
+    createTransport,
+    updateTransport,
+    deleteTransport,
+    toggleTransportStatus
+  } = useTransportMaster();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
       router.push('/');
@@ -42,99 +90,77 @@ export default function TransportMasterPage() {
     }
   }, [user, router]);
 
-  useEffect(() => {
-    if (user && hasRole(['admin', 'staff'])) {
-      loadTransportMasters();
-    }
-  }, [search]);
-
-  const loadTransportMasters = async () => {
-    setLoading(true);
-    try {
-      const response = await transportMasterAPI.getAll({ search, limit: 1000 });
-      setTransportMasters(response.data.transportMasters);
-    } catch (error) {
-      console.error('Error loading transport masters:', error);
-      toast.error('Failed to load transport masters');
-      setTransportMasters([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggleStatus = async (id: string) => {
-    try {
-      await transportMasterAPI.toggleStatus(id);
-      toast.success('Status updated successfully');
-      loadTransportMasters();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update status');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      if (editingTransport) {
-        await transportMasterAPI.update(editingTransport.id, formData);
-        toast.success('Transport updated successfully');
-      } else {
-        await transportMasterAPI.create(formData);
-        toast.success('Transport created successfully');
-      }
-      setShowCreateForm(false);
-      setEditingTransport(null);
-      setFormData({
-        vehicleType: '',
-        vehicleRoute: '',
-        pax: 0,
-        price: 0,
-        description: ''
-      });
-      loadTransportMasters();
-    } catch (error) {
-      toast.error('Failed to save transport');
-      console.error('Error saving transport:', error);
+    
+    const success = editingTransport 
+      ? await updateTransport(editingTransport.id, formData)
+      : await createTransport(formData);
+    
+    if (success) {
+      resetForm();
     }
   };
 
   const handleEdit = (transport: TransportMaster) => {
     setEditingTransport(transport);
     setFormData({
+      fromLocationId: transport.fromLocationId,
+      toLocationId: transport.toLocationId,
       vehicleType: transport.vehicleType,
-      vehicleRoute: transport.vehicleRoute,
-      pax: transport.pax,
+      paxCount: transport.paxCount,
       price: transport.price,
-      description: transport.description || ''
+      isActive: transport.isActive
     });
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this transport master?')) {
-      return;
-    }
+  const handleDeleteClick = (transport: TransportMaster) => {
+    setTransportToDelete(transport);
+    setShowDeleteModal(true);
+  };
 
-    try {
-      await transportMasterAPI.delete(id);
-      toast.success('Transport master deleted successfully');
-      loadTransportMasters();
-    } catch (error) {
-      console.error('Error deleting transport master:', error);
-      toast.error('Failed to delete transport master');
+  const handleDeleteConfirm = async () => {
+    if (!transportToDelete) return;
+
+    const success = await deleteTransport(transportToDelete.id);
+    if (success) {
+      setShowDeleteModal(false);
+      setTransportToDelete(null);
     }
   };
 
-  if (!user) {
-    return null; // Prevent flash of content
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    setTransportToDelete(null);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      fromLocationId: '',
+      toLocationId: '',
+      vehicleType: '',
+      paxCount: 0,
+      price: 0,
+      isActive: true
+    });
+    setEditingTransport(null);
+    setShowCreateForm(false);
+  };
+
+  if (!mounted) {
+    return null; // Prevent hydration mismatch
+  }
+
+  if (!user || !hasRole(['admin', 'staff'])) {
+    return null;
   }
 
   return (
     <div className="flex h-screen bg-gray-50/50">
       {/* Desktop Sidebar */}
       <div className="hidden lg:block">
-        <Sidebar 
+        <Sidebar
           collapsed={sidebarCollapsed}
           onCollapsedChange={setSidebarCollapsed}
         />
@@ -165,214 +191,84 @@ export default function TransportMasterPage() {
               <div>
                 <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Transport Master</h1>
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">
-                  Manage transport options and pricing
+                  Manage transport routes and pricing
                 </p>
               </div>
             </div>
-            <Button 
-              onClick={() => setShowCreateForm(true)}
-              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-              size="sm"
-            >
-              <Plus className="h-4 w-4 lg:mr-2" />
-              <span className="hidden lg:inline">Add New Transport</span>
+            <Button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Add Transport Route
             </Button>
           </div>
         </div>
 
         <div className="p-4 lg:p-8 space-y-6">
           {/* Search */}
-          <Card className="shadow-sm">
+          <Card>
             <CardContent className="p-4">
               <div className="flex items-center space-x-4">
-                <input
-                  type="text"
-                  placeholder="Search by route or vehicle type..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search transport routes..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Create/Edit Form */}
-          {showCreateForm && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{editingTransport ? 'Edit Transport' : 'Create New Transport'}</CardTitle>
-                <CardDescription>
-                  {editingTransport ? 'Update transport information' : 'Add a new transport option to the system'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="vehicleType">Vehicle Type *</Label>
-                      <Input
-                        id="vehicleType"
-                        value={formData.vehicleType}
-                        onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })}
-                        placeholder="e.g., Bus, Car, Van"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vehicleRoute">Vehicle Route *</Label>
-                      <Input
-                        id="vehicleRoute"
-                        value={formData.vehicleRoute}
-                        onChange={(e) => setFormData({ ...formData, vehicleRoute: e.target.value })}
-                        placeholder="e.g., Jeddah to Makkah"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="pax">Passenger Capacity *</Label>
-                      <Input
-                        id="pax"
-                        type="number"
-                        value={formData.pax}
-                        onChange={(e) => setFormData({ ...formData, pax: parseInt(e.target.value) || 0 })}
-                        placeholder="e.g., 50"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="price">Price (SAR) *</Label>
-                      <Input
-                        id="price"
-                        type="number"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                        placeholder="e.g., 100"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Input
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Optional description"
-                    />
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setShowCreateForm(false);
-                        setEditingTransport(null);
-                        setFormData({
-                          vehicleType: '',
-                          vehicleRoute: '',
-                          pax: 0,
-                          price: 0,
-                          description: ''
-                        });
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit">
-                      {editingTransport ? 'Update' : 'Create'}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Transport Masters List */}
-          <Card className="shadow-sm">
+          {/* Transport Routes List */}
+          <Card>
             <CardHeader>
-              <CardTitle className="text-xl font-semibold">Transport Options</CardTitle>
-              <p className="text-sm text-gray-500 mt-1">
-                {transportMasters.length} transport options found
-              </p>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="h-5 w-5" />
+                Transport Routes ({filteredTransports.length})
+              </CardTitle>
+              <CardDescription>
+                Manage transport routes and pricing for travel bookings
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="space-y-4">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-48" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                      <Skeleton className="h-8 w-20" />
+                    </div>
                   ))}
                 </div>
-              ) : transportMasters.length === 0 ? (
+              ) : filteredTransports.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-gray-500">No transport options found</p>
+                  <Truck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No transport routes found</h3>
+                  <p className="text-gray-500 mb-4">
+                    {searchTerm ? 'No transport routes match your search criteria' : 'Get started by adding your first transport route'}
+                  </p>
+                  {!searchTerm && (
+                    <Button onClick={() => setShowCreateForm(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Transport Route
+                    </Button>
+                  )}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {transportMasters.map((transport) => (
-                    <div
+                <div className="space-y-4">
+                  {filteredTransports.map((transport) => (
+                    <TransportCard
                       key={transport.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                          <span className="text-blue-600 font-semibold text-sm">
-                            {transport.pax}
-                          </span>
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-900">
-                            {transport.vehicleType}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {transport.vehicleRoute} • {transport.pax} PAX
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-green-600">
-                            SAR {transport.price}
-                          </p>
-                          <div className="flex items-center space-x-1">
-                            {transport.isActive ? (
-                              <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                                Active
-                              </span>
-                            ) : (
-                              <span className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full">
-                                Inactive
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleToggleStatus(transport.id)}
-                        >
-                          {transport.isActive ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(transport)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(transport.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                      transport={transport}
+                      onEdit={handleEdit}
+                      onDelete={handleDeleteClick}
+                      onToggleStatus={toggleTransportStatus}
+                    />
                   ))}
                 </div>
               )}
@@ -380,6 +276,41 @@ export default function TransportMasterPage() {
           </Card>
         </div>
       </div>
+
+      {/* Create/Edit Form */}
+      <Sheet open={showCreateForm} onOpenChange={(open) => {
+        setShowCreateForm(open);
+        if (!open) {
+          resetForm();
+        }
+      }}>
+        <SheetContent side="right" className="w-96">
+          <SheetHeader>
+            <SheetTitle>
+              {editingTransport ? 'Edit Transport Route' : 'Add New Transport Route'}
+            </SheetTitle>
+            <SheetDescription>
+              {editingTransport ? 'Update transport route information' : 'Add a new transport route to the system'}
+            </SheetDescription>
+          </SheetHeader>
+          <TransportForm
+            formData={formData}
+            editingTransport={editingTransport}
+            destinations={destinations}
+            onFormDataChange={setFormData}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation Modal */}
+      <TransportDeleteConfirmationModal
+        isOpen={showDeleteModal}
+        transport={transportToDelete}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </div>
   );
 }

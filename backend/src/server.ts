@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import path from 'path';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import partyRoutes from './routes/party.routes';
@@ -13,14 +14,16 @@ import auditRoutes from './routes/audit.routes';
 import transportPricingRoutes from './routes/transportPricing.routes';
 import transportMasterRoutes from './routes/transportMaster.routes';
 import currencyMasterRoutes from './routes/currencyMaster.routes';
+import countryMasterRoutes from './routes/countryMaster.routes';
 import destinationMasterRoutes from './routes/destinationMaster.routes';
 import hotelMasterRoutes from './routes/hotelMaster.routes';
-import serviceTypeMasterRoutes from './routes/serviceTypeMaster.routes';
 import airportMasterRoutes from './routes/airportMaster.routes';
 import partyLimitsRoutes from './routes/partyLimits.routes';
 import cancellationRoutes from './routes/cancellation.routes';
+import notificationRoutes from './routes/notifications.routes';
 
-dotenv.config();
+// Load environment variables from .env file in the backend directory
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
@@ -56,12 +59,13 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/transport-pricing', transportPricingRoutes);
 app.use('/api/transport-masters', transportMasterRoutes);
 app.use('/api/currency-masters', currencyMasterRoutes);
+app.use('/api/country-masters', countryMasterRoutes);
 app.use('/api/destination-masters', destinationMasterRoutes);
 app.use('/api/hotel-masters', hotelMasterRoutes);
-app.use('/api/service-type-masters', serviceTypeMasterRoutes);
 app.use('/api/airport-masters', airportMasterRoutes);
 app.use('/api/party-limits', partyLimitsRoutes);
 app.use('/api/cancellation', cancellationRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error handlers
 app.use(notFoundHandler);

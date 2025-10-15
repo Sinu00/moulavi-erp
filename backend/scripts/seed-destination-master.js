@@ -6,11 +6,11 @@ async function seedDestinationMaster() {
 
   // Simplified to Saudi Arabia cities only for Umrah service
   const destinationData = [
-    { destinationCode: 'MAK', destinationName: 'Makkah', city: 'Makkah', country: 'Saudi Arabia' },
-    { destinationCode: 'MED', destinationName: 'Madinah', city: 'Madinah', country: 'Saudi Arabia' },
-    { destinationCode: 'JED', destinationName: 'Jeddah', city: 'Jeddah', country: 'Saudi Arabia' },
-    { destinationCode: 'RUH', destinationName: 'Riyadh', city: 'Riyadh', country: 'Saudi Arabia' },
-    { destinationCode: 'TAF', destinationName: 'Taif', city: 'Taif', country: 'Saudi Arabia' },
+    { destinationCode: 'MAK', destinationName: 'Makkah (Holy City)', city: 'Makkah', country: 'Saudi Arabia' },
+    { destinationCode: 'MED', destinationName: 'Madinah (Prophet\'s City)', city: 'Madinah', country: 'Saudi Arabia' },
+    { destinationCode: 'JED', destinationName: 'Jeddah (Port City)', city: 'Jeddah', country: 'Saudi Arabia' },
+    { destinationCode: 'RUH', destinationName: 'Riyadh (Capital)', city: 'Riyadh', country: 'Saudi Arabia' },
+    { destinationCode: 'TAF', destinationName: 'Taif (Mountain City)', city: 'Taif', country: 'Saudi Arabia' },
   ];
 
   for (const data of destinationData) {
