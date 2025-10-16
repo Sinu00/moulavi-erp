@@ -94,6 +94,7 @@ model UmrahVisaBooking {
   deletedAt            DateTime?                  @map("deleted_at") @db.Timestamp(6)
   isDeleted            Boolean                    @default(false) @map("is_deleted")
   hasGroupNumber       Boolean                    @default(false) @map("has_group_number")
+  accommodationType    AccommodationType?         @map("accommodation_type")
   statusHistory        BookingStatusHistory[]
   tripInfo             TripInfo?
   accommodationDetails UmrahAccommodationDetails?
@@ -107,6 +108,7 @@ model UmrahVisaBooking {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([hasGroupNumber])
+  @@index([accommodationType])
   @@map("umrah_visa_bookings")
 }
 

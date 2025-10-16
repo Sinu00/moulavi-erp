@@ -21,10 +21,29 @@ router.get('/bookings', authenticate, async (req, res) => {
     const where: any = {};
     
     // If user is a party, automatically filter by their partyId
-    if (user && user.role === 'party' && user.partyId) {
-      where.service = {
-        partyId: user.partyId,
-      };
+    if (user && user.role === 'party') {
+      // Find the party associated with this user
+      const userParty = await prisma.party.findUnique({
+        where: { userId: user.id },
+        select: { id: true }
+      });
+      
+      if (userParty) {
+        where.service = {
+          partyId: userParty.id,
+        };
+      } else {
+        // If no party found for this user, return empty results
+        return res.json({
+          bookings: [],
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: 0,
+            totalPages: 0,
+          },
+        });
+      }
     }
     // If admin/staff and partyId is provided, filter by that partyId
     else if (partyId) {
@@ -185,6 +204,14 @@ const step4Schema = z.object({
   passengers: z.array(z.object({
     fullName: z.string().min(1).max(255),
     isLeadPassenger: z.boolean().default(false),
+    documents: z.object({
+      panCardPhoto: z.any().optional(),
+      passportFront: z.any().optional(),
+      passportBack: z.any().optional(),
+      iqamaPhoto: z.any().optional(),
+      hotelBooking: z.any().optional(),
+      ticketCopy: z.any().optional(),
+    }).optional(),
   })),
 });
 
@@ -369,6 +396,14 @@ router.post('/step3/:bookingId', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
+    // Update the main booking with accommodation type
+    await prisma.umrahVisaBooking.update({
+      where: { id: bookingId },
+      data: {
+        accommodationType: validatedData.accommodationType,
+      },
+    });
+
     // Create or update accommodation details (passengerCount will be set in Step 4)
     const accommodationData: any = {
       accommodationType: validatedData.accommodationType,
@@ -446,6 +481,79 @@ router.post('/step4/:bookingId', authenticate, async (req, res) => {
       },
     });
 
+    // Validate document requirements based on booking mode and accommodation type
+    const isGroupBooking = booking?.hasGroupNumber;
+    const accommodationType = booking?.accommodationType;
+
+    if (isGroupBooking && accommodationType) {
+      for (const passenger of validatedData.passengers) {
+        if (accommodationType === 'iqama') {
+          // Group + Iqama: Iqama photo + PAN card required
+          if (!passenger.documents?.iqamaPhoto) {
+            return res.status(400).json({ 
+              error: `Iqama photo is required for ${passenger.fullName || 'passenger'}` 
+            });
+          }
+          if (!passenger.documents?.panCardPhoto) {
+            return res.status(400).json({ 
+              error: `PAN card is required for ${passenger.fullName || 'passenger'}` 
+            });
+          }
+        } else if (accommodationType === 'hotel') {
+          // Group + Hotel: PAN card + Hotel booking + Ticket copy required
+          if (!passenger.documents?.panCardPhoto) {
+            return res.status(400).json({ 
+              error: `PAN card is required for ${passenger.fullName || 'passenger'}` 
+            });
+          }
+          if (!passenger.documents?.hotelBooking) {
+            return res.status(400).json({ 
+              error: `Hotel booking document is required for ${passenger.fullName || 'passenger'}` 
+            });
+          }
+          if (!passenger.documents?.ticketCopy) {
+            return res.status(400).json({ 
+              error: `Ticket copy is required for ${passenger.fullName || 'passenger'}` 
+            });
+          }
+        }
+      }
+    } else {
+      // Regular booking: Validate lead passenger documents
+      const leadPassenger = validatedData.passengers.find(p => p.isLeadPassenger);
+      if (leadPassenger) {
+        if (!leadPassenger.documents?.panCardPhoto) {
+          return res.status(400).json({ 
+            error: 'Lead passenger PAN card photo is required' 
+          });
+        }
+        if (!leadPassenger.documents?.passportFront) {
+          return res.status(400).json({ 
+            error: 'Lead passenger passport front is required' 
+          });
+        }
+        if (!leadPassenger.documents?.passportBack) {
+          return res.status(400).json({ 
+            error: 'Lead passenger passport back is required' 
+          });
+        }
+      }
+
+      // Validate other passengers
+      for (const passenger of validatedData.passengers.filter(p => !p.isLeadPassenger)) {
+        if (!passenger.documents?.passportFront) {
+          return res.status(400).json({ 
+            error: `Passport front is required for ${passenger.fullName || 'passenger'}` 
+          });
+        }
+        if (!passenger.documents?.passportBack) {
+          return res.status(400).json({ 
+            error: `Passport back is required for ${passenger.fullName || 'passenger'}` 
+          });
+        }
+      }
+    }
+
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
@@ -454,65 +562,100 @@ router.post('/step4/:bookingId', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Travel details are required before adding passengers' });
     }
 
-    // Ensure exactly one lead passenger
-    const leadPassengers = validatedData.passengers.filter(p => p.isLeadPassenger);
-    if (leadPassengers.length !== 1) {
-      return res.status(400).json({ error: 'Exactly one lead passenger is required' });
+    if (!booking.service?.party?.partyName) {
+      return res.status(400).json({ error: 'Party information is missing from the booking' });
+    }
+
+    // Check if TripInfo already exists for this booking
+    const existingTripInfo = await prisma.tripInfo.findUnique({
+      where: { bookingId },
+    });
+
+    if (existingTripInfo) {
+      return res.status(400).json({ error: 'Trip info already exists for this booking' });
+    }
+
+    // For group bookings, we don't need to validate lead passenger count
+    if (!isGroupBooking) {
+      // Ensure exactly one lead passenger for regular bookings
+      const leadPassengers = validatedData.passengers.filter(p => p.isLeadPassenger);
+      if (leadPassengers.length !== 1) {
+        return res.status(400).json({ error: 'Exactly one lead passenger is required' });
+      }
     }
 
     // Determine initial status based on hasGroupNumber
     const initialStatus = booking.hasGroupNumber ? 'group_assigned' : 'group_processing';
 
-    // Update booking with passenger count and status
-    const updatedBooking = await prisma.umrahVisaBooking.update({
-      where: { id: bookingId },
-      data: {
-        passengerCount: validatedData.passengerCount,
-        status: initialStatus,
-      },
+    console.log('🚀 Creating TripInfo for booking:', {
+      bookingId,
+      partyName: booking.service.party.partyName,
+      initialStatus,
+      hasGroupNumber: booking.hasGroupNumber,
+      passengerCount: validatedData.passengerCount,
     });
 
-    // Create passengers
-    const passengers = await Promise.all(
-      validatedData.passengers.map(passenger =>
-        prisma.umrahPassenger.create({
-          data: {
-            bookingId,
-            fullName: passenger.fullName,
-            isLeadPassenger: passenger.isLeadPassenger,
-          },
-        })
-      )
-    );
+    // Perform all operations in a transaction to ensure data consistency
+    const [updatedBooking, passengers, tripInfo] = await prisma.$transaction(async (tx) => {
+      // Update booking with passenger count and status
+      const updatedBooking = await tx.umrahVisaBooking.update({
+        where: { id: bookingId },
+        data: {
+          passengerCount: validatedData.passengerCount,
+          status: initialStatus,
+        },
+      });
 
-    // Create TripInfo entry
-    const tripInfo = await prisma.tripInfo.create({
-      data: {
-        bookingId,
-        groupNumber: booking.groupNumber,
-        groupName: booking.groupName,
-        partyName: booking.service.party.partyName,
-        arrivalDate: booking.travelDetails.arrivalDate,
-        departureDate: booking.travelDetails.departureDate,
-        iqamaNumber: booking.accommodationDetails?.iqamaNumber,
-        iqamaHolderName: booking.accommodationDetails?.iqamaName,
-        iqamaHolderDob: booking.accommodationDetails?.iqamaDob,
-        iqamaHolderMobile: booking.accommodationDetails?.iqamaMobile,
-        iqamaNationalShortAddress: booking.accommodationDetails?.iqamaNationalShortAddress,
-        updatedBy: user.id,
-        status: initialStatus,
-      },
+      // Create passengers
+      const passengers = await Promise.all(
+        validatedData.passengers.map(passenger =>
+          tx.umrahPassenger.create({
+            data: {
+              bookingId,
+              fullName: passenger.fullName,
+              isLeadPassenger: isGroupBooking ? true : passenger.isLeadPassenger, // Group bookings always have lead passenger
+            },
+          })
+        )
+      );
+
+      // Create TripInfo entry
+      const tripInfo = await tx.tripInfo.create({
+        data: {
+          bookingId,
+          groupNumber: booking.groupNumber,
+          groupName: booking.groupName,
+          partyName: booking.service.party.partyName,
+          arrivalDate: booking.travelDetails!.arrivalDate,
+          departureDate: booking.travelDetails!.departureDate,
+          iqamaNumber: booking.accommodationDetails?.iqamaNumber,
+          iqamaHolderName: booking.accommodationDetails?.iqamaName,
+          iqamaHolderDob: booking.accommodationDetails?.iqamaDob,
+          iqamaHolderMobile: booking.accommodationDetails?.iqamaMobile,
+          iqamaNationalShortAddress: booking.accommodationDetails?.iqamaNationalShortAddress,
+          updatedBy: user.id,
+          status: initialStatus,
+        },
+      });
+
+      // Create status history entry
+      await tx.bookingStatusHistory.create({
+        data: {
+          bookingId,
+          oldStatus: null,
+          newStatus: initialStatus,
+          changedBy: user.id,
+          reason: 'Booking created',
+        },
+      });
+
+      return [updatedBooking, passengers, tripInfo];
     });
 
-    // Create status history entry
-    await prisma.bookingStatusHistory.create({
-      data: {
-        bookingId,
-        oldStatus: null,
-        newStatus: initialStatus,
-        changedBy: user.id,
-        reason: 'Booking created',
-      },
+    console.log('✅ TripInfo created successfully:', {
+      tripInfoId: tripInfo.id,
+      bookingId,
+      status: tripInfo.status,
     });
 
     res.json({
@@ -529,7 +672,13 @@ router.post('/step4/:bookingId', authenticate, async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
-    console.error('Error in step 4:', error);
+    console.error('❌ Error in step 4 (Umrah Visa Booking):', error);
+    console.error('❌ Booking ID:', req.params.bookingId);
+    console.error('❌ User ID:', (req as any).user?.id);
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     res.status(500).json({ error: 'Failed to complete step 4' });
   }
 });

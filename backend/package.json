@@ -5,12 +5,13 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "tsc",
+    "build": "tsc && prisma generate",
     "start": "node dist/server.js",
     "migrate": "node -r ts-node/register src/database/migrate.ts",
     "create-admin": "node scripts/create-admin.js",
     "seed-minimum": "node scripts/seed-minimum-master-data.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "deploy": "npm run build && npm run migrate && npm start"
   },
   "keywords": [
     "erp",
