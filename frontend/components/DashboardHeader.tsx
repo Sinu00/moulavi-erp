@@ -33,7 +33,10 @@ export default function DashboardHeader({
 
   const handleLogout = async () => {
     try {
-      await authAPI.logout();
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        await authAPI.logout(refreshToken);
+      }
       removeUser();
       toast.success('Logged out successfully');
       router.push('/');

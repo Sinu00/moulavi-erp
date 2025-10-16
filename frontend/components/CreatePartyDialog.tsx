@@ -132,7 +132,12 @@ export default function CreatePartyDialog({
 
     setLoading(true);
     try {
-      await onSubmit(formData);
+      // Ensure customer_type is not empty (validation should prevent this, but just in case)
+      const submitData = {
+        ...formData,
+        customer_type: formData.customer_type || 'direct' // fallback to direct if somehow empty
+      };
+      await onSubmit(submitData);
       onOpenChange(false);
       toast.success(editingParty ? 'Party updated successfully' : 'Party created successfully');
     } catch (error: any) {

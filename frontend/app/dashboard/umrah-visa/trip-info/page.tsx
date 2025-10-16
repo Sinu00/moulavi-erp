@@ -579,7 +579,7 @@ export default function TripInfoPage() {
                                   {formatDate(trip.arrivalDate)}
                                 </div>
                                 <div className="text-xs text-gray-600">
-                                  {trip.booking?.service?.party?.contactNumber || 'N/A'}
+                                  {trip.iqamaHolderMobile || 'N/A'}
                                 </div>
                               </div>
                             </TableCell>
@@ -591,7 +591,7 @@ export default function TripInfoPage() {
                                   {formatDate(trip.departureDate)}
                                 </div>
                                 <div className="text-xs text-gray-600">
-                                  {trip.booking?.service?.party?.contactNumber || 'N/A'}
+                                  {trip.iqamaHolderMobile || 'N/A'}
                                 </div>
                               </div>
                             </TableCell>

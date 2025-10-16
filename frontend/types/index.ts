@@ -80,7 +80,7 @@ export interface CreatePartyRequest {
   whatsapp_number?: string;
   address?: string;
   gst_number?: string;
-  customer_type: 'direct' | 'b2b';
+  customer_type: 'direct' | 'b2b' | '';
   account_currency_id: string;
   is_supplier?: boolean;
   is_customer?: boolean;

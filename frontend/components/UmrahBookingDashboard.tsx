@@ -359,7 +359,7 @@ export default function UmrahBookingDashboard({
                         <h3 className="text-sm font-medium text-gray-900">
                           {booking.groupName || `${booking.passengerCount} Passengers`}
                         </h3>
-                        {getStatusBadge(booking.status)}
+                        {getStatusBadge(booking.status || 'group_processing')}
                       </div>
                       <p className="text-sm text-gray-500">
                         {booking.flightNumber} • {booking.arrivalDate} - {booking.departureDate}
@@ -373,8 +373,12 @@ export default function UmrahBookingDashboard({
                   <div className="flex items-center space-x-2">
                     {userRole !== 'party' && (
                       <Select
-                        value={booking.status}
-                        onValueChange={(value) => handleStatusUpdate(booking.id, value)}
+                        value={booking.status || 'group_processing'}
+                        onValueChange={(value) => {
+                          if (value && booking.id) {
+                            handleStatusUpdate(booking.id, value);
+                          }
+                        }}
                       >
                         <SelectTrigger className="w-32">
                           <SelectValue />
@@ -409,7 +413,7 @@ export default function UmrahBookingDashboard({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDeleteBooking(booking.id)}
+                          onClick={() => booking.id && handleDeleteBooking(booking.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

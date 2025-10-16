@@ -29,8 +29,7 @@ export default function CountryMasterPage() {
   const [formData, setFormData] = useState<CreateCountryMasterRequest>({
     countryCode: '',
     countryName: '',
-    nationality: '',
-    description: ''
+    nationality: ''
   });
 
   useEffect(() => {
@@ -75,7 +74,6 @@ export default function CountryMasterPage() {
         countryCode: '',
         countryName: '',
         nationality: '',
-        description: ''
       });
       loadCountries();
     } catch (error) {
@@ -90,7 +88,6 @@ export default function CountryMasterPage() {
       countryCode: country.countryCode,
       countryName: country.countryName,
       nationality: country.nationality,
-      description: country.description || ''
     });
     setShowCreateForm(true);
   };
@@ -327,15 +324,6 @@ export default function CountryMasterPage() {
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Input
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Optional description"
-                    />
-                  </div>
                   <div className="flex justify-end space-x-2">
                     <Button
                       type="button"
@@ -347,7 +335,6 @@ export default function CountryMasterPage() {
                           countryCode: '',
                           countryName: '',
                           nationality: '',
-                          description: ''
                         });
                       }}
                     >
@@ -406,11 +393,6 @@ export default function CountryMasterPage() {
                       </Button>
                     </div>
                   </div>
-                  {country.description && (
-                    <div className="mt-3 text-sm text-gray-600">
-                      {country.description}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             ))}
