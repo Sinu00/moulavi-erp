@@ -103,7 +103,7 @@ export default function ViewPartyDialog({
                   <Label className="text-sm font-medium text-gray-500">Account Currency</Label>
                   <div className="mt-1">
                     <Badge variant="outline" className="text-xs">
-                      {party.accountCurrency}
+                      {party.accountCurrency?.currencyCode || 'N/A'}
                     </Badge>
                   </div>
                 </div>

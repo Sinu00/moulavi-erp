@@ -108,7 +108,7 @@ export default function PartyList() {
                     </span>
                     <div className="flex items-center sm:justify-end gap-2">
                       <div className="text-xs text-gray-500">
-                        {party.accountCurrency}
+                        {party.accountCurrency?.currencyCode || 'N/A'}
                       </div>
                       {party.loginRequired && (
                         <div className="text-xs text-indigo-600">
