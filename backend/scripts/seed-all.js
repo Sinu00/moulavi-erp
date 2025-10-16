@@ -191,7 +191,6 @@ async function seedAll() {
     console.log('📊 Summary:');
     console.log(`   - ${currencies.length} Currencies`);
     console.log(`   - ${countries.length} Countries`);
-    console.log(`   - ${services.length} Service Types`);
     console.log(`   - ${destinations.length} Destinations`);
     console.log(`   - ${airports.length} Airports`);
     console.log(`   - ${hotels.length} Hotels`);
