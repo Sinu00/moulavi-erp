@@ -1,21 +1,22 @@
-import { prisma } from '../config/database';
+import prisma from '../lib/prisma';
 import { CreateUmrahVisaBookingRequest } from '../types';
 
-export interface ConflictCheckResult {
-  hasConflict: boolean;
-  conflicts: ConflictDetail[];
+export interface ConflictDetail {
+  type: 'group_number' | 'flight_booking' | 'passenger_limit' | 'transport_capacity' | 'date_overlap';
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  conflictingData?: any;
 }
 
-export interface ConflictDetail {
-  type: 'group_number' | 'flight_booking' | 'passenger_limit' | 'transport_capacity';
-  message: string;
-  severity: 'error' | 'warning';
-  conflictingData?: any;
+export interface ConflictCheckResult {
+  hasConflicts: boolean;
+  conflicts: ConflictDetail[];
+  canProceed: boolean;
 }
 
 export class ConflictService {
   /**
-   * Check for booking conflicts before creation
+   * Check all potential conflicts for a booking
    */
   static async checkBookingConflicts(
     bookingData: CreateUmrahVisaBookingRequest
@@ -23,57 +24,63 @@ export class ConflictService {
     const conflicts: ConflictDetail[] = [];
 
     // Check group number conflicts
-    if (bookingData.booking_mode === 'group_number' && bookingData.group_number) {
-      const groupConflict = await this.checkGroupNumberConflict(bookingData.group_number);
+    if (bookingData.groupNumber) {
+      const groupConflict = await this.checkGroupNumberConflict(bookingData.groupNumber);
       if (groupConflict) {
         conflicts.push(groupConflict);
       }
     }
 
     // Check flight booking conflicts
-    const flightConflict = await this.checkFlightBookingConflict(
-      bookingData.flight_number,
-      bookingData.arrival_date,
-      bookingData.departure_date
-    );
-    if (flightConflict) {
-      conflicts.push(flightConflict);
+    if (bookingData.travelDetails?.arrivalFlightNumber) {
+      const flightConflict = await this.checkFlightBookingConflict(
+        bookingData.travelDetails.arrivalFlightNumber,
+        bookingData.travelDetails.arrivalDate,
+        bookingData.travelDetails.departureDate
+      );
+      if (flightConflict) {
+        conflicts.push(flightConflict);
+      }
     }
 
     // Check passenger limit conflicts
     const passengerConflict = await this.checkPassengerLimitConflict(
-      bookingData.party_id,
-      bookingData.passenger_count,
-      bookingData.accommodation_type
+      bookingData.serviceId,
+      bookingData.passengerCount,
+      bookingData.accommodationType || 'hotel'
     );
     if (passengerConflict) {
       conflicts.push(passengerConflict);
     }
 
-    // TODO: Update transport capacity conflicts for new schema
-    // Transport capacity conflicts temporarily disabled due to schema changes
-    // if (bookingData.transport_route && bookingData.transport_type && bookingData.transport_pax) {
-    //   const transportConflict = await this.checkTransportCapacityConflict(
-    //     bookingData.transport_route,
-    //     bookingData.transport_type,
-    //     bookingData.transport_pax,
-    //     bookingData.arrival_date
-    //   );
-    //   if (transportConflict) {
-    //     conflicts.push(transportConflict);
-    //   }
-    // }
+    // Check for date overlaps
+    if (bookingData.travelDetails?.arrivalDate && bookingData.travelDetails?.departureDate) {
+      const dateConflict = await this.checkDateOverlap(
+        bookingData.serviceId,
+        bookingData.travelDetails.arrivalDate,
+        bookingData.travelDetails.departureDate
+      );
+      if (dateConflict) {
+        conflicts.push(dateConflict);
+      }
+    }
+
+    const hasConflicts = conflicts.length > 0;
+    const canProceed = !conflicts.some(conflict => conflict.severity === 'error');
 
     return {
-      hasConflict: conflicts.some(c => c.severity === 'error'),
-      conflicts
+      hasConflicts,
+      conflicts,
+      canProceed
     };
   }
 
   /**
-   * Check for duplicate group number
+   * Check for duplicate group numbers
    */
-  private static async checkGroupNumberConflict(groupNumber: string): Promise<ConflictDetail | null> {
+  private static async checkGroupNumberConflict(
+    groupNumber: string
+  ): Promise<ConflictDetail | null> {
     const existingBooking = await prisma.umrahVisaBooking.findFirst({
       where: {
         groupNumber,
@@ -85,9 +92,9 @@ export class ConflictService {
       select: {
         id: true,
         groupName: true,
-        arrivalDate: true,
-        departureDate: true,
-        status: true
+        status: true,
+        createdAt: true,
+        updatedAt: true
       }
     });
 
@@ -111,11 +118,15 @@ export class ConflictService {
     arrivalDate: string,
     departureDate: string
   ): Promise<ConflictDetail | null> {
+    // Check for flight conflicts through travel details
     const existingBooking = await prisma.umrahVisaBooking.findFirst({
       where: {
-        flightNumber,
-        arrivalDate: new Date(arrivalDate),
-        departureDate: new Date(departureDate),
+        travelDetails: {
+          OR: [
+            { arrivalFlightNumber: flightNumber },
+            { departureFlightNumber: flightNumber }
+          ]
+        },
         isDeleted: false,
         status: {
           not: 'cancelled'
@@ -143,44 +154,45 @@ export class ConflictService {
   }
 
   /**
-   * Check passenger limit conflicts
+   * Check passenger limits for party
    */
   private static async checkPassengerLimitConflict(
-    partyId: string,
+    serviceId: string,
     passengerCount: number,
     accommodationType: string
   ): Promise<ConflictDetail | null> {
-    // Get party limits
-    const partyLimits = await prisma.partyLimits.findUnique({
-      where: { partyId },
-      select: {
-        maxPassengers: true,
-        maxPassengersIqama: true
-      }
+    // Get the service to find the party
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { partyId: true }
     });
 
-    const maxPassengers = accommodationType === 'iqama' 
-      ? (partyLimits?.maxPassengersIqama || 5)
-      : (partyLimits?.maxPassengers || 50);
-
-    if (passengerCount > maxPassengers) {
+    if (!service) {
       return {
         type: 'passenger_limit',
-        message: `Passenger count ${passengerCount} exceeds limit of ${maxPassengers} for ${accommodationType} accommodation`,
-        severity: 'error',
-        conflictingData: {
-          requested: passengerCount,
-          limit: maxPassengers,
-          accommodationType
-        }
+        message: 'Service not found',
+        severity: 'error'
       };
     }
+
+    // Get party limits
+    const partyLimits = await prisma.partyLimits.findUnique({
+      where: { partyId: service.partyId }
+    });
+
+    if (!partyLimits) {
+      return null; // No limits set
+    }
+
+    const maxPassengers = accommodationType === 'iqama' 
+      ? partyLimits.maxPassengersIqama 
+      : partyLimits.maxPassengers;
 
     // Check for existing bookings on the same dates that might exceed limits
     const existingBookings = await prisma.umrahVisaBooking.findMany({
       where: {
         service: {
-          partyId
+          partyId: service.partyId
         },
         isDeleted: false,
         status: {
@@ -189,12 +201,12 @@ export class ConflictService {
       },
       select: {
         passengerCount: true,
-        arrivalDate: true,
-        departureDate: true
+        createdAt: true,
+        updatedAt: true
       }
     });
 
-    const totalPassengers = existingBookings.reduce((sum, booking) => sum + booking.passengerCount, 0);
+    const totalPassengers = existingBookings.reduce((sum: number, booking: any) => sum + booking.passengerCount, 0);
     
     if (totalPassengers + passengerCount > maxPassengers * 2) { // Allow some flexibility
       return {
@@ -204,97 +216,8 @@ export class ConflictService {
         conflictingData: {
           existing: totalPassengers,
           requested: passengerCount,
-          total: totalPassengers + passengerCount,
-          limit: maxPassengers * 2
+          limit: maxPassengers
         }
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Check transport capacity conflicts
-   * TODO: Update for new schema with fromLocationId/toLocationId
-   */
-  private static async checkTransportCapacityConflict(
-    transportRoute: string,
-    transportType: string,
-    transportPax: number,
-    arrivalDate: string
-  ): Promise<ConflictDetail | null> {
-    // Temporarily disabled due to schema changes
-    // TODO: Implement with new location-based transport system
-    return null;
-    
-    // // Get transport master to validate capacity
-    // const transportMaster = await prisma.transportMaster.findFirst({
-    //   where: {
-    //     vehicleType: transportType,
-    //     pax: transportPax,
-    //     isActive: true
-    //     // TODO: Add fromLocationId/toLocationId filtering
-    //   }
-    // });
-
-    // if (!transportMaster) {
-    //   return {
-    //     type: 'transport_capacity',
-    //     message: `Transport ${transportType} with ${transportPax} PAX not available for route ${transportRoute}`,
-    //     severity: 'error'
-    //   };
-    // }
-
-    // Check for existing bookings using the same transport on the same date
-    const existingBookings = await prisma.umrahVisaBooking.findMany({
-      where: {
-        transportRoute,
-        transportType,
-        arrivalDate: new Date(arrivalDate),
-        isDeleted: false,
-        status: {
-          not: 'cancelled'
-        }
-      },
-      select: {
-        id: true,
-        transportPax: true,
-        groupName: true
-      }
-    });
-
-    const totalPax = existingBookings.reduce((sum, booking) => sum + (booking.transportPax || 0), 0);
-    
-    // Check if this would exceed reasonable capacity (assuming max 3 bookings per transport per day)
-    if (existingBookings.length >= 3) {
-      return {
-        type: 'transport_capacity',
-        message: `Transport ${transportType} is fully booked for ${arrivalDate}`,
-        severity: 'error',
-        conflictingData: {
-          existingBookings: existingBookings.length,
-          totalPax,
-          requestedPax: transportPax
-        }
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Check for duplicate passengers within the same booking
-   */
-  static async checkDuplicatePassengers(passengers: any[]): Promise<ConflictDetail | null> {
-    const passportNumbers = passengers.map(p => p.passport_number);
-    const duplicates = passportNumbers.filter((item, index) => passportNumbers.indexOf(item) !== index);
-    
-    if (duplicates.length > 0) {
-      return {
-        type: 'passenger_limit',
-        message: `Duplicate passport numbers found: ${duplicates.join(', ')}`,
-        severity: 'error',
-        conflictingData: { duplicates }
       };
     }
 
@@ -305,55 +228,82 @@ export class ConflictService {
    * Check for overlapping date ranges
    */
   static async checkDateOverlap(
-    partyId: string,
+    serviceId: string,
     arrivalDate: string,
     departureDate: string
   ): Promise<ConflictDetail | null> {
+    // Get the service to find the party
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { partyId: true }
+    });
+
+    if (!service) {
+      return null;
+    }
+
     const overlappingBookings = await prisma.umrahVisaBooking.findMany({
       where: {
         service: {
-          partyId
+          partyId: service.partyId
         },
         isDeleted: false,
         status: {
           not: 'cancelled'
         },
-        OR: [
-          {
-            arrivalDate: {
-              lte: new Date(departureDate)
-            },
-            departureDate: {
-              gte: new Date(arrivalDate)
+        travelDetails: {
+          OR: [
+            {
+              arrivalDate: {
+                lte: new Date(departureDate)
+              },
+              departureDate: {
+                gte: new Date(arrivalDate)
+              }
             }
-          }
-        ]
+          ]
+        }
       },
       select: {
         id: true,
-        arrivalDate: true,
-        departureDate: true,
         groupName: true,
-        passengerCount: true
+        passengerCount: true,
+        createdAt: true,
+        updatedAt: true
       }
     });
 
     if (overlappingBookings.length > 0) {
       return {
-        type: 'flight_booking',
+        type: 'date_overlap',
         message: `Date range overlaps with existing bookings`,
         severity: 'warning',
-        conflictingData: {
-          overlappingBookings,
-          requestedRange: {
-            arrivalDate: new Date(arrivalDate),
-            departureDate: new Date(departureDate)
-          }
-        }
+        conflictingData: overlappingBookings
       };
     }
 
     return null;
+  }
+
+  /**
+   * Generate alternative group number
+   */
+  private static async generateAlternativeGroupNumber(baseNumber: string): Promise<string> {
+    let counter = 1;
+    let alternativeNumber = `${baseNumber}-${counter}`;
+    
+    while (true) {
+      const existing = await prisma.umrahVisaBooking.findFirst({
+        where: { groupNumber: alternativeNumber }
+      });
+      
+      if (!existing) {
+        return alternativeNumber;
+      }
+      
+      counter++;
+      alternativeNumber = `${baseNumber}-${counter}`;
+    }
   }
 
   /**
@@ -370,46 +320,37 @@ export class ConflictService {
       switch (conflict.type) {
         case 'group_number':
           // Suggest alternative group number
-          const alternativeGroupNumber = await this.generateAlternativeGroupNumber(bookingData.group_number!);
+          const alternativeGroupNumber = await this.generateAlternativeGroupNumber(bookingData.groupNumber!);
           conflict.conflictingData = { ...conflict.conflictingData, alternativeGroupNumber };
           unresolved.push(conflict);
           break;
 
         case 'flight_booking':
-          // Check if it's the same party (allow same party bookings)
-          if (conflict.conflictingData) {
-            const existingBooking = await prisma.umrahVisaBooking.findUnique({
-              where: { id: conflict.conflictingData.id },
-              include: {
-                service: {
-                  select: { partyId: true }
-                }
+          // Check if it's the same party booking
+          const existingBooking = await prisma.umrahVisaBooking.findUnique({
+            where: { id: conflict.conflictingData?.id },
+            include: {
+              service: {
+                select: { partyId: true }
               }
-            });
-
-            if (existingBooking?.service.partyId === bookingData.party_id) {
-              resolved.push({
-                ...conflict,
-                message: 'Same party booking - conflict resolved',
-                severity: 'warning'
-              });
-            } else {
-              unresolved.push(conflict);
             }
+          });
+
+          if (existingBooking?.service.partyId === bookingData.serviceId) {
+            resolved.push({
+              ...conflict,
+              message: 'Same party booking - conflict resolved',
+              severity: 'warning'
+            });
           } else {
             unresolved.push(conflict);
           }
           break;
 
         case 'passenger_limit':
-          if (conflict.severity === 'warning') {
-            resolved.push(conflict);
-          } else {
-            unresolved.push(conflict);
-          }
-          break;
-
         case 'transport_capacity':
+        case 'date_overlap':
+          // These require manual resolution
           unresolved.push(conflict);
           break;
 
@@ -419,24 +360,5 @@ export class ConflictService {
     }
 
     return { resolved, unresolved };
-  }
-
-  /**
-   * Generate alternative group number
-   */
-  private static async generateAlternativeGroupNumber(originalGroupNumber: string): Promise<string> {
-    const baseNumber = originalGroupNumber.replace(/\d+$/, '');
-    const lastDigit = originalGroupNumber.match(/\d+$/)?.[0] || '1';
-    
-    let counter = parseInt(lastDigit) + 1;
-    let alternative = `${baseNumber}${counter}`;
-
-    // Check if alternative exists
-    while (await this.checkGroupNumberConflict(alternative)) {
-      counter++;
-      alternative = `${baseNumber}${counter}`;
-    }
-
-    return alternative;
   }
 }

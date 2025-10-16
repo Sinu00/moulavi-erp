@@ -28,7 +28,7 @@ export const restoreData = {
 /**
  * Prisma middleware to automatically filter out soft deleted records
  */
-export const softDeleteMiddleware: Prisma.Middleware = async (params, next) => {
+export const softDeleteMiddleware = async (params: any, next: any) => {
   // Only apply to find operations
   if (params.action === 'findMany' || params.action === 'findFirst' || params.action === 'findUnique') {
     // Add soft delete filter if not already present

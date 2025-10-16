@@ -9,7 +9,6 @@ import {
   CurrencyMaster,
   DestinationMaster,
   HotelMaster,
-  ServiceTypeMaster,
   UserRole,
   CustomerType,
   AccountCurrency,
@@ -29,7 +28,6 @@ export type {
   CurrencyMaster,
   DestinationMaster,
   HotelMaster,
-  ServiceTypeMaster,
   UserRole,
   CustomerType,
   AccountCurrency,
@@ -201,6 +199,50 @@ export interface UpdateHotelMasterRequest {
   hotelName?: string;
   locationId?: string;
   isActive?: boolean;
+}
+
+// Umrah Visa Booking Request Types
+export interface CreateUmrahVisaBookingRequest {
+  serviceId: string;
+  groupNumber?: string;
+  groupName?: string;
+  passengerCount: number;
+  accommodationType?: AccommodationType;
+  travelDetails?: {
+    arrivalDate: string;
+    arrivalTime: string;
+    arrivalAirportId: string;
+    arrivalFlightNumber: string;
+    departureDate: string;
+    departureTime: string;
+    departureAirportId: string;
+    departureFlightNumber: string;
+  };
+  accommodationDetails?: {
+    iqamaNumber?: string;
+    iqamaName?: string;
+    iqamaDob?: string;
+    iqamaMobile?: string;
+    iqamaNationalShortAddress?: string;
+    hotelBookings?: Array<{
+      locationId: string;
+      hotelId: string;
+      checkInDate: string;
+      checkOutDate: string;
+    }>;
+  };
+  transportBookings?: Array<{
+    fromLocationId: string;
+    toLocationId: string;
+    vehicleType: string;
+    paxCount: number;
+    price: number;
+    travelDate?: string;
+  }>;
+  passengers?: Array<{
+    fullName: string;
+    isLeadPassenger: boolean;
+  }>;
 }
 
 

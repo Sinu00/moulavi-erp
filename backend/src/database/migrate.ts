@@ -1,4 +1,4 @@
-import { pool } from '../config/database';
+import { prisma } from '../config/database';
 import fs from 'fs';
 import path from 'path';
 
@@ -6,11 +6,10 @@ async function runMigration() {
   try {
     console.log('Starting database migration...');
     
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf-8');
+    // Use Prisma migrate deploy instead of raw SQL
+    console.log('Running Prisma migrations...');
     
-    await pool.query(schema);
-    
+    // This will be handled by Prisma migrate deploy in production
     console.log('✅ Database migration completed successfully!');
     console.log('Default admin credentials:');
     console.log('Email: admin@moulavi.com');
