@@ -10,7 +10,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build:backend": "cd backend && npm run build",
     "build:frontend": "cd frontend && npm run build",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build": "npm run build:frontend",
     "migrate": "cd backend && npm run migrate",
     "start:backend": "cd backend && npm start",
     "start:frontend": "cd frontend && npm start"

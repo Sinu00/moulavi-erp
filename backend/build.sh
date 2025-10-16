@@ -5,24 +5,16 @@ set -e
 
 echo "🚀 Starting production build..."
 
-# Install dependencies
+# Install all dependencies (including dev dependencies for build)
 echo "📦 Installing dependencies..."
-npm ci --only=production
+npm ci
 
 # Generate Prisma client
 echo "🔧 Generating Prisma client..."
 npx prisma generate
 
-# Run database migrations
-echo "🗄️ Running database migrations..."
-npx prisma migrate deploy
-
 # Build TypeScript
 echo "🔨 Building TypeScript..."
-npm run build
-
-# Seed minimum data if needed
-echo "🌱 Seeding minimum data..."
-npm run seed-minimum
+npx tsc
 
 echo "✅ Build completed successfully!"
