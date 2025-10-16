@@ -14,6 +14,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { partyAPI } from '@/lib/api';
 
@@ -71,6 +79,9 @@ interface Step4Data {
     panCardPhoto?: File | null;
     passportFront?: File | null;
     passportBack?: File | null;
+    iqamaPhoto?: File | null;
+    hotelBooking?: File | null;
+    ticketCopy?: File | null;
   }>;
 }
 
@@ -104,15 +115,26 @@ export default function UmrahVisaNewPage() {
     accommodationType: 'hotel',
   });
   const [step4Data, setStep4Data] = useState<Step4Data>({
-    passengers: [{ fullName: '', isLeadPassenger: true, panCardPhoto: null, passportFront: null, passportBack: null }],
+    passengers: [{ fullName: '', isLeadPassenger: true, panCardPhoto: null, passportFront: null, passportBack: null, iqamaPhoto: null, hotelBooking: null, ticketCopy: null }],
   });
   const [skipDocuments, setSkipDocuments] = useState(false);
+  
+  // Hotel duration validation dialog
+  const [showDurationDialog, setShowDurationDialog] = useState(false);
+  const [remainingDays, setRemainingDays] = useState(0);
+  const [uncoveredDates, setUncoveredDates] = useState<string[]>([]);
+  
+  // Track step data changes to allow re-submission when data is modified
+  const [stepDataHashes, setStepDataHashes] = useState<{[key: number]: string}>({});
 
   // Master data
   const [airports, setAirports] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [hotels, setHotels] = useState<any[]>([]);
   const [transportOptions, setTransportOptions] = useState<any[]>([]);
+  
+  // Per-location hotel cache to prevent data loss
+  const [hotelsByLocation, setHotelsByLocation] = useState<{[locationId: string]: any[]}>({});
 
   const steps = [
     {
@@ -155,6 +177,13 @@ export default function UmrahVisaNewPage() {
     loadInitialData();
   }, [router]);
 
+  // Preload hotels when hotel bookings change
+  useEffect(() => {
+    if (currentStep === 3 && step3Data.hotelBookings) {
+      preloadHotelsForBookings();
+    }
+  }, [currentStep, step3Data.hotelBookings]);
+
   const formatFlightNumber = (value: string): string => {
     // Remove all non-alphanumeric characters except dash
     let cleaned = value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
@@ -176,6 +205,47 @@ export default function UmrahVisaNewPage() {
     } else {
       return letters + '-' + numbers;
     }
+  };
+
+  const calculateHotelCoverage = () => {
+    if (!step2Data.arrivalDate || !step2Data.departureDate || !step3Data.hotelBookings) {
+      return { totalCovered: 0, uncoveredDates: [], remainingDays: 0 };
+    }
+
+    const arrivalDate = new Date(step2Data.arrivalDate);
+    const departureDate = new Date(step2Data.departureDate);
+    const allDates: string[] = [];
+    
+    // Generate all dates in the travel period
+    const currentDate = new Date(arrivalDate);
+    while (currentDate < departureDate) {
+      allDates.push(currentDate.toISOString().split('T')[0]);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Get covered dates from hotel bookings
+    const coveredDates = new Set<string>();
+    step3Data.hotelBookings.forEach(booking => {
+      if (booking.checkInDate && booking.checkOutDate) {
+        const checkIn = new Date(booking.checkInDate);
+        const checkOut = new Date(booking.checkOutDate);
+        const current = new Date(checkIn);
+        
+        while (current < checkOut) {
+          coveredDates.add(current.toISOString().split('T')[0]);
+          current.setDate(current.getDate() + 1);
+        }
+      }
+    });
+
+    // Find uncovered dates
+    const uncoveredDates = allDates.filter(date => !coveredDates.has(date));
+    
+    return {
+      totalCovered: coveredDates.size,
+      uncoveredDates,
+      remainingDays: uncoveredDates.length
+    };
   };
 
   const calculateDuration = (arrival: string, departure: string) => {
@@ -288,15 +358,50 @@ export default function UmrahVisaNewPage() {
 
   const loadHotels = async (locationId: string) => {
     try {
+      // Check if hotels for this location are already cached
+      if (hotelsByLocation[locationId]) {
+        setHotels(hotelsByLocation[locationId]);
+        return;
+      }
+
+      // Fetch hotels from API
       const response = await fetch(`${API_URL}/umrah-visa/hotels/${locationId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
       });
       const data = await response.json();
+      
+      // Cache the hotels for this location
+      setHotelsByLocation(prev => ({
+        ...prev,
+        [locationId]: data
+      }));
+      
+      // Set current hotels
       setHotels(data);
     } catch (error) {
       console.error('Error loading hotels:', error);
+    }
+  };
+
+  // Get hotels for a specific location
+  const getHotelsForLocation = (locationId: string) => {
+    return hotelsByLocation[locationId] || [];
+  };
+
+  // Preload hotels for all selected locations
+  const preloadHotelsForBookings = async () => {
+    if (!step3Data.hotelBookings) return;
+    
+    const locationIds = step3Data.hotelBookings
+      .map(booking => booking.locationId)
+      .filter(id => id && !hotelsByLocation[id]); // Only load if not already cached
+    
+    if (locationIds.length > 0) {
+      // Load hotels for all locations in parallel
+      const promises = locationIds.map(locationId => loadHotels(locationId));
+      await Promise.all(promises);
     }
   };
 
@@ -394,6 +499,15 @@ export default function UmrahVisaNewPage() {
           return false;
         }
       }
+
+      // Check hotel coverage for the entire travel duration
+      const coverage = calculateHotelCoverage();
+      if (coverage.remainingDays > 0) {
+        setRemainingDays(coverage.remainingDays);
+        setUncoveredDates(coverage.uncoveredDates);
+        setShowDurationDialog(true);
+        return false; // Prevent proceeding until user addresses the gaps
+      }
     }
     return true;
   };
@@ -403,6 +517,45 @@ export default function UmrahVisaNewPage() {
       return true; // Skip validation if test mode
     }
 
+    const isGroupBooking = step1Data.bookingMode === 'group_number';
+    
+    if (isGroupBooking) {
+      // Group booking validation
+      if (!step1Data.groupName || step1Data.groupName.trim() === '') {
+        toast.error('Group name is required');
+        return false;
+      }
+
+      // Validate documents based on accommodation type
+      const passenger = step4Data.passengers[0]; // Use first passenger for group documents
+      
+      if (step3Data.accommodationType === 'iqama') {
+        // Group + Iqama: Iqama photo + PAN card
+        if (!passenger.iqamaPhoto) {
+          toast.error('Iqama photo is required');
+          return false;
+        }
+        if (!passenger.panCardPhoto) {
+          toast.error('PAN card is required');
+          return false;
+        }
+      } else if (step3Data.accommodationType === 'hotel') {
+        // Group + Hotel: PAN card + Hotel booking + Ticket copy
+        if (!passenger.panCardPhoto) {
+          toast.error('PAN card is required');
+          return false;
+        }
+        if (!passenger.hotelBooking) {
+          toast.error('Hotel booking document is required');
+          return false;
+        }
+        if (!passenger.ticketCopy) {
+          toast.error('Ticket copy is required');
+          return false;
+        }
+      }
+    } else {
+      // Regular booking validation
     const passengerCount = step4Data.passengers.length;
     
     // Validate passenger count based on accommodation type
@@ -428,7 +581,7 @@ export default function UmrahVisaNewPage() {
         return false;
       }
       
-      // Validate lead passenger documents
+        // Regular booking document requirements
       if (passenger.isLeadPassenger) {
         if (!passenger.panCardPhoto) {
           toast.error('Lead passenger PAN card photo is required');
@@ -451,6 +604,7 @@ export default function UmrahVisaNewPage() {
         if (!passenger.passportBack) {
           toast.error(`Passport back is required for ${passenger.fullName || 'passenger'}`);
           return false;
+          }
         }
       }
     }
@@ -486,6 +640,7 @@ export default function UmrahVisaNewPage() {
       if (response.ok) {
         setBookingId(data.bookingId);
         setCompletedSteps(prev => [...prev, 1]);
+        setStepDataHashes(prev => ({ ...prev, 1: generateStepDataHash(1) }));
         setCurrentStep(2);
         toast.success('Step 1 completed successfully');
       } else {
@@ -521,6 +676,7 @@ export default function UmrahVisaNewPage() {
       
       if (response.ok) {
         setCompletedSteps(prev => [...prev, 2]);
+        setStepDataHashes(prev => ({ ...prev, 2: generateStepDataHash(2) }));
         setCurrentStep(3);
         toast.success('Step 2 completed successfully');
       } else {
@@ -553,6 +709,7 @@ export default function UmrahVisaNewPage() {
       const data = await response.json();
       if (response.ok) {
         setCompletedSteps(prev => [...prev, 3]);
+        setStepDataHashes(prev => ({ ...prev, 3: generateStepDataHash(3) }));
         setCurrentStep(4);
         toast.success('Step 3 completed successfully');
       } else {
@@ -571,14 +728,48 @@ export default function UmrahVisaNewPage() {
 
     setIsLoading(true);
     try {
-      // Prepare payload with passenger count
-      const payload = {
+      const isGroupBooking = step1Data.bookingMode === 'group_number';
+      
+      let payload;
+      
+      if (isGroupBooking) {
+        // Group booking: Use group name and documents from first passenger
+        const passenger = step4Data.passengers[0];
+        payload = {
+          passengerCount: 1, // Group bookings are treated as single entity
+          passengers: [{
+            fullName: step1Data.groupName || 'Group Booking',
+            isLeadPassenger: true,
+            // Include document information for backend processing
+            documents: {
+              panCardPhoto: passenger.panCardPhoto,
+              passportFront: passenger.passportFront,
+              passportBack: passenger.passportBack,
+              iqamaPhoto: passenger.iqamaPhoto,
+              hotelBooking: passenger.hotelBooking,
+              ticketCopy: passenger.ticketCopy,
+            }
+          }],
+        };
+      } else {
+        // Regular booking: Use all passengers
+        payload = {
         passengerCount: step4Data.passengers.length,
         passengers: step4Data.passengers.map(p => ({
           fullName: p.fullName,
           isLeadPassenger: p.isLeadPassenger,
+            // Include document information for backend processing
+            documents: {
+              panCardPhoto: p.panCardPhoto,
+              passportFront: p.passportFront,
+              passportBack: p.passportBack,
+              iqamaPhoto: p.iqamaPhoto,
+              hotelBooking: p.hotelBooking,
+              ticketCopy: p.ticketCopy,
+            }
         })),
       };
+      }
 
       const response = await fetch(`${API_URL}/umrah-visa/step4/${bookingId}`, {
         method: 'POST',
@@ -604,20 +795,56 @@ export default function UmrahVisaNewPage() {
     }
   };
 
-  const nextStep = async () => {
-    switch (currentStep) {
+  // Generate hash for step data to detect changes
+  const generateStepDataHash = (stepNumber: number): string => {
+    let dataToHash = '';
+    switch (stepNumber) {
       case 1:
-        await submitStep1();
+        dataToHash = JSON.stringify(step1Data);
         break;
       case 2:
-        await submitStep2();
+        dataToHash = JSON.stringify(step2Data);
         break;
       case 3:
-        await submitStep3();
+        dataToHash = JSON.stringify(step3Data);
         break;
       case 4:
-        await submitStep4();
+        dataToHash = JSON.stringify(step4Data);
         break;
+    }
+    // Simple hash function
+    return btoa(dataToHash).slice(0, 16);
+  };
+
+  // Check if step data has changed since last submission
+  const hasStepDataChanged = (stepNumber: number): boolean => {
+    const currentHash = generateStepDataHash(stepNumber);
+    const lastHash = stepDataHashes[stepNumber];
+    return currentHash !== lastHash;
+  };
+
+  const nextStep = async () => {
+    // Submit if step hasn't been completed OR if data has changed
+    const shouldSubmit = !completedSteps.includes(currentStep) || hasStepDataChanged(currentStep);
+    
+    if (shouldSubmit) {
+      switch (currentStep) {
+        case 1:
+          await submitStep1();
+          break;
+        case 2:
+          await submitStep2();
+          break;
+        case 3:
+          await submitStep3();
+          break;
+        case 4:
+          await submitStep4();
+          break;
+      }
+    } else {
+      // Step already completed and data hasn't changed, just move to next step
+      setCurrentStep(prev => Math.min(prev + 1, steps.length));
     }
   };
 
@@ -662,7 +889,7 @@ export default function UmrahVisaNewPage() {
     
     setStep4Data(prev => ({
       ...prev,
-      passengers: [...prev.passengers, { fullName: '', isLeadPassenger: false, panCardPhoto: null, passportFront: null, passportBack: null }],
+      passengers: [...prev.passengers, { fullName: '', isLeadPassenger: false, panCardPhoto: null, passportFront: null, passportBack: null, iqamaPhoto: null, hotelBooking: null, ticketCopy: null }],
     }));
   };
 
@@ -678,25 +905,85 @@ export default function UmrahVisaNewPage() {
   };
 
   const addHotelBooking = () => {
-    setStep3Data(prev => ({
-      ...prev,
-      hotelBookings: [
-        ...(prev.hotelBookings || []),
-        {
-          locationId: '',
-          hotelId: '',
-          checkInDate: '',
-          checkOutDate: '',
-        },
-      ],
-    }));
+    setStep3Data(prev => {
+      const existingBookings = prev.hotelBookings || [];
+      let checkInDate = '';
+      
+      if (existingBookings.length === 0) {
+        // First hotel: use arrival date from step 2
+        checkInDate = step2Data.arrivalDate;
+      } else {
+        // Subsequent hotels: use check-out date of the last hotel
+        const lastBooking = existingBookings[existingBookings.length - 1];
+        checkInDate = lastBooking.checkOutDate || '';
+      }
+      
+      return {
+        ...prev,
+        hotelBookings: [
+          ...existingBookings,
+          {
+            locationId: '',
+            hotelId: '',
+            checkInDate,
+            checkOutDate: '',
+          },
+        ],
+      };
+    });
+  };
+
+  const handleAddHotelForRemainingDays = () => {
+    // Add a hotel for the first uncovered date
+    if (uncoveredDates.length > 0) {
+      const firstUncoveredDate = uncoveredDates[0];
+      const lastUncoveredDate = uncoveredDates[uncoveredDates.length - 1];
+      
+      // Add a hotel booking for the uncovered period
+      setStep3Data(prev => ({
+        ...prev,
+        hotelBookings: [
+          ...(prev.hotelBookings || []),
+          {
+            locationId: '',
+            hotelId: '',
+            checkInDate: firstUncoveredDate,
+            checkOutDate: new Date(new Date(lastUncoveredDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Next day after last uncovered date
+          },
+        ],
+      }));
+    }
+    setShowDurationDialog(false);
+  };
+
+  const handleSkipRemainingDays = () => {
+    // User chooses to skip the remaining days
+    setShowDurationDialog(false);
+    // Proceed to next step
+    submitStep3();
   };
 
   const removeHotelBooking = (index: number) => {
-    setStep3Data(prev => ({
-      ...prev,
-      hotelBookings: prev.hotelBookings?.filter((_, i) => i !== index) || [],
-    }));
+    setStep3Data(prev => {
+      const updatedBookings = prev.hotelBookings?.filter((_, i) => i !== index) || [];
+      
+      // If we removed a hotel and there's a hotel after it, update its check-in date
+      if (updatedBookings[index] && index > 0) {
+        // Use check-out date of the previous hotel as check-in date
+        const previousHotel = updatedBookings[index - 1];
+        if (previousHotel.checkOutDate) {
+          updatedBookings[index].checkInDate = previousHotel.checkOutDate;
+        }
+      } else if (updatedBookings[index] && index === 0) {
+        // If we removed the first hotel, the new first hotel should use arrival date
+        updatedBookings[index].checkInDate = step2Data.arrivalDate;
+      }
+      
+      return {
+        ...prev,
+        hotelBookings: updatedBookings,
+      };
+    });
   };
 
   const renderStepContent = () => {
@@ -1412,6 +1699,45 @@ export default function UmrahVisaNewPage() {
                   <div>
                     <h4 className="font-medium text-gray-900">Hotel Bookings</h4>
                     <p className="text-sm text-gray-600">Add hotels for your accommodation</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      💡 Check-in dates are auto-filled: First hotel uses arrival date, subsequent hotels use previous hotel's check-out date
+                    </p>
+                    {step3Data.hotelBookings && step3Data.hotelBookings.length > 0 && (
+                      <div className="mt-2">
+                        {(() => {
+                          const coverage = calculateHotelCoverage();
+                          const totalDays = durationDays;
+                          const coveredDays = totalDays - coverage.remainingDays;
+                          const coveragePercentage = totalDays > 0 ? Math.round((coveredDays / totalDays) * 100) : 0;
+                          
+                          return (
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-gray-600">Coverage:</span>
+                              <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full transition-all duration-300 ${
+                                    coveragePercentage === 100 ? 'bg-green-500' : 
+                                    coveragePercentage >= 80 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${coveragePercentage}%` }}
+                                />
+                              </div>
+                              <span className={`font-medium ${
+                                coveragePercentage === 100 ? 'text-green-600' : 
+                                coveragePercentage >= 80 ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                                {coveredDays}/{totalDays} days ({coveragePercentage}%)
+                              </span>
+                              {coverage.remainingDays > 0 && (
+                                <span className="text-red-600 font-medium">
+                                  ⚠️ {coverage.remainingDays} day{coverage.remainingDays > 1 ? 's' : ''} uncovered
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                   <Button type="button" variant="outline" size="sm" onClick={addHotelBooking}>
                     <Hotel className="h-4 w-4 mr-2" />
@@ -1499,7 +1825,7 @@ export default function UmrahVisaNewPage() {
                                         <SelectValue placeholder="Select hotel" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {hotels.filter(h => h.locationId === booking.locationId).map((hotel) => (
+                                        {getHotelsForLocation(booking.locationId).map((hotel) => (
                                           <SelectItem key={hotel.id} value={hotel.id}>
                                             {hotel.hotelName}
                                           </SelectItem>
@@ -1526,6 +1852,12 @@ export default function UmrahVisaNewPage() {
                                       onChange={(e) => {
                                         const updatedBookings = [...(step3Data.hotelBookings || [])];
                                         updatedBookings[index].checkOutDate = e.target.value;
+                                        
+                                        // Update check-in date of the next hotel if it exists
+                                        if (updatedBookings[index + 1]) {
+                                          updatedBookings[index + 1].checkInDate = e.target.value;
+                                        }
+                                        
                                         setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
                                       }}
                                       className="w-full"
@@ -1624,7 +1956,7 @@ export default function UmrahVisaNewPage() {
                                       <SelectValue placeholder="Select hotel" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {hotels.filter(h => h.locationId === booking.locationId).map((hotel) => (
+                                      {getHotelsForLocation(booking.locationId).map((hotel) => (
                                         <SelectItem key={hotel.id} value={hotel.id}>
                                           {hotel.hotelName}
                                         </SelectItem>
@@ -1636,7 +1968,15 @@ export default function UmrahVisaNewPage() {
 
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                  <Label>Check-in Date *</Label>
+                                  <div className="flex items-center gap-2">
+                                    <Label>Check-in Date *</Label>
+                                    {(index === 0 && booking.checkInDate === step2Data.arrivalDate) || 
+                                     (index > 0 && booking.checkInDate === step3Data.hotelBookings?.[index - 1]?.checkOutDate) ? (
+                                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                                        Auto-filled
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   <Input
                                     type="date"
                                     value={booking.checkInDate}
@@ -1645,6 +1985,9 @@ export default function UmrahVisaNewPage() {
                                       updatedBookings[index].checkInDate = e.target.value;
                                       setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
                                     }}
+                                    className={(index === 0 && booking.checkInDate === step2Data.arrivalDate) || 
+                                               (index > 0 && booking.checkInDate === step3Data.hotelBookings?.[index - 1]?.checkOutDate) ? 
+                                               'border-blue-300 bg-blue-50' : ''}
                                   />
                                 </div>
 
@@ -1656,6 +1999,12 @@ export default function UmrahVisaNewPage() {
                                     onChange={(e) => {
                                       const updatedBookings = [...(step3Data.hotelBookings || [])];
                                       updatedBookings[index].checkOutDate = e.target.value;
+                                      
+                                      // Update check-in date of the next hotel if it exists
+                                      if (updatedBookings[index + 1]) {
+                                        updatedBookings[index + 1].checkInDate = e.target.value;
+                                      }
+                                      
                                       setStep3Data(prev => ({ ...prev, hotelBookings: updatedBookings }));
                                     }}
                                   />
@@ -1761,6 +2110,33 @@ export default function UmrahVisaNewPage() {
                 <p className="text-sm text-gray-600">
                   Upload required documents for each passenger
                 </p>
+                {(() => {
+                  const isGroupBooking = step1Data.bookingMode === 'group_number';
+                  if (isGroupBooking) {
+                    if (step3Data.accommodationType === 'iqama') {
+                      return (
+                        <div className="flex items-center gap-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                          <span>📋</span>
+                          <span>Group + Iqama: Iqama Photo & PAN Card required</span>
+                        </div>
+                      );
+                    } else if (step3Data.accommodationType === 'hotel') {
+                      return (
+                        <div className="flex items-center gap-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                          <span>🏨</span>
+                          <span>Group + Hotel: PAN Card, Hotel Booking & Ticket Copy required</span>
+                        </div>
+                      );
+                    }
+                  } else {
+                    return (
+                      <div className="flex items-center gap-2 text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
+                        <span>📄</span>
+                        <span>Regular: Lead passenger PAN + Passport, Others Passport only</span>
+                      </div>
+                    );
+                  }
+                })()}
               </div>
               
               {/* Test Mode Toggle */}
@@ -1778,7 +2154,7 @@ export default function UmrahVisaNewPage() {
               </div>
             </div>
 
-            {step3Data.accommodationType === 'iqama' && step4Data.passengers.length > 5 && (
+            {step1Data.bookingMode !== 'group_number' && step3Data.accommodationType === 'iqama' && step4Data.passengers.length > 5 && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <p className="text-sm text-red-800">
                   ⚠️ Maximum 5 passengers allowed for iqama accommodation. Please remove {step4Data.passengers.length - 5} passenger(s).
@@ -1786,6 +2162,154 @@ export default function UmrahVisaNewPage() {
               </div>
             )}
 
+            {step1Data.bookingMode === 'group_number' ? (
+              // Group booking: Single document upload section
+              <div className="space-y-4">
+                <Card className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h5 className="font-medium">Group Documents</h5>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Group Name *</Label>
+                      <Input
+                        placeholder="Enter group name"
+                        value={step1Data.groupName || ''}
+                        onChange={(e) => setStep1Data(prev => ({ ...prev, groupName: e.target.value }))}
+                        disabled={isLoading}
+                      />
+                    </div>
+
+                    {!skipDocuments && (() => {
+                      if (step3Data.accommodationType === 'iqama') {
+                        // Group + Iqama: Iqama photo + PAN card
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Iqama Photo *</Label>
+                              <Input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setStep4Data(prev => ({
+                                    ...prev,
+                                    passengers: [{
+                                      ...prev.passengers[0],
+                                      iqamaPhoto: file
+                                    }]
+                                  }));
+                                }}
+                                disabled={isLoading}
+                              />
+                              {step4Data.passengers[0]?.iqamaPhoto && (
+                                <p className="text-xs text-green-600">✓ {step4Data.passengers[0].iqamaPhoto.name}</p>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>PAN Card *</Label>
+                              <Input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setStep4Data(prev => ({
+                                    ...prev,
+                                    passengers: [{
+                                      ...prev.passengers[0],
+                                      panCardPhoto: file
+                                    }]
+                                  }));
+                                }}
+                                disabled={isLoading}
+                              />
+                              {step4Data.passengers[0]?.panCardPhoto && (
+                                <p className="text-xs text-green-600">✓ {step4Data.passengers[0].panCardPhoto.name}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      } else if (step3Data.accommodationType === 'hotel') {
+                        // Group + Hotel: PAN card + Hotel booking + Ticket copy
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label>PAN Card *</Label>
+                              <Input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setStep4Data(prev => ({
+                                    ...prev,
+                                    passengers: [{
+                                      ...prev.passengers[0],
+                                      panCardPhoto: file
+                                    }]
+                                  }));
+                                }}
+                                disabled={isLoading}
+                              />
+                              {step4Data.passengers[0]?.panCardPhoto && (
+                                <p className="text-xs text-green-600">✓ {step4Data.passengers[0].panCardPhoto.name}</p>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Hotel Booking *</Label>
+                              <Input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setStep4Data(prev => ({
+                                    ...prev,
+                                    passengers: [{
+                                      ...prev.passengers[0],
+                                      hotelBooking: file
+                                    }]
+                                  }));
+                                }}
+                                disabled={isLoading}
+                              />
+                              {step4Data.passengers[0]?.hotelBooking && (
+                                <p className="text-xs text-green-600">✓ {step4Data.passengers[0].hotelBooking.name}</p>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label>Ticket Copy *</Label>
+                              <Input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0] || null;
+                                  setStep4Data(prev => ({
+                                    ...prev,
+                                    passengers: [{
+                                      ...prev.passengers[0],
+                                      ticketCopy: file
+                                    }]
+                                  }));
+                                }}
+                                disabled={isLoading}
+                              />
+                              {step4Data.passengers[0]?.ticketCopy && (
+                                <p className="text-xs text-green-600">✓ {step4Data.passengers[0].ticketCopy.name}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                </Card>
+              </div>
+            ) : (
+              // Regular booking: Passenger management system
+              <>
             <div className="flex justify-end">
               <Button 
                 type="button" 
@@ -1856,7 +2380,115 @@ export default function UmrahVisaNewPage() {
                       />
                     </div>
 
-                    {!skipDocuments && (
+                    {!skipDocuments && (() => {
+                      const isGroupBooking = step1Data.bookingMode === 'group_number';
+                      
+                      if (isGroupBooking) {
+                        // Group booking document requirements
+                        if (step3Data.accommodationType === 'iqama') {
+                          // Group + Iqama: Iqama photo + PAN card
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Iqama Photo *</Label>
+                                <Input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    const updatedPassengers = [...step4Data.passengers];
+                                    updatedPassengers[index].iqamaPhoto = file;
+                                    setStep4Data(prev => ({ ...prev, passengers: updatedPassengers }));
+                                  }}
+                                  disabled={isLoading}
+                                />
+                                {passenger.iqamaPhoto && (
+                                  <p className="text-xs text-green-600">✓ {passenger.iqamaPhoto.name}</p>
+                                )}
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>PAN Card *</Label>
+                                <Input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    const updatedPassengers = [...step4Data.passengers];
+                                    updatedPassengers[index].panCardPhoto = file;
+                                    setStep4Data(prev => ({ ...prev, passengers: updatedPassengers }));
+                                  }}
+                                  disabled={isLoading}
+                                />
+                                {passenger.panCardPhoto && (
+                                  <p className="text-xs text-green-600">✓ {passenger.panCardPhoto.name}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        } else if (step3Data.accommodationType === 'hotel') {
+                          // Group + Hotel: PAN card + Hotel booking + Ticket copy
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label>PAN Card *</Label>
+                                <Input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    const updatedPassengers = [...step4Data.passengers];
+                                    updatedPassengers[index].panCardPhoto = file;
+                                    setStep4Data(prev => ({ ...prev, passengers: updatedPassengers }));
+                                  }}
+                                  disabled={isLoading}
+                                />
+                                {passenger.panCardPhoto && (
+                                  <p className="text-xs text-green-600">✓ {passenger.panCardPhoto.name}</p>
+                                )}
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Hotel Booking *</Label>
+                                <Input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    const updatedPassengers = [...step4Data.passengers];
+                                    updatedPassengers[index].hotelBooking = file;
+                                    setStep4Data(prev => ({ ...prev, passengers: updatedPassengers }));
+                                  }}
+                                  disabled={isLoading}
+                                />
+                                {passenger.hotelBooking && (
+                                  <p className="text-xs text-green-600">✓ {passenger.hotelBooking.name}</p>
+                                )}
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label>Ticket Copy *</Label>
+                                <Input
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0] || null;
+                                    const updatedPassengers = [...step4Data.passengers];
+                                    updatedPassengers[index].ticketCopy = file;
+                                    setStep4Data(prev => ({ ...prev, passengers: updatedPassengers }));
+                                  }}
+                                  disabled={isLoading}
+                                />
+                                {passenger.ticketCopy && (
+                                  <p className="text-xs text-green-600">✓ {passenger.ticketCopy.name}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                      } else {
+                        // Regular booking document requirements (existing logic)
+                        return (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {passenger.isLeadPassenger && (
                           <div className="space-y-2">
@@ -1914,11 +2546,15 @@ export default function UmrahVisaNewPage() {
                           )}
                         </div>
                       </div>
-                    )}
+                        );
+                      }
+                    })()}
                   </div>
                 </Card>
               ))}
             </div>
+              </>
+            )}
 
             {skipDocuments && (
               <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
@@ -1928,7 +2564,33 @@ export default function UmrahVisaNewPage() {
               </div>
             )}
 
-            {!skipDocuments && (
+            {!skipDocuments && (() => {
+              const isGroupBooking = step1Data.bookingMode === 'group_number';
+              
+              if (isGroupBooking) {
+                if (step3Data.accommodationType === 'iqama') {
+                  return (
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <strong>Required Documents (Group + Iqama):</strong>
+                        <br />• All Passengers: Iqama Photo & PAN Card
+                        <br />• Supported formats: Images (JPG, PNG) and PDF
+                      </p>
+                    </div>
+                  );
+                } else if (step3Data.accommodationType === 'hotel') {
+                  return (
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <strong>Required Documents (Group + Hotel):</strong>
+                        <br />• All Passengers: PAN Card, Hotel Booking & Ticket Copy
+                        <br />• Supported formats: Images (JPG, PNG) and PDF
+                      </p>
+                    </div>
+                  );
+                }
+              } else {
+                return (
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-blue-800">
                   <strong>Required Documents:</strong>
@@ -1937,7 +2599,9 @@ export default function UmrahVisaNewPage() {
                   <br />• Supported formats: Images (JPG, PNG) and PDF
                 </p>
               </div>
-            )}
+                );
+              }
+            })()}
           </div>
         );
 
@@ -2169,6 +2833,13 @@ export default function UmrahVisaNewPage() {
                       {isLoading ? 'Processing...' : currentStep < steps.length ? 'Next' : 'Submit Application'}
                       {currentStep < steps.length && <ChevronRight className="h-4 w-4 ml-2" />}
                     </Button>
+                    {/* Show indicator if step has unsaved changes */}
+                    {completedSteps.includes(currentStep) && hasStepDataChanged(currentStep) && (
+                      <div className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                        <span>•</span>
+                        <span className="ml-1">Unsaved changes</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -2176,6 +2847,68 @@ export default function UmrahVisaNewPage() {
           </div>
         </div>
       </div>
+
+      {/* Hotel Duration Coverage Dialog */}
+      <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
+        <DialogContent className="max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Accommodation Coverage Gap</DialogTitle>
+            <DialogDescription className="text-sm">
+              Your travel duration is {durationDays} days, but your hotel bookings only cover {durationDays - remainingDays} days.
+              You have {remainingDays} day{remainingDays > 1 ? 's' : ''} without accommodation.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-hidden flex flex-col space-y-4">
+            <div className="bg-yellow-50 rounded-lg border border-yellow-200 flex flex-col min-h-0">
+              <div className="p-3 border-b border-yellow-200 flex-shrink-0">
+                <h4 className="font-medium text-yellow-800 text-sm">
+                  Uncovered Dates ({uncoveredDates.length} days):
+                </h4>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <div className="grid grid-cols-2 gap-1 text-xs text-yellow-700">
+                  {uncoveredDates.map(date => (
+                    <div key={date} className="flex items-center gap-2 py-1">
+                      <span className="text-yellow-600">•</span>
+                      <span>{new Date(date).toLocaleDateString('en-US', { 
+                        weekday: 'short', 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex-shrink-0">
+              <p className="text-sm text-gray-600 text-center">
+                What would you like to do for these {remainingDays} day{remainingDays > 1 ? 's' : ''}?
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter className="flex-shrink-0 flex flex-col gap-2 sm:flex-row mt-4">
+            <Button 
+              variant="outline" 
+              onClick={handleAddHotelForRemainingDays}
+              className="w-full sm:flex-1 text-sm"
+            >
+              <Hotel className="h-4 w-4 mr-2" />
+              Add Hotel for These Days
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleSkipRemainingDays}
+              className="w-full sm:flex-1 text-sm"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Skip (Stay with Sponsor/Iqama)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
