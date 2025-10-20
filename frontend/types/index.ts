@@ -92,11 +92,16 @@ export interface CreatePartyRequest {
 
 // Umrah Visa Status Type
 export type UmrahVisaStatus = 
-  | 'group_processing' 
-  | 'group_assigned' 
+  | 'pending'
   | 'documents_downloaded' 
+  | 'group_assigned' 
+  | 'voucher'
+  | 'bill'
   | 'booking_success' 
   | 'cancelled';
+
+// Visa Type
+export type VisaType = 'individual_visa' | 'group_visa';
 
 // Service Types
 export interface Service {

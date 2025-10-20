@@ -88,13 +88,19 @@ model UmrahVisaBooking {
   groupNumber          String?                    @map("group_number") @db.VarChar(100)
   groupName            String?                    @map("group_name") @db.VarChar(255)
   passengerCount       Int                        @map("passenger_count")
-  status               UmrahVisaStatus            @default(group_processing)
+  status               UmrahVisaStatus            @default(pending)
   createdAt            DateTime                   @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt            DateTime                   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   deletedAt            DateTime?                  @map("deleted_at") @db.Timestamp(6)
   isDeleted            Boolean                    @default(false) @map("is_deleted")
   hasGroupNumber       Boolean                    @default(false) @map("has_group_number")
   accommodationType    AccommodationType?         @map("accommodation_type")
+  visaType             VisaType                   @default(individual_visa) @map("visa_type")
+  hasTransportation    Boolean                    @default(false) @map("has_transportation")
+  voucherGeneratedAt   DateTime?                  @map("voucher_generated_at") @db.Timestamp(6)
+  voucherGeneratedBy   String?                    @map("voucher_generated_by") @db.Uuid
+  billGeneratedAt      DateTime?                  @map("bill_generated_at") @db.Timestamp(6)
+  billGeneratedBy      String?                    @map("bill_generated_by") @db.Uuid
   statusHistory        BookingStatusHistory[]
   tripInfo             TripInfo?
   accommodationDetails UmrahAccommodationDetails?
@@ -109,6 +115,8 @@ model UmrahVisaBooking {
   @@index([createdAt])
   @@index([hasGroupNumber])
   @@index([accommodationType])
+  @@index([visaType])
+  @@index([hasTransportation])
   @@map("umrah_visa_bookings")
 }
 
@@ -528,11 +536,18 @@ enum ServiceStatus {
 }
 
 enum UmrahVisaStatus {
-  group_processing
-  group_assigned
+  pending
   documents_downloaded
+  group_assigned
+  voucher
+  bill
   booking_success
   cancelled
+}
+
+enum VisaType {
+  individual_visa
+  group_visa
 }
 
 enum Gender {

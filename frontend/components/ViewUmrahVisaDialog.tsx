@@ -49,7 +49,8 @@ export default function ViewUmrahVisaDialog({ bookingId, open, onOpenChange }: V
     try {
       setLoading(true);
       const response = await umrahVisaAPI.getBookingById(bookingId);
-      setBooking(response.data.booking);
+      // Backend returns the booking object directly
+      setBooking(response.data);
     } catch (error: any) {
       console.error('Error loading booking details:', error);
       toast.error(error?.response?.data?.error || 'Failed to load booking details');

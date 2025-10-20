@@ -102,8 +102,11 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   ];
 
   const umrahVisaItems = [
-    { name: 'Bookings', icon: FileText, path: '/dashboard/umrah-visa/bookings' },
+    { name: 'Booking', icon: FileText, path: '/dashboard/umrah-visa/bookings' },
+    { name: 'Assign Group', icon: Users, path: '/dashboard/umrah-visa/assign-group' },
     { name: 'Trip Info', icon: MapPin, path: '/dashboard/umrah-visa/trip-info' },
+    { name: 'Voucher', icon: Award, path: '/dashboard/umrah-visa/voucher' },
+    { name: 'Invoice', icon: FileText, path: '/dashboard/umrah-visa/invoice' },
   ];
 
   const menuItems = [

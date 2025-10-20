@@ -181,7 +181,7 @@ router.get(
       prisma.umrahVisaBooking.count({
         where: {
           status: {
-            in: ['group_processing', 'group_assigned'],
+            in: ['pending', 'documents_downloaded', 'group_assigned', 'voucher', 'bill'],
           },
         },
       }),
@@ -200,9 +200,11 @@ router.get(
 // Helper functions
 function getStatusChangeTitle(oldStatus: string | null, newStatus: string): string {
   const statusMap: Record<string, string> = {
-    group_processing: 'Group Processing',
-    group_assigned: 'Group Assigned',
+    pending: 'Pending',
     documents_downloaded: 'Documents Downloaded',
+    group_assigned: 'Group Assigned',
+    voucher: 'Voucher Pending',
+    bill: 'Bill Ready',
     booking_success: 'Booking Success',
     cancelled: 'Cancelled',
   };
@@ -228,9 +230,11 @@ function getStatusChangeMessage(history: any): string {
 
 function getStatusPriority(status: string): 'low' | 'medium' | 'high' {
   const priorityMap: Record<string, 'low' | 'medium' | 'high'> = {
-    group_processing: 'medium',
-    group_assigned: 'high',
+    pending: 'medium',
     documents_downloaded: 'high',
+    group_assigned: 'high',
+    voucher: 'high',
+    bill: 'high',
     booking_success: 'high',
     cancelled: 'high',
   };
@@ -240,9 +244,11 @@ function getStatusPriority(status: string): 'low' | 'medium' | 'high' {
 
 function getStatusIcon(status: string): string {
   const iconMap: Record<string, string> = {
-    group_processing: 'clock',
-    group_assigned: 'users',
+    pending: 'clock',
     documents_downloaded: 'download',
+    group_assigned: 'users',
+    voucher: 'file-text',
+    bill: 'dollar-sign',
     booking_success: 'check-circle',
     cancelled: 'x-circle',
   };

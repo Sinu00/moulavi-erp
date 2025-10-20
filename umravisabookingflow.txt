@@ -1,0 +1,24 @@
+BOOKING COMPLETED (Step 4):
+├─ hasGroupNumber = false → "pending"
+└─ hasGroupNumber = true
+   ├─ accommodationType = "iqama" → "group_assigned"
+   └─ accommodationType = "hotel" → "voucher"
+
+FROM "pending":
+[Download Documents] → "documents_downloaded"
+
+FROM "documents_downloaded":
+[Assign Group] → 
+├─ accommodationType = "iqama" → "group_assigned"
+└─ accommodationType = "hotel" → "voucher"
+
+FROM "group_assigned":
+[Upload Image] →
+├─ hasTransportation = true → "voucher"
+└─ hasTransportation = false → "bill"
+
+FROM "voucher":
+[Generate Voucher] → "bill"
+
+FROM "bill":
+[Generate Bill] → "booking_success" (future functionality)

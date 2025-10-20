@@ -24,57 +24,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { 
   Search, 
-  Download, 
   Upload,
   Users,
-  FileText,
-  CheckCircle,
-  Clock,
-  XCircle,
   Menu,
   RefreshCw,
-  AlertCircle,
-  Plus,
-  Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
 import { TripInfo, UmrahVisaStatus } from '@/types';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-// Status configuration
-const statusConfig: Record<UmrahVisaStatus, { label: string; color: string; icon: any }> = {
-  group_processing: {
-    label: 'Group Processing',
-    color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    icon: Clock,
-  },
-  group_assigned: {
-    label: 'Group Assigned',
-    color: 'bg-blue-100 text-blue-800 border-blue-300',
-    icon: Users,
-  },
-  documents_downloaded: {
-    label: 'Documents Downloaded',
-    color: 'bg-purple-100 text-purple-800 border-purple-300',
-    icon: Download,
-  },
-  booking_success: {
-    label: 'Booking Success',
-    color: 'bg-green-100 text-green-800 border-green-300',
-    icon: CheckCircle,
-  },
-  cancelled: {
-    label: 'Cancelled',
-    color: 'bg-red-100 text-red-800 border-red-300',
-    icon: XCircle,
-  },
-};
+import { umrahVisaAPI } from '@/lib/api';
+import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
 
 export default function TripInfoPage() {
   const router = useRouter();
@@ -85,19 +47,13 @@ export default function TripInfoPage() {
   const [filteredData, setFilteredData] = useState<TripInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<UmrahVisaStatus | 'all'>('all');
   
   // Dialog states
-  const [showAddGroupDialog, setShowAddGroupDialog] = useState(false);
   const [showUploadConfirmationDialog, setShowUploadConfirmationDialog] = useState(false);
-  const [showReDownloadDialog, setShowReDownloadDialog] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<TripInfo | null>(null);
   
   // Form states
-  const [groupNumber, setGroupNumber] = useState('');
-  const [groupName, setGroupName] = useState('');
   const [confirmationImage, setConfirmationImage] = useState<File | null>(null);
-  const [reDownloadReason, setReDownloadReason] = useState('');
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -109,26 +65,17 @@ export default function TripInfoPage() {
 
   useEffect(() => {
     filterData();
-  }, [searchQuery, selectedStatus, tripInfoList]);
+  }, [searchQuery, tripInfoList]);
 
   const fetchTripInfo = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('accessToken');
+      const response = await umrahVisaAPI.getBookings({ limit: 1000, status: 'group_assigned' });
+      const data = response.data;
       
-      const response = await fetch(`${API_URL}/umrah-visa/bookings?limit=1000`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Failed to fetch trip info');
-
-      const data = await response.json();
-      
-      // Extract trip info from bookings
+      // Extract trip info from bookings - only group_assigned status
       const tripInfoData = data.bookings
-        .filter((booking: any) => booking.tripInfo)
+        .filter((booking: any) => booking.tripInfo && booking.tripInfo.status === 'group_assigned')
         .map((booking: any) => ({
           ...booking.tripInfo,
           booking: {
@@ -148,26 +95,8 @@ export default function TripInfoPage() {
   };
 
   const filterData = () => {
-    let filtered = [...tripInfoList];
-
-    // Filter by status
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(trip => trip.status === selectedStatus);
-    }
-
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(trip =>
-        trip.partyName?.toLowerCase().includes(query) ||
-        trip.groupNumber?.toLowerCase().includes(query) ||
-        trip.groupName?.toLowerCase().includes(query) ||
-        trip.iqamaNumber?.toLowerCase().includes(query) ||
-        trip.iqamaHolderName?.toLowerCase().includes(query)
-      );
-    }
-
-    setFilteredData(filtered);
+    // No filtering needed - only group_assigned bookings are fetched
+    setFilteredData(tripInfoList);
   };
 
   const formatDate = (dateString: string) => {
@@ -178,100 +107,7 @@ export default function TripInfoPage() {
     });
   };
 
-  const getStatusCounts = () => {
-    return {
-      all: tripInfoList.length,
-      group_processing: tripInfoList.filter(t => t.status === 'group_processing').length,
-      group_assigned: tripInfoList.filter(t => t.status === 'group_assigned').length,
-      documents_downloaded: tripInfoList.filter(t => t.status === 'documents_downloaded').length,
-      booking_success: tripInfoList.filter(t => t.status === 'booking_success').length,
-      cancelled: tripInfoList.filter(t => t.status === 'cancelled').length,
-    };
-  };
-
-  const statusCounts = getStatusCounts();
-
   // Action Handlers
-  const handleAddGroupData = async () => {
-    if (!selectedTrip || !groupNumber || !groupName) {
-      toast.error('Please fill in all fields');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_URL}/umrah-visa/${selectedTrip.bookingId}/add-group-data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ groupNumber, groupName }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to add group data');
-      }
-
-      toast.success('Group data added successfully');
-      setShowAddGroupDialog(false);
-      setGroupNumber('');
-      setGroupName('');
-      setSelectedTrip(null);
-      fetchTripInfo();
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
-
-  const handleDownloadDocuments = async (trip: TripInfo) => {
-    try {
-      // Show downloading toast for testing
-      toast.info('Downloading documents... (Test mode)');
-      
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_URL}/umrah-visa/${trip.bookingId}/download-documents`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to download documents');
-      }
-
-      const data = await response.json();
-      toast.success('Documents downloaded successfully! Status changed to Documents Downloaded');
-      
-      // Refresh the data to show updated status
-      fetchTripInfo();
-    } catch (error: any) {
-      toast.error(error.message);
-    }
-  };
-
-  const handleReDownloadRequest = async () => {
-    if (!reDownloadReason.trim()) {
-      toast.error('Please provide a reason for re-download');
-      return;
-    }
-
-    // For now, just log and close
-    // In production, you'd save this request for admin approval
-    console.log('Re-download request:', {
-      tripId: selectedTrip?.id,
-      reason: reDownloadReason,
-      requestedBy: user?.name,
-    });
-
-    toast.info('Re-download request submitted for admin approval');
-    setShowReDownloadDialog(false);
-    setReDownloadReason('');
-    setSelectedTrip(null);
-  };
 
   const handleUploadConfirmation = async () => {
     if (!confirmationImage || !selectedTrip) {
@@ -287,19 +123,7 @@ export default function TripInfoPage() {
       const token = localStorage.getItem('accessToken');
       
       // Update trip info with confirmation
-      const response = await fetch(`${API_URL}/umrah-visa/${selectedTrip.bookingId}/upload-confirmation`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ confirmationImagePath: imagePath }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to upload confirmation');
-      }
+      const response = await umrahVisaAPI.uploadConfirmation(selectedTrip.bookingId, imagePath);
 
       toast.success('Confirmation uploaded successfully! Status changed to Booking Success');
       setShowUploadConfirmationDialog(false);
@@ -307,63 +131,18 @@ export default function TripInfoPage() {
       setSelectedTrip(null);
       fetchTripInfo();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(error.message || 'Failed to upload confirmation');
     }
   };
 
   const renderActionButton = (trip: TripInfo) => {
-    switch (trip.status) {
-      case 'group_processing':
-        return (
-          <Button
-            size="sm"
-            onClick={() => {
-              setSelectedTrip(trip);
-              setShowAddGroupDialog(true);
-            }}
-            className="flex items-center gap-1 whitespace-nowrap"
-          >
-            <Plus className="h-3 w-3" />
-            Update Group Details
-          </Button>
-        );
-
-      case 'group_assigned':
+    // Only handle group_assigned status - this page only shows group_assigned bookings
         return (
           <div className="flex flex-col gap-1">
             <div className="text-xs text-gray-500 text-center">
               Downloads: {trip.documentsDownloadCount}/1
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={() => handleDownloadDocuments(trip)}
-                className="flex items-center gap-1 whitespace-nowrap"
-                disabled={trip.documentsDownloadCount > 0}
-              >
-                <Download className="h-3 w-3" />
-                {trip.documentsDownloadCount > 0 ? 'Downloaded' : 'Download'}
-              </Button>
-              {trip.documentsDownloadCount > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setSelectedTrip(trip);
-                    setShowReDownloadDialog(true);
-                  }}
-                  title="Request re-download"
-                  className="h-8 px-2"
-                >
-                  <AlertCircle className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          </div>
-        );
-
-      case 'documents_downloaded':
-        return (
           <Button
             size="sm"
             onClick={() => {
@@ -373,32 +152,11 @@ export default function TripInfoPage() {
             className="flex items-center gap-1 whitespace-nowrap"
           >
             <Upload className="h-3 w-3" />
-            Upload Confirmation
+            Upload Image
           </Button>
-        );
-
-      case 'booking_success':
-        return (
-          <Button
-            size="sm"
-            disabled
-            className="flex items-center gap-1 whitespace-nowrap"
-          >
-            <CheckCircle className="h-3 w-3" />
-            Completed
-          </Button>
-        );
-
-      case 'cancelled':
-        return (
-          <Badge variant="outline" className="text-gray-400 whitespace-nowrap">
-            No actions
-          </Badge>
-        );
-
-      default:
-        return null;
-    }
+        </div>
+      </div>
+    );
   };
 
   if (!user) {
@@ -494,40 +252,6 @@ export default function TripInfoPage() {
                 />
               </div>
 
-              {/* Status Filter Tabs */}
-              <div className="flex flex-wrap gap-2 pb-4 border-b">
-                <Button
-                  variant={selectedStatus === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setSelectedStatus('all')}
-                  className="flex items-center gap-2"
-                >
-                  <FileText className="h-4 w-4" />
-                  All ({statusCounts.all})
-                </Button>
-                
-                {(Object.keys(statusConfig) as UmrahVisaStatus[]).map((status) => {
-                  const config = statusConfig[status];
-                  const Icon = config.icon;
-                  const count = statusCounts[status];
-                  
-                  return (
-                    <Button
-                      key={status}
-                      variant={selectedStatus === status ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSelectedStatus(status)}
-                      className="flex items-center gap-2"
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span className="hidden md:inline">{config.label}</span>
-                      <span className="md:hidden">{config.label.split(' ')[0]}</span>
-                      ({count})
-                    </Button>
-                  );
-                })}
-              </div>
-
               {/* Table */}
               <div className="rounded-md border overflow-x-auto">
                 <Table>
@@ -545,16 +269,13 @@ export default function TripInfoPage() {
                     {filteredData.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                          {searchQuery || selectedStatus !== 'all' 
-                            ? 'No trips found matching your filters' 
+                          {searchQuery 
+                            ? 'No trips found matching your search' 
                             : 'No trip information available'}
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredData.map((trip) => {
-                        const config = statusConfig[trip.status];
-                        const Icon = config.icon;
-                        
                         return (
                           <TableRow key={trip.id}>
                             {/* Group Details */}
@@ -635,9 +356,9 @@ export default function TripInfoPage() {
                             {/* Status & Action */}
                             <TableCell>
                               <div className="flex items-center justify-between gap-3">
-                                <Badge className={`${config.color} flex items-center gap-1 text-xs whitespace-nowrap`}>
-                                  <Icon className="h-3 w-3" />
-                                  {config.label}
+                                <Badge className={`${UMRAH_VISA_STATUS_CONFIG.group_assigned.color} flex items-center gap-1 text-xs whitespace-nowrap`}>
+                                  <Users className="h-3 w-3" />
+                                  {UMRAH_VISA_STATUS_CONFIG.group_assigned.label}
                                 </Badge>
                                 <div className="flex-shrink-0">
                                   {renderActionButton(trip)}
@@ -655,46 +376,6 @@ export default function TripInfoPage() {
           </Card>
         </div>
       </div>
-
-      {/* Add Group Data Dialog */}
-      <Dialog open={showAddGroupDialog} onOpenChange={setShowAddGroupDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update Group Details</DialogTitle>
-            <DialogDescription>
-              Assign group number and name to this trip. This will change the status to "Group Assigned".
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="groupNumber">Group Number</Label>
-              <Input
-                id="groupNumber"
-                placeholder="e.g., GRP-2024-001"
-                value={groupNumber}
-                onChange={(e) => setGroupNumber(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="groupName">Group Name</Label>
-              <Input
-                id="groupName"
-                placeholder="e.g., Ramadan Group 2024"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddGroupDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddGroupData}>
-              Save Group Data
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Upload Confirmation Dialog */}
       <Dialog open={showUploadConfirmationDialog} onOpenChange={setShowUploadConfirmationDialog}>
@@ -722,45 +403,6 @@ export default function TripInfoPage() {
             </Button>
             <Button onClick={handleUploadConfirmation}>
               Upload
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Re-Download Request Dialog */}
-      <Dialog open={showReDownloadDialog} onOpenChange={setShowReDownloadDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request Re-Download</DialogTitle>
-            <DialogDescription>
-              Documents have already been downloaded. Please provide a reason for re-download request.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="reason">Reason for Re-Download</Label>
-              <Textarea
-                id="reason"
-                placeholder="e.g., Documents were corrupted, need updated version..."
-                value={reDownloadReason}
-                onChange={(e) => setReDownloadReason(e.target.value)}
-                rows={4}
-              />
-            </div>
-            {selectedTrip && (
-              <div className="text-sm text-gray-600">
-                <div>Last downloaded: {selectedTrip.documentsDownloadedAt ? formatDate(selectedTrip.documentsDownloadedAt) : 'N/A'}</div>
-                <div>Downloaded by: {selectedTrip.documentsDownloadedByUser?.name || 'N/A'}</div>
-                <div>Download count: {selectedTrip.documentsDownloadCount} times</div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowReDownloadDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleReDownloadRequest}>
-              Submit Request
             </Button>
           </DialogFooter>
         </DialogContent>

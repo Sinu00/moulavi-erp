@@ -148,7 +148,8 @@ export const umrahVisaAPI = {
   
   getPartyBookings: (params?: any) => api.get('/umrah-visa/bookings', { params }),
   
-  getBookingById: (id: string) => api.get(`/umrah-visa/booking/${id}`),
+  // Backend route: GET /api/umrah-visa/:bookingId
+  getBookingById: (id: string) => api.get(`/umrah-visa/${id}`),
   
   updateBookingStatus: (id: string, status: string, notes?: string) =>
     api.patch(`/umrah-visa/booking/${id}/status`, { status, notes }),
@@ -162,6 +163,41 @@ export const umrahVisaAPI = {
     api.get('/umrah-visa/transport-pricing', { params }),
   
   getStats: (params?: any) => api.get('/umrah-visa/stats', { params }),
+
+  // Workflow endpoints
+  downloadDocuments: (bookingId: string) =>
+    api.post(`/umrah-visa/${bookingId}/download-documents`),
+
+  addGroupData: (bookingId: string, data: any) =>
+    api.post(`/umrah-visa/${bookingId}/add-group-data`, data),
+
+  uploadConfirmation: (bookingId: string, confirmationImagePath: string) =>
+    api.post(`/umrah-visa/${bookingId}/upload-confirmation`, { confirmationImagePath }),
+
+  generateVoucher: (bookingId: string) =>
+    api.post(`/umrah-visa/${bookingId}/generate-voucher`),
+
+  getTripInfo: (bookingId: string) =>
+    api.get(`/umrah-visa/${bookingId}/trip-info`),
+
+  getAvailableActions: (bookingId: string) =>
+    api.get(`/umrah-visa/${bookingId}/available-actions`),
+
+  updateTravelDetails: (id: string, data: any) => api.patch(`/umrah-visa/${id}/travel-details`, data),
+
+  updateAccommodation: (id: string, data: any) => api.patch(`/umrah-visa/${id}/accommodation`, data),
+
+  updateTransportBookings: (id: string, transportBookings: any[]) =>
+    api.patch(`/umrah-visa/${id}/transport-bookings`, { transportBookings }),
+
+  updatePassengers: (id: string, passengers: any[]) =>
+    api.patch(`/umrah-visa/${id}/passengers`, { passengers }),
+
+  createTransportBooking: (id: string, data: any) => api.post(`/umrah-visa/${id}/transport-bookings`, data),
+  deleteTransportBooking: (rowId: string) => api.delete(`/umrah-visa/transport-bookings/${rowId}`),
+
+  createHotelBooking: (id: string, data: any) => api.post(`/umrah-visa/${id}/hotel-bookings`, data),
+  deleteHotelBooking: (rowId: string) => api.delete(`/umrah-visa/hotel-bookings/${rowId}`),
 };
 
 // User Management API
@@ -272,5 +308,12 @@ export const airportRouteMasterAPI = {
   update: (id: string, data: any) => api.put(`/airport-route-masters/${id}`, data),
   delete: (id: string) => api.delete(`/airport-route-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/airport-route-masters/${id}/toggle-status`),
+};
+
+// Masters
+export const umrahVisaMasterAPI = {
+  getDestinations: (params?: any) => api.get('/umrah-visa/masters/destinations', { params }),
+  getHotels: (params?: any) => api.get('/umrah-visa/masters/hotels', { params }),
+  getAirports: (params?: any) => api.get('/umrah-visa/masters/airports', { params }),
 };
 

@@ -14,6 +14,7 @@ import {
   AccountCurrency,
   ServiceStatus,
   UmrahVisaStatus,
+  VisaType,
   Gender
 } from '@prisma/client';
 
@@ -33,6 +34,7 @@ export type {
   AccountCurrency,
   ServiceStatus,
   UmrahVisaStatus,
+  VisaType,
   Gender
 };
 
