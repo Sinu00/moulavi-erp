@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -46,6 +47,7 @@ export default function UmrahVisaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedVisaType, setSelectedVisaType] = useState<string>('all');
   
   // Dialog states
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
@@ -64,7 +66,7 @@ export default function UmrahVisaPage() {
 
   useEffect(() => {
     filterData();
-  }, [searchQuery, selectedStatus, bookings]);
+  }, [searchQuery, selectedStatus, selectedVisaType, bookings]);
 
   const fetchBookings = async () => {
     try {
@@ -85,6 +87,11 @@ export default function UmrahVisaPage() {
     // Filter by status
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(booking => booking.status === selectedStatus);
+    }
+
+    // Filter by visa type
+    if (selectedVisaType !== 'all') {
+      filtered = filtered.filter(booking => booking.visaType === selectedVisaType);
     }
 
     // Filter by search query
@@ -119,6 +126,14 @@ export default function UmrahVisaPage() {
       bill: bookings.filter(b => b.status === 'bill').length,
       booking_success: bookings.filter(b => b.status === 'booking_success').length,
       cancelled: bookings.filter(b => b.status === 'cancelled').length,
+    };
+  };
+
+  const getVisaTypeCounts = () => {
+    return {
+      all: bookings.length,
+      individual_visa: bookings.filter(b => b.visaType === 'individual_visa').length,
+      group_visa: bookings.filter(b => b.visaType === 'group_visa').length,
     };
   };
 
@@ -300,17 +315,35 @@ export default function UmrahVisaPage() {
           <div className="p-4 lg:p-8">
           <Card>
               <CardContent className="space-y-4">
-                {/* Search Bar */}
-                  <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                {/* Search Bar and Visa Type Filter */}
+                <div className="flex gap-4 items-center mt-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                     <Input
-                    placeholder="Search by party name, email, group number..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search by party name, email, group number..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
                     />
-                    <CardDescription>Showing {filteredData.length} of {bookings.length} bookings</CardDescription>
                   </div>
+                  <div className="w-48">
+                    <Select value={selectedVisaType} onValueChange={setSelectedVisaType}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by Visa Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Visa Types ({getVisaTypeCounts().all})</SelectItem>
+                        <SelectItem value="individual_visa">Individual Visa ({getVisaTypeCounts().individual_visa})</SelectItem>
+                        <SelectItem value="group_visa">Group Visa ({getVisaTypeCounts().group_visa})</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Booking Count */}
+                <div className="text-sm text-gray-600">
+                  Showing {filteredData.length} of {bookings.length} bookings
+                </div>
 
                 {/* Status Filter Tabs */}
                 <div className="flex flex-wrap gap-2 pb-4 border-b">
