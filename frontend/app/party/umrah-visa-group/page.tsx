@@ -10,17 +10,18 @@ import { PartyLayout } from '@/components/layouts/PartyLayout';
 import { ArrowLeft, ChevronRight, ChevronLeft } from 'lucide-react';
 
 // Import our new components and hooks
-import { useUmrahBooking, useMasterData } from '@/hooks/useUmrahBooking';
+import { useGroupUmrahBooking } from '@/hooks/useGroupUmrahBooking';
+import { useMasterData } from '@/hooks/useUmrahBooking';
 import { StepProgress, LoadingSpinner } from '@/components/umrah-booking/shared';
-import { BookingModeStep } from '@/components/umrah-booking/steps/BookingModeStep';
+import { GroupDetailsStep } from '@/components/umrah-booking/steps/GroupDetailsStep';
 import { TravelDetailsStep } from '@/components/umrah-booking/steps/TravelDetailsStep';
-import { AccommodationStep } from '@/components/umrah-booking/steps/AccommodationStep';
-import { DocumentsStep } from '@/components/umrah-booking/steps/DocumentsStep';
+import { GroupAccommodationStep } from '@/components/umrah-booking/steps/GroupAccommodationStep';
+import { GroupDocumentsStep } from '@/components/umrah-booking/steps/GroupDocumentsStep';
 import { validateStep1, validateStep2, validateStep3, validateStep4 } from '@/lib/umrah/validation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-export default function UmrahVisaNewPage() {
+export default function GroupUmrahVisaPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isClient, setIsClient] = useState(false);
@@ -38,7 +39,12 @@ export default function UmrahVisaNewPage() {
     setSkipDocuments,
     loadPartyData,
     submitStep,
-  } = useUmrahBooking();
+    addPassenger,
+    removePassenger,
+    addHotelBooking,
+    removeHotelBooking,
+    hasStepDataChanged,
+  } = useGroupUmrahBooking();
 
   const {
     masterData,
@@ -47,6 +53,33 @@ export default function UmrahVisaNewPage() {
     loadHotels,
     getHotelsForLocation,
   } = useMasterData();
+
+  const steps = [
+    {
+      id: 1,
+      title: 'Group Details',
+      description: 'Group number and name',
+      icon: 'Users',
+    },
+    {
+      id: 2,
+      title: 'Travel Details',
+      description: 'Flight and transport information',
+      icon: 'Plane',
+    },
+    {
+      id: 3,
+      title: 'Hotel Booking',
+      description: 'Hotel accommodation details',
+      icon: 'Home',
+    },
+    {
+      id: 4,
+      title: 'Passengers & Documents',
+      description: 'Passenger count and documents',
+      icon: 'User',
+    },
+  ];
 
   useEffect(() => {
     setIsClient(true);
@@ -106,7 +139,7 @@ export default function UmrahVisaNewPage() {
     switch (bookingState.currentStep) {
       case 1:
         return (
-          <BookingModeStep
+          <GroupDetailsStep
             data={bookingState.step1Data}
             onChange={updateStep1Data}
             disabled={isLoading}
@@ -127,7 +160,7 @@ export default function UmrahVisaNewPage() {
 
       case 3:
         return (
-          <AccommodationStep
+          <GroupAccommodationStep
             data={bookingState.step3Data}
             onChange={updateStep3Data}
             locations={masterData.locations}
@@ -136,19 +169,24 @@ export default function UmrahVisaNewPage() {
             departureDate={bookingState.step2Data.departureDate}
             onLoadHotels={loadHotels}
             getHotelsForLocation={getHotelsForLocation}
+            onAddHotelBooking={addHotelBooking}
+            onRemoveHotelBooking={removeHotelBooking}
             disabled={isLoading}
           />
         );
 
       case 4:
         return (
-          <DocumentsStep
+          <GroupDocumentsStep
             data={bookingState.step4Data}
             step1Data={bookingState.step1Data}
             step3Data={bookingState.step3Data}
             skipDocuments={bookingState.skipDocuments}
             onChange={updateStep4Data}
             onSkipDocumentsChange={setSkipDocuments}
+            onStep1DataChange={updateStep1Data}
+            onAddPassenger={addPassenger}
+            onRemovePassenger={removePassenger}
             disabled={isLoading}
           />
         );
@@ -168,8 +206,8 @@ export default function UmrahVisaNewPage() {
 
   return (
     <PartyLayout 
-      title="Umrah Visa Application" 
-      subtitle="Complete the steps below to apply for your Umrah visa"
+      title="Group Umrah Visa Application" 
+      subtitle="Complete the steps below to apply for your group Umrah visa"
     >
       <div className="p-6">
         <div className="max-w-4xl mx-auto">
@@ -180,6 +218,7 @@ export default function UmrahVisaNewPage() {
                 currentStep={bookingState.currentStep}
                 completedSteps={bookingState.completedSteps}
                 onStepClick={goToStep}
+                steps={steps}
               />
 
               {/* Step Content */}
@@ -187,18 +226,13 @@ export default function UmrahVisaNewPage() {
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                   <div className="flex items-center space-x-3 mb-6">
                     <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
-                      <ArrowLeft className="h-5 w-5 text-red-600" />
+                      {React.createElement(steps[bookingState.currentStep - 1].icon, { className: "h-5 w-5 text-red-600" })}
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">
-                        Step {bookingState.currentStep}
+                        {steps[bookingState.currentStep - 1].title}
                       </h3>
-                      <p className="text-sm text-gray-600">
-                        {bookingState.currentStep === 1 && 'Choose your booking type'}
-                        {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
-                        {bookingState.currentStep === 3 && 'Select accommodation type and details'}
-                        {bookingState.currentStep === 4 && 'Upload required documents'}
-                      </p>
+                      <p className="text-sm text-gray-600">{steps[bookingState.currentStep - 1].description}</p>
                     </div>
                   </div>
                   {renderStepContent()}
@@ -241,6 +275,13 @@ export default function UmrahVisaNewPage() {
                     {isLoading ? 'Processing...' : bookingState.currentStep < 4 ? 'Next' : 'Submit Application'}
                     {bookingState.currentStep < 4 && <ChevronRight className="h-4 w-4 ml-2" />}
                   </Button>
+                  {/* Show indicator if step has unsaved changes */}
+                  {bookingState.completedSteps.includes(bookingState.currentStep) && hasStepDataChanged(bookingState.currentStep) && (
+                    <div className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                      <span>•</span>
+                      <span className="ml-1">Unsaved changes</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

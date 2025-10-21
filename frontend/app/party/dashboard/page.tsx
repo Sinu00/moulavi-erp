@@ -12,14 +12,13 @@ import { toast } from 'sonner';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { umrahVisaAPI, authAPI } from '@/lib/api';
 import ViewUmrahVisaDialog from '@/components/ViewUmrahVisaDialog';
+import { PartyLayout } from '@/components/layouts/PartyLayout';
 import { 
   Plus, 
   FileText, 
   Clock, 
   CheckCircle, 
   XCircle, 
-  LogOut, 
-  User,
   Hash,
   Users,
   Calendar,
@@ -58,6 +57,7 @@ interface UmrahVisaBooking {
   groupName?: string;
   passengerCount: number;
   status: 'group_processing' | 'group_assigned' | 'documents_downloaded' | 'booking_success' | 'cancelled';
+  visaType?: 'individual_visa' | 'group_visa';
   createdAt: string;
   updatedAt: string;
   passengers: UmrahPassenger[];
@@ -217,20 +217,6 @@ export default function PartyDashboardPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (refreshToken) {
-        await authAPI.logout(refreshToken);
-      }
-    } catch (error) {
-      // Logout should continue even if API call fails
-    } finally {
-      removeUser();
-      toast.success('Logged out successfully');
-      router.push('/');
-    }
-  };
 
   if (!user) {
     return (
@@ -244,227 +230,135 @@ export default function PartyDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col fixed h-screen">
-        {/* Sidebar Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-500 to-red-600 flex items-center justify-center shadow-md">
-              <Building className="h-5 w-5 text-white" />
-            </div>
+    <PartyLayout 
+      title="Dashboard Overview" 
+      subtitle={`Welcome back, ${user.name}`}
+    >
+      <div className="p-6">
+        {/* Stats Overview */}
+        <div className="mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <div className="text-center">
+                    <Skeleton className="h-8 w-12 mx-auto mb-2" />
+                    <Skeleton className="h-4 w-16 mx-auto" />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</div>
+                    <div className="text-sm text-red-600 font-medium">Total Applications</div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-900 mb-1">{stats.pending}</div>
+                    <div className="text-sm text-red-600 font-medium">Pending Applications</div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-900 mb-1">{stats.completed}</div>
+                    <div className="text-sm text-red-600 font-medium">Completed Applications</div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Applications */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="p-6 border-b border-gray-200">
             <div>
-              <h1 className="text-lg font-bold text-gray-900">{user.name}</h1>
-              <p className="text-xs text-gray-500">Party Dashboard</p>
+              <h2 className="text-lg font-semibold text-gray-900">Recent Applications</h2>
+              <p className="text-sm text-gray-600">Your latest applications</p>
             </div>
           </div>
-        </div>
-
-        {/* Sidebar Navigation */}
-        <div className="flex-1 p-4">
-          <nav className="space-y-2">
-            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Dashboard
-            </div>
-            <div className="px-3 py-2 bg-red-50 rounded-lg border border-red-200">
-              <div className="flex items-center space-x-3">
-                <div className="h-8 w-8 rounded-lg bg-red-600 flex items-center justify-center">
-                  <FileText className="h-4 w-4 text-white" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Overview</div>
-                  <div className="text-xs text-gray-500">Dashboard home</div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6">
-              Services
-            </div>
-            <button 
-              onClick={() => router.push('/party/umrah-visa')}
-              className="w-full px-3 py-2 text-left hover:bg-gray-50 rounded-lg transition-colors"
-            >
-              <div className="flex items-center space-x-3">
-                <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center">
-                  <Plane className="h-4 w-4 text-gray-600" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Umrah Visa</div>
-                  <div className="text-xs text-gray-500">Apply for visa</div>
-                </div>
-              </div>
-            </button>
-          </nav>
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-              <User className="h-4 w-4 text-gray-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-900 truncate">{user.name}</div>
-              <div className="text-xs text-gray-500">{user.email}</div>
-            </div>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleLogout} 
-            className="w-full border-gray-300 text-gray-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col ml-64">
-        {/* Top Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
-              <p className="text-sm text-gray-600">Welcome back, {user.name}</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant="secondary" className="bg-red-100 text-red-700">
-                {user.role}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 p-6">
-          {/* Stats Overview */}
-          <div className="mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {loading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                    <div className="text-center">
-                      <Skeleton className="h-8 w-12 mx-auto mb-2" />
-                      <Skeleton className="h-4 w-16 mx-auto" />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <>
-                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</div>
-                      <div className="text-sm text-red-600 font-medium">Total Applications</div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats.pending}</div>
-                      <div className="text-sm text-red-600 font-medium">Pending Applications</div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-gray-900 mb-1">{stats.completed}</div>
-                      <div className="text-sm text-red-600 font-medium">Completed Applications</div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Applications */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="p-6 border-b border-gray-200">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Recent Applications</h2>
-                <p className="text-sm text-gray-600">Your latest applications</p>
-              </div>
-            </div>
-            
-            <div className="p-6">
-              {loading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <Skeleton className="h-10 w-10 rounded-lg" />
-                        <div>
-                          <Skeleton className="h-4 w-32 mb-2" />
-                          <Skeleton className="h-3 w-24" />
-                        </div>
+          
+          <div className="p-6">
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <Skeleton className="h-10 w-10 rounded-lg" />
+                      <div>
+                        <Skeleton className="h-4 w-32 mb-2" />
+                        <Skeleton className="h-3 w-24" />
                       </div>
-                      <Skeleton className="h-6 w-16" />
                     </div>
-                  ))}
-                </div>
-              ) : filteredBookings.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                    <FileText className="h-8 w-8 text-gray-400" />
+                    <Skeleton className="h-6 w-16" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No applications yet</h3>
-                  <p className="text-gray-500 mb-6">Get started by applying for your first Umrah visa</p>
-                  <Button 
-                    onClick={() => router.push('/party/umrah-visa')}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                ))}
+              </div>
+            ) : filteredBookings.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                  <FileText className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No applications yet</h3>
+                <p className="text-gray-500 mb-6">Get started by applying for your first Umrah visa</p>
+                <Button 
+                  onClick={() => router.push('/party/umrah-visa')}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Apply for Umrah Visa
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredBookings.slice(0, 5).map((booking) => (
+                  <div
+                    key={booking.id}
+                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Apply for Umrah Visa
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredBookings.slice(0, 5).map((booking) => (
-                    <div
-                      key={booking.id}
-                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center">
-                          <Building className="h-5 w-5 text-gray-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            {booking.groupName || 'Umrah Application'}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {booking.groupNumber || 'No group'} • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
-                          </p>
-                        </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center">
+                        <Building className="h-5 w-5 text-gray-600" />
                       </div>
-                      <div className="flex items-center space-x-3">
-                        {getStatusBadge(booking.status)}
-                        <Button
-                          onClick={() => handleViewBooking(booking.id)}
-                          size="sm"
-                          variant="ghost"
-                          className="text-gray-600 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                      <div>
+                        <h3 className="font-medium text-gray-900">
+                          {booking.groupName || 'Umrah Application'}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {booking.groupNumber || 'No group'} • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
+                        </p>
                       </div>
                     </div>
-                  ))}
-                  
-                  {filteredBookings.length > 5 && (
-                    <div className="text-center pt-4">
-                      <Button 
-                        variant="outline" 
+                    <div className="flex items-center space-x-3">
+                      {getStatusBadge(booking.status)}
+                      <Button
+                        onClick={() => handleViewBooking(booking.id)}
                         size="sm"
-                        className="text-gray-600 hover:text-red-600 hover:border-red-200"
+                        variant="ghost"
+                        className="text-gray-600 hover:text-red-600 hover:bg-red-50"
                       >
-                        View All Applications ({filteredBookings.length})
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+                
+                {filteredBookings.length > 5 && (
+                  <div className="text-center pt-4">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="text-gray-600 hover:text-red-600 hover:border-red-200"
+                    >
+                      View All Applications ({filteredBookings.length})
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -475,7 +369,7 @@ export default function PartyDashboardPage() {
         open={viewDialogOpen}
         onOpenChange={setViewDialogOpen}
       />
-    </div>
+    </PartyLayout>
   );
 }
 

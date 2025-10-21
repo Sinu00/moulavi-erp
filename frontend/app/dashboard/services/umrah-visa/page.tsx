@@ -72,6 +72,7 @@ interface UmrahVisaBooking {
   transportPax?: number;
   transportPrice?: number;
   accommodationType: string;
+  visaType?: 'individual_visa' | 'group_visa';
   makkahCheckIn?: string;
   makkahCheckOut?: string;
   madinaCheckIn?: string;

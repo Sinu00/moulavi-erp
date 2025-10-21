@@ -3,9 +3,43 @@ import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { z } from 'zod';
 import { AuditService } from '../services/auditService';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/umrah-visa';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only images (JPEG, JPG, PNG) and PDF files are allowed'));
+    }
+  }
+});
 
 // GET /api/umrah-visa/bookings - Get all bookings with pagination and filters
 router.get('/bookings', authenticate, async (req, res) => {
@@ -143,6 +177,12 @@ const step1Schema = z.object({
   path: ["groupNumber"]
 });
 
+// Group booking validation schemas
+const groupStep1Schema = z.object({
+  groupNumber: z.string().min(1, 'Group number is required'),
+  groupName: z.string().min(1, 'Group name is required'),
+});
+
 const step2Schema = z.object({
   arrivalDate: z.string().transform((str) => new Date(str)),
   arrivalTime: z.string().transform((str) => {
@@ -277,6 +317,7 @@ router.post('/step1', authenticate, async (req, res) => {
         groupName: validatedData.groupName,
         hasGroupNumber: !!(validatedData.groupNumber && validatedData.groupName), // Set to true if both are provided
         passengerCount: 1, // Default, will be updated in step 3
+        visaType: 'individual_visa', // Set visa type to individual for regular bookings
       },
     });
 
@@ -1651,6 +1692,316 @@ router.get('/:bookingId/trip-info', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error fetching trip info:', error);
     res.status(500).json({ error: 'Failed to fetch trip info' });
+  }
+});
+
+// ==================== GROUP BOOKING ENDPOINTS ====================
+
+// POST /api/umrah-visa/group/step1 - Group Step 1: Group Number and Group Name
+router.post('/group/step1', authenticate, async (req, res) => {
+  try {
+    const { partyId } = req.body;
+    const validatedData = groupStep1Schema.parse(req.body);
+
+    if (!partyId) {
+      return res.status(400).json({ error: 'Party ID is required' });
+    }
+
+    // Create service first
+    const service = await prisma.service.create({
+      data: {
+        serviceType: 'umrah_visa',
+        partyId,
+        status: 'pending',
+      },
+    });
+
+    // Create basic booking with group visa type
+    const booking = await prisma.umrahVisaBooking.create({
+      data: {
+        serviceId: service.id,
+        groupNumber: validatedData.groupNumber,
+        groupName: validatedData.groupName,
+        hasGroupNumber: true, // Always true for group bookings
+        passengerCount: 1, // Will be updated in step 4
+        visaType: 'group_visa', // Set visa type to group
+        accommodationType: 'hotel', // Always hotel for group bookings
+      },
+    });
+
+    res.status(201).json({
+      message: 'Group booking step 1 completed successfully',
+      bookingId: booking.id,
+      serviceId: service.id,
+      data: booking,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    console.error('Error in group booking step 1:', error);
+    res.status(500).json({ error: 'Failed to complete step 1' });
+  }
+});
+
+// POST /api/umrah-visa/group/step2/:bookingId - Group Step 2: Travel Details
+router.post('/group/step2/:bookingId', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    console.log('🚀 Group booking step 2 request for booking:', bookingId);
+    
+    const validatedData = step2Schema.parse(req.body);
+
+    // Check if booking exists and is a group booking
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (booking.visaType !== 'group_visa') {
+      return res.status(400).json({ error: 'This endpoint is only for group visa bookings' });
+    }
+
+    // Validate date range (80 days max)
+    if (!validateDateRange(validatedData.arrivalDate, validatedData.departureDate)) {
+      return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
+    }
+
+    // Check if arrival airport requires transport selection
+    const needsTransport = await requiresTransport(validatedData.arrivalAirportId);
+    
+    if (needsTransport && (!validatedData.transportBookings || validatedData.transportBookings.length === 0)) {
+      return res.status(400).json({ 
+        error: 'Transport selection is required for Jeddah/Medina airports',
+        requiresTransport: true 
+      });
+    }
+
+    // Create travel details
+    const travelDetails = await prisma.umrahTravelDetails.create({
+      data: {
+        bookingId,
+        arrivalDate: validatedData.arrivalDate,
+        arrivalTime: validatedData.arrivalTime,
+        arrivalAirportId: validatedData.arrivalAirportId,
+        arrivalFlightNumber: validatedData.arrivalFlightNumber,
+        departureDate: validatedData.departureDate,
+        departureTime: validatedData.departureTime,
+        departureAirportId: validatedData.departureAirportId,
+        departureFlightNumber: validatedData.departureFlightNumber,
+      },
+    });
+
+    // Create transport bookings if provided
+    let transportBookings: any[] = [];
+    const hasTransportation = validatedData.transportBookings && validatedData.transportBookings.length > 0;
+    
+    if (hasTransportation && validatedData.transportBookings) {
+      transportBookings = await Promise.all(
+        validatedData.transportBookings.map(transport =>
+          prisma.umrahTransportBooking.create({
+            data: {
+              bookingId,
+              fromLocationId: transport.fromLocationId,
+              toLocationId: transport.toLocationId,
+              vehicleType: transport.vehicleType,
+              paxCount: transport.paxCount,
+              price: transport.price,
+              travelDate: transport.travelDate,
+            },
+          })
+        )
+      );
+    }
+
+    // Update booking with hasTransportation flag
+    await prisma.umrahVisaBooking.update({
+      where: { id: bookingId },
+      data: {
+        hasTransportation,
+      },
+    });
+
+    res.json({
+      message: 'Group booking step 2 completed successfully',
+      data: {
+        travelDetails,
+        transportBookings,
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    console.error('Error in group booking step 2:', error);
+    res.status(500).json({ error: 'Failed to complete step 2' });
+  }
+});
+
+// POST /api/umrah-visa/group/step3/:bookingId - Group Step 3: Hotel Accommodation
+router.post('/group/step3/:bookingId', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    console.log('🚀 Group booking step 3 request for booking:', bookingId);
+    
+    // For group bookings, we expect hotel bookings array
+    const { hotelBookings } = req.body;
+
+    if (!hotelBookings || !Array.isArray(hotelBookings) || hotelBookings.length === 0) {
+      return res.status(400).json({ error: 'At least one hotel booking is required' });
+    }
+
+    // Check if booking exists and is a group booking
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (booking.visaType !== 'group_visa') {
+      return res.status(400).json({ error: 'This endpoint is only for group visa bookings' });
+    }
+
+    // Create accommodation details (always hotel for group bookings)
+    const accommodationDetails = await prisma.umrahAccommodationDetails.create({
+      data: {
+        bookingId,
+        accommodationType: 'hotel',
+      },
+    });
+
+    // Create hotel bookings
+    const createdHotelBookings = await Promise.all(
+      hotelBookings.map((hotel: any) =>
+        prisma.umrahHotelBooking.create({
+          data: {
+            accommodationId: accommodationDetails.id,
+            locationId: hotel.locationId,
+            hotelId: hotel.hotelId,
+            checkInDate: new Date(hotel.checkInDate),
+            checkOutDate: new Date(hotel.checkOutDate),
+          },
+        })
+      )
+    );
+
+    res.json({
+      message: 'Group booking step 3 completed successfully',
+      data: {
+        accommodationDetails,
+        hotelBookings: createdHotelBookings,
+      },
+    });
+  } catch (error) {
+    console.error('Error in group booking step 3:', error);
+    res.status(500).json({ error: 'Failed to complete step 3' });
+  }
+});
+
+// POST /api/umrah-visa/group/step4/:bookingId - Group Step 4: Passengers & Documents
+router.post('/group/step4/:bookingId', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { passengerCount, passengers } = req.body;
+    
+    console.log('🚀 Group booking step 4 request for booking:', bookingId);
+
+    // Check if booking exists and is a group booking
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        accommodationDetails: true,
+      },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (booking.visaType !== 'group_visa') {
+      return res.status(400).json({ error: 'This endpoint is only for group visa bookings' });
+    }
+
+    const parsedPassengerCount = parseInt(passengerCount);
+    const parsedPassengers = JSON.parse(passengers);
+
+    if (parsedPassengerCount < 1 || parsedPassengerCount > 50) {
+      return res.status(400).json({ error: 'Passenger count must be between 1 and 50' });
+    }
+
+    if (parsedPassengers.length !== parsedPassengerCount) {
+      return res.status(400).json({ error: 'Number of passengers must match passenger count' });
+    }
+
+    const leadPassengers = parsedPassengers.filter((p: any) => p.isLeadPassenger);
+    if (leadPassengers.length !== 1) {
+      return res.status(400).json({ error: 'Exactly one lead passenger is required' });
+    }
+
+    // Validate passenger names
+    for (const passenger of parsedPassengers) {
+      if (!passenger.fullName || passenger.fullName.trim() === '') {
+        return res.status(400).json({ error: 'All passengers must have a full name' });
+      }
+    }
+
+    // Process uploaded files (Development Mode - Skip file processing)
+    // const files = req.files as Express.Multer.File[];
+    // const filesByField: { [key: string]: Express.Multer.File } = {};
+    // 
+    // files.forEach(file => {
+    //   filesByField[file.fieldname] = file;
+    // });
+
+    // Create passengers (Development Mode - No document processing)
+    const createdPassengers = await Promise.all(
+      parsedPassengers.map(async (passenger: any) => {
+        // Create passenger without documents
+        return await prisma.umrahPassenger.create({
+          data: {
+            bookingId,
+            fullName: passenger.fullName.trim(),
+            isLeadPassenger: passenger.isLeadPassenger,
+          },
+        });
+      })
+    );
+
+    // Update booking with passenger count and status
+    // For group bookings with hotel accommodation, status goes directly to "voucher"
+    const updatedBooking = await prisma.umrahVisaBooking.update({
+      where: { id: bookingId },
+      data: {
+        passengerCount: parsedPassengerCount,
+        status: 'voucher', // Direct to voucher status for group bookings
+      },
+    });
+
+    // Update service status
+    await prisma.service.update({
+      where: { id: booking.serviceId },
+      data: {
+        status: 'completed',
+      },
+    });
+
+    res.json({
+      message: 'Group Umrah visa booking completed successfully',
+      data: {
+        booking: updatedBooking,
+        passengers: createdPassengers,
+        passengerCount: parsedPassengerCount,
+        passengersCreated: createdPassengers.length
+      },
+    });
+  } catch (error) {
+    console.error('Error in group booking step 4:', error);
+    res.status(500).json({ error: 'Failed to complete step 4' });
   }
 });
 

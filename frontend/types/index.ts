@@ -172,6 +172,7 @@ export interface UmrahVisaBooking {
   transportPax?: number;
   transportPrice?: number;
   accommodationType: AccommodationType;
+  visaType?: VisaType;
   makkahCheckIn?: string;
   makkahCheckOut?: string;
   madinaCheckIn?: string;

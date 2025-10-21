@@ -48,6 +48,7 @@ export default function UmrahBookingDashboard({
     status: '',
     bookingMode: '',
     accommodationType: '',
+    visaType: '',
     arrivalDateFrom: '',
     arrivalDateTo: '',
     sortBy: 'createdAt',
@@ -254,7 +255,7 @@ export default function UmrahBookingDashboard({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
@@ -298,6 +299,17 @@ export default function UmrahBookingDashboard({
                 <SelectItem value="">All Types</SelectItem>
                 <SelectItem value="hotel">Hotel</SelectItem>
                 <SelectItem value="iqama">Iqama</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Select value={filters.visaType || ''} onValueChange={(value) => handleFilterChange('visaType', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Visa Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="individual_visa">Individual</SelectItem>
+                <SelectItem value="group_visa">Group</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -353,6 +365,11 @@ export default function UmrahBookingDashboard({
                     <div className="flex items-center space-x-2">
                       {getBookingModeIcon(booking.bookingMode)}
                       {getAccommodationIcon(booking.accommodationType)}
+                      {booking.visaType === 'group_visa' && (
+                        <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center">
+                          <Users className="h-3 w-3 text-blue-600" />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
@@ -365,7 +382,7 @@ export default function UmrahBookingDashboard({
                         {booking.flightNumber} • {booking.arrivalDate} - {booking.departureDate}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {booking.passengerCount} passengers • {booking.bookingMode.replace('_', ' ')}
+                        {booking.passengerCount} passengers • {booking.bookingMode?.replace('_', ' ')} • {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
                       </p>
                     </div>
                   </div>
