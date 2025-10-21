@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
 import { umrahVisaAPI } from '@/lib/api';
-import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
+import { UMRAH_VISA_STATUS_CONFIG, VISA_TYPE_CONFIG } from '@/lib/constants';
 import ViewUmrahVisaDialog from '@/components/ViewUmrahVisaDialog';
 import AddGroupNumberDialog from '@/components/AddGroupNumberDialog';
 
@@ -299,10 +299,6 @@ export default function UmrahVisaPage() {
         <div className="flex-1 overflow-auto">
           <div className="p-4 lg:p-8">
           <Card>
-              <CardHeader>
-                <CardTitle>Umrah Visa Bookings</CardTitle>
-                <CardDescription>Showing {filteredData.length} of {bookings.length} bookings</CardDescription>
-              </CardHeader>
               <CardContent className="space-y-4">
                 {/* Search Bar */}
                   <div className="relative">
@@ -313,6 +309,7 @@ export default function UmrahVisaPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
                     />
+                    <CardDescription>Showing {filteredData.length} of {bookings.length} bookings</CardDescription>
                   </div>
 
                 {/* Status Filter Tabs */}
@@ -341,6 +338,7 @@ export default function UmrahVisaPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[120px]">Visa Type</TableHead>
                         <TableHead className="w-[220px]">Party Details</TableHead>
                         <TableHead className="w-[150px]">Group Details</TableHead>
                         <TableHead className="w-[120px]">Passengers</TableHead>
@@ -352,15 +350,20 @@ export default function UmrahVisaPage() {
                     <TableBody>
                       {isLoading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+                          <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
                         </TableRow>
                       ) : filteredData.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-gray-500">No bookings found</TableCell>
+                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">No bookings found</TableCell>
                         </TableRow>
                       ) : (
                         filteredData.map((booking) => (
                           <TableRow key={booking.id}>
+                            <TableCell>
+                              <Badge className={`${VISA_TYPE_CONFIG[booking.visaType as keyof typeof VISA_TYPE_CONFIG]?.color || 'bg-gray-100'} text-xs`}>
+                                {VISA_TYPE_CONFIG[booking.visaType as keyof typeof VISA_TYPE_CONFIG]?.label || booking.visaType || 'N/A'}
+                              </Badge>
+                            </TableCell>
                             <TableCell>
                               <div className="space-y-1">
                                 <div className="font-semibold text-gray-900">{booking.service?.party?.partyName}</div>

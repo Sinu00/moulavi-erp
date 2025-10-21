@@ -1,4 +1,4 @@
-import { UmrahVisaStatus } from '@/types';
+import { UmrahVisaStatus, VisaType } from '@/types';
 
 export const UMRAH_VISA_STATUS_CONFIG: Record<UmrahVisaStatus, { label: string; color: string }> = {
   pending: { label: 'Pending', color: 'bg-yellow-50 text-yellow-900 border border-yellow-200' },
@@ -8,6 +8,11 @@ export const UMRAH_VISA_STATUS_CONFIG: Record<UmrahVisaStatus, { label: string; 
   bill: { label: 'Bill Ready', color: 'bg-indigo-50 text-indigo-900 border border-indigo-200' },
   booking_success: { label: 'Booking Success', color: 'bg-green-50 text-green-900 border border-green-200' },
   cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-900 border border-red-200' },
+};
+
+export const VISA_TYPE_CONFIG: Record<VisaType, { label: string; color: string }> = {
+  individual_visa: { label: 'Individual Visa', color: 'bg-blue-50 text-blue-900 border border-blue-200' },
+  group_visa: { label: 'Group Visa', color: 'bg-green-50 text-green-900 border border-green-200' },
 };
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
