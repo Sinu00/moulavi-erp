@@ -74,6 +74,7 @@ export default function AssignGroupPage() {
         .filter((booking: any) => booking.tripInfo)
         .map((booking: any) => ({
           ...booking.tripInfo,
+          visaType: booking.visaType,
           booking: { id: booking.id, passengerCount: booking.passengerCount, service: booking.service },
         }));
 
@@ -208,6 +209,7 @@ export default function AssignGroupPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[130px]">Visa Type</TableHead>
                         <TableHead className="w-[200px]">Group Details</TableHead>
                         <TableHead className="w-[180px]">Party Name</TableHead>
                         <TableHead className="w-[150px]">Arrival Date</TableHead>
@@ -219,15 +221,20 @@ export default function AssignGroupPage() {
                     <TableBody>
                       {isLoading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
+                          <TableCell colSpan={7} className="text-center py-8">Loading...</TableCell>
                         </TableRow>
                       ) : filteredData.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-gray-500">No bookings found</TableCell>
+                          <TableCell colSpan={7} className="text-center py-8 text-gray-500">No bookings found</TableCell>
                         </TableRow>
                       ) : (
                         filteredData.map((trip) => (
                           <TableRow key={trip.id}>
+                            <TableCell>
+                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              </Badge>
+                            </TableCell>
                             <TableCell>
                               <div className="space-y-1">
                                 <div className="font-semibold">{trip.groupNumber || 'N/A'}</div>

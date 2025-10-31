@@ -22,6 +22,8 @@ export interface Step3Data {
   accommodationType: 'hotel' | 'iqama';
   iqamaDetails?: IqamaDetails;
   hotelBookings?: HotelBooking[];
+  transportSegments?: TransportBooking[];
+  ziyarah?: ZiyarahBooking[];
 }
 
 export interface Step4Data {
@@ -31,10 +33,13 @@ export interface Step4Data {
 export interface TransportBooking {
   fromLocationId: string;
   toLocationId: string;
+  fromHotelId?: string; // HotelMaster ID (can be hotel, ziyarah, or empty for airport)
+  toHotelId?: string; // HotelMaster ID (can be hotel, ziyarah, or empty for airport)
   vehicleType: string;
   paxCount: number;
   price: number;
   travelDate?: string;
+  travelTime?: string;
 }
 
 export interface HotelBooking {
@@ -71,6 +76,7 @@ export interface Airport {
 export interface Location {
   id: string;
   destinationName: string;
+  city?: string;
 }
 
 export interface Hotel {
@@ -97,7 +103,12 @@ export interface BookingState {
   step2Data: Step2Data;
   step3Data: Step3Data;
   step4Data: Step4Data;
-  skipDocuments: boolean;
+}
+
+export interface ZiyarahBooking {
+  city: 'Makkah' | 'Madinah';
+  date: string;
+  time: string;
 }
 
 export interface MasterData {

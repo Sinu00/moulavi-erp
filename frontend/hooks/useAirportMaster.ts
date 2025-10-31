@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { airportMasterAPI } from '@/lib/api';
+import { locationMasterAPI } from '@/lib/api';
+import { LocationMaster, CreateLocationMasterRequest } from '@/types';
 
 interface AirportMaster {
   id: string;
@@ -23,16 +24,69 @@ interface CreateAirportMasterRequest {
   isActive?: boolean;
 }
 
+// Helper to transform LocationMaster to AirportMaster format for backward compatibility
+const transformLocationToAirport = (location: LocationMaster): AirportMaster => ({
+  id: location.id,
+  airportCode: location.code,
+  airportName: location.name,
+  city: location.city,
+  country: location.country?.countryName || 'Saudi Arabia',
+  isActive: location.isActive,
+  createdAt: location.createdAt,
+  updatedAt: location.updatedAt,
+});
+
+// Helper to transform AirportMaster request to LocationMaster request
+const transformAirportToLocation = (
+  data: CreateAirportMasterRequest,
+  countryId?: string
+): CreateLocationMasterRequest => ({
+  code: data.airportCode,
+  name: data.airportName,
+  city: data.city,
+  locationType: 'AIRPORT',
+  countryId: countryId || '', // Will need to be provided or fetched
+  isActive: data.isActive,
+});
+
 export function useAirportMaster() {
   const [airports, setAirports] = useState<AirportMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [countryId, setCountryId] = useState<string>('');
+
+  // Fetch Saudi Arabia country ID on mount
+  useEffect(() => {
+    const fetchCountryId = async () => {
+      try {
+        // Try to get from existing airports first
+        const response = await locationMasterAPI.getAll({ locationType: 'AIRPORT', limit: 1 });
+        if (response.data.locationMasters?.[0]?.countryId) {
+          setCountryId(response.data.locationMasters[0].countryId);
+        } else {
+          // If no airports exist yet, we'll need countryId when creating
+          // For now, we'll show an error if creating without countryId
+          console.warn('No airports found. Country ID will need to be provided when creating first airport.');
+        }
+      } catch (error) {
+        console.error('Error fetching country ID:', error);
+      }
+    };
+    fetchCountryId();
+  }, []);
 
   const loadAirports = async () => {
     try {
       setLoading(true);
-      const response = await airportMasterAPI.getAll();
-      setAirports(response.data.airports || []);
+      const response = await locationMasterAPI.getAll({
+        locationType: 'AIRPORT',
+        page: 1,
+        limit: 1000, // Get all airports
+      });
+      
+      const locations: LocationMaster[] = response.data.locationMasters || [];
+      const transformed = locations.map(transformLocationToAirport);
+      setAirports(transformed);
     } catch (error) {
       toast.error('Failed to load airports');
       console.error('Error loading airports:', error);
@@ -43,8 +97,24 @@ export function useAirportMaster() {
 
   const createAirport = async (data: CreateAirportMasterRequest) => {
     try {
-      await airportMasterAPI.create(data);
-      toast.success('Airport created successfully');
+      // Get country ID if not already set
+      let finalCountryId = countryId;
+      if (!finalCountryId) {
+        const response = await locationMasterAPI.getAll({ locationType: 'AIRPORT', limit: 1 });
+        if (response.data.locationMasters?.[0]?.countryId) {
+          finalCountryId = response.data.locationMasters[0].countryId;
+          setCountryId(finalCountryId);
+        }
+      }
+
+      if (!finalCountryId) {
+        toast.error('Unable to determine country. Please ensure airports exist.');
+        return false;
+      }
+
+      const locationData = transformAirportToLocation(data, finalCountryId);
+      await locationMasterAPI.create(locationData);
+      // Don't show success toast here - parent component will handle it
       await loadAirports();
       return true;
     } catch (error: any) {
@@ -57,8 +127,27 @@ export function useAirportMaster() {
 
   const updateAirport = async (id: string, data: CreateAirportMasterRequest) => {
     try {
-      await airportMasterAPI.update(id, data);
-      toast.success('Airport updated successfully');
+      // Get country ID if not already set
+      let finalCountryId = countryId;
+      if (!finalCountryId) {
+        const response = await locationMasterAPI.getAll({ locationType: 'AIRPORT', limit: 1 });
+        if (response.data.locationMasters?.[0]?.countryId) {
+          finalCountryId = response.data.locationMasters[0].countryId;
+          setCountryId(finalCountryId);
+        }
+      }
+
+      const updateData: any = {};
+      if (data.airportCode !== undefined) updateData.code = data.airportCode;
+      if (data.airportName !== undefined) updateData.name = data.airportName;
+      if (data.city !== undefined) updateData.city = data.city;
+      if (data.isActive !== undefined) updateData.isActive = data.isActive;
+      
+      // If country is provided and different, we'd need to get countryId
+      // For now, skip countryId update unless needed
+
+      await locationMasterAPI.update(id, updateData);
+      // Don't show success toast here - parent component will handle it
       await loadAirports();
       return true;
     } catch (error: any) {
@@ -71,8 +160,8 @@ export function useAirportMaster() {
 
   const deleteAirport = async (id: string) => {
     try {
-      await airportMasterAPI.delete(id);
-      toast.success('Airport deleted successfully');
+      await locationMasterAPI.delete(id);
+      // Don't show success toast here - parent component will handle it
       await loadAirports();
       return true;
     } catch (error: any) {
@@ -85,10 +174,10 @@ export function useAirportMaster() {
 
   const toggleAirportStatus = async (airport: AirportMaster) => {
     try {
-      await airportMasterAPI.update(airport.id, {
+      await locationMasterAPI.update(airport.id, {
         isActive: !airport.isActive
       });
-      toast.success(`Airport ${!airport.isActive ? 'activated' : 'deactivated'} successfully`);
+      // Don't show success toast here - parent component will handle it
       await loadAirports();
       return true;
     } catch (error: any) {

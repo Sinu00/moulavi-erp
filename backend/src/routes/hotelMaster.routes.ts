@@ -38,9 +38,12 @@ router.post(
       return res.status(400).json({ error: 'Hotel with this code already exists' });
     }
 
-    // Verify location (destination) exists
-    const location = await prisma.destinationMaster.findUnique({
-      where: { id: locationId },
+    // Verify location exists in LocationMaster
+    const location = await prisma.locationMaster.findFirst({
+      where: {
+        id: locationId,
+        locationType: 'DESTINATION',
+      },
     });
 
     if (!location) {
@@ -94,7 +97,7 @@ router.get(
         orderBy: { hotelName: 'asc' },
         include: {
           location: {
-            select: { id: true, destinationName: true, city: true }
+            select: { id: true, name: true, city: true }
           }
         }
       }),
@@ -149,7 +152,7 @@ router.get(
       where: { id },
       include: {
         location: {
-          select: { id: true, destinationName: true, city: true, country: true }
+          select: { id: true, name: true, city: true, country: true }
         }
       }
     });
@@ -174,8 +177,11 @@ router.put(
 
     // Verify location exists if provided
     if (locationId) {
-      const location = await prisma.destinationMaster.findUnique({
-        where: { id: locationId },
+      const location = await prisma.locationMaster.findFirst({
+        where: {
+          id: locationId,
+          locationType: 'DESTINATION',
+        },
       });
 
       if (!location) {

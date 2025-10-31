@@ -35,7 +35,6 @@ export default function UmrahVisaNewPage() {
     updateStep3Data,
     updateStep4Data,
     setCurrentStep,
-    setSkipDocuments,
     loadPartyData,
     submitStep,
   } = useUmrahBooking();
@@ -73,7 +72,7 @@ export default function UmrahVisaNewPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data, bookingState.skipDocuments);
+        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data);
       default:
         return null;
     }
@@ -146,9 +145,7 @@ export default function UmrahVisaNewPage() {
             data={bookingState.step4Data}
             step1Data={bookingState.step1Data}
             step3Data={bookingState.step3Data}
-            skipDocuments={bookingState.skipDocuments}
             onChange={updateStep4Data}
-            onSkipDocumentsChange={setSkipDocuments}
             disabled={isLoading}
           />
         );

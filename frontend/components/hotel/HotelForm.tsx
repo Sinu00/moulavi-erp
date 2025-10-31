@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { DestinationMaster } from '@/types';
+import { LocationMaster } from '@/types';
 
 interface HotelMaster {
   id: string;
@@ -17,7 +17,7 @@ interface HotelMaster {
   updatedAt: string;
   location?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
 }
@@ -32,7 +32,7 @@ interface CreateHotelMasterRequest {
 interface HotelFormProps {
   formData: CreateHotelMasterRequest;
   editingHotel: HotelMaster | null;
-  destinations: DestinationMaster[];
+  destinations: LocationMaster[];
   onFormDataChange: (data: CreateHotelMasterRequest) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
@@ -87,7 +87,7 @@ export default function HotelForm({
             <SelectContent>
               {destinations.map((destination) => (
                 <SelectItem key={destination.id} value={destination.id}>
-                  {destination.destinationName}
+                  {destination.name}
                 </SelectItem>
               ))}
             </SelectContent>

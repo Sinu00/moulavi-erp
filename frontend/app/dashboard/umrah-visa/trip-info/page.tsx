@@ -78,6 +78,7 @@ export default function TripInfoPage() {
         .filter((booking: any) => booking.tripInfo && booking.tripInfo.status === 'group_assigned')
         .map((booking: any) => ({
           ...booking.tripInfo,
+          visaType: booking.visaType,
           booking: {
             id: booking.id,
             passengerCount: booking.passengerCount,
@@ -257,6 +258,7 @@ export default function TripInfoPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[130px]">Visa Type</TableHead>
                       <TableHead className="w-[200px]">Group Details</TableHead>
                       <TableHead className="w-[180px]">Arrival Details</TableHead>
                       <TableHead className="w-[180px]">Return Details</TableHead>
@@ -268,7 +270,7 @@ export default function TripInfoPage() {
                   <TableBody>
                     {filteredData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                           {searchQuery 
                             ? 'No trips found matching your search' 
                             : 'No trip information available'}
@@ -278,6 +280,12 @@ export default function TripInfoPage() {
                       filteredData.map((trip) => {
                         return (
                           <TableRow key={trip.id}>
+                            {/* Visa Type */}
+                            <TableCell>
+                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              </Badge>
+                            </TableCell>
                             {/* Group Details */}
                             <TableCell>
                               <div className="space-y-1">

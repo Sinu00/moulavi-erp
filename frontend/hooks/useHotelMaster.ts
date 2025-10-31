@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import { hotelMasterAPI, destinationMasterAPI } from '@/lib/api';
-import { HotelMaster, CreateHotelMasterRequest, UpdateHotelMasterRequest, DestinationMaster } from '@/types';
+import { hotelMasterAPI, locationMasterAPI } from '@/lib/api';
+import { HotelMaster, CreateHotelMasterRequest, UpdateHotelMasterRequest, LocationMaster } from '@/types';
 
 export function useHotelMaster() {
   const [hotels, setHotels] = useState<HotelMaster[]>([]);
-  const [destinations, setDestinations] = useState<DestinationMaster[]>([]);
+  const [destinations, setDestinations] = useState<LocationMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -18,7 +18,7 @@ export function useHotelMaster() {
     return hotels.filter(hotel =>
       hotel.hotelName.toLowerCase().includes(term) ||
       hotel.hotelCode.toLowerCase().includes(term) ||
-      hotel.location?.destinationName.toLowerCase().includes(term) ||
+      hotel.location?.name?.toLowerCase().includes(term) ||
       hotel.location?.city.toLowerCase().includes(term)
     );
   }, [hotels, searchTerm]);
@@ -38,8 +38,8 @@ export function useHotelMaster() {
 
   const loadDestinations = async () => {
     try {
-      const response = await destinationMasterAPI.getActive();
-      setDestinations(response.data.destinationMasters || []);
+      const response = await locationMasterAPI.getActive({ locationType: 'DESTINATION' });
+      setDestinations(response.data.locationMasters || []);
     } catch (error) {
       console.error('Error loading destinations:', error);
       toast.error('Failed to load destinations');
@@ -49,7 +49,7 @@ export function useHotelMaster() {
   const createHotel = async (data: CreateHotelMasterRequest): Promise<boolean> => {
     try {
       await hotelMasterAPI.create(data);
-      toast.success('Hotel created successfully');
+      // Don't show success toast here - parent component will handle it
       await loadHotels();
       return true;
     } catch (error: any) {
@@ -63,7 +63,7 @@ export function useHotelMaster() {
   const updateHotel = async (id: string, data: UpdateHotelMasterRequest): Promise<boolean> => {
     try {
       await hotelMasterAPI.update(id, data);
-      toast.success('Hotel updated successfully');
+      // Don't show success toast here - parent component will handle it
       await loadHotels();
       return true;
     } catch (error: any) {
@@ -77,7 +77,7 @@ export function useHotelMaster() {
   const deleteHotel = async (id: string): Promise<boolean> => {
     try {
       await hotelMasterAPI.delete(id);
-      toast.success('Hotel deleted successfully');
+      // Don't show success toast here - parent component will handle it
       await loadHotels();
       return true;
     } catch (error: any) {
@@ -91,7 +91,7 @@ export function useHotelMaster() {
   const toggleHotelStatus = async (hotel: HotelMaster): Promise<boolean> => {
     try {
       await hotelMasterAPI.toggleStatus(hotel.id);
-      toast.success(`Hotel ${hotel.isActive ? 'deactivated' : 'activated'} successfully`);
+      // Don't show success toast here - parent component will handle it
       await loadHotels();
       return true;
     } catch (error: any) {

@@ -4,16 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Step4Data, Step1Data, Step3Data } from '@/lib/umrah/types';
-import { BOOKING_RULES } from '@/lib/umrah/constants';
-import { Users } from 'lucide-react';
+import { FileUpload } from 'lucide-react';
 
 interface GroupDocumentsStepProps {
   data: Step4Data;
   step1Data: Step1Data;
   step3Data: Step3Data;
-  skipDocuments: boolean;
   onChange: (data: Partial<Step4Data>) => void;
-  onSkipDocumentsChange: (skip: boolean) => void;
   onStep1DataChange: (data: Partial<Step1Data>) => void;
   onAddPassenger: () => void;
   onRemovePassenger: (index: number) => void;
@@ -24,9 +21,7 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
   data,
   step1Data,
   step3Data,
-  skipDocuments,
   onChange,
-  onSkipDocumentsChange,
   onStep1DataChange,
   onAddPassenger,
   onRemovePassenger,
@@ -45,35 +40,24 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
     onChange({ passengers: updatedPassengers });
   };
 
-  const getDocumentRequirements = () => {
-    // Group bookings with hotel accommodation
-    return BOOKING_RULES.group.hotel;
+  const handleFileUpload = (index: number, field: 'panCardPhoto', file: File | null) => {
+    updatePassenger(index, field, file);
   };
 
-  const requirements = getDocumentRequirements();
+  // Ensure we have at least one passenger (lead passenger) for PAN card upload
+  const leadPassenger = data.passengers.find(p => p.isLeadPassenger) || data.passengers[0];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <h4 className="font-medium text-gray-900">Group Passengers & Documents</h4>
-          <p className="text-sm text-gray-600">
-            Add passengers for your group booking
-          </p>
-          <div className="flex items-center gap-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-            <span>🚧</span>
-            <span>Development Mode: Document uploads disabled - Only passenger information required</span>
-          </div>
-        </div>
+      <div className="space-y-2">
+        <h4 className="font-medium text-gray-900">Group Passengers & Documents</h4>
+        <p className="text-sm text-gray-600">
+          Add passengers for your group booking and upload the required PAN card
+        </p>
       </div>
 
-      {/* Group booking: Single document upload section */}
       <div className="space-y-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h5 className="font-medium">Group Documents</h5>
-          </div>
-
+        <Card className="p-6">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Group Name *</Label>
@@ -100,7 +84,7 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
                       passengers: Array(count).fill(null).map((_, index) => ({
                         fullName: index === 0 ? step1Data.groupName : '',
                         isLeadPassenger: index === 0,
-                        panCardPhoto: index === 0 ? data.passengers[0]?.panCardPhoto : null,
+                        panCardPhoto: index === 0 ? (leadPassenger?.panCardPhoto || null) : null,
                         passportFront: null,
                         passportBack: null,
                         iqamaPhoto: null,
@@ -115,88 +99,89 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
               <p className="text-xs text-gray-500">Enter the total number of passengers in your group (1-50 passengers)</p>
             </div>
 
-            {/* Document Requirements Info - Development Mode */}
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <h6 className="font-medium text-green-900 mb-2">Group Booking Documents (Development Mode):</h6>
-              <div className="space-y-1 text-sm text-green-800">
+            {/* Document Requirements Info */}
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <h6 className="font-medium text-blue-900 mb-2">Required Documents:</h6>
+              <div className="space-y-1 text-sm text-blue-800">
                 <div className="flex items-center gap-2">
-                  <span className="text-green-600">•</span>
-                  <span>PAN Card Photo</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-600">•</span>
-                  <span>Passport Front & Back</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-600">•</span>
-                  <span>Hotel Booking Document</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-600">•</span>
-                  <span>Ticket Copy</span>
+                  <span className="text-blue-600">•</span>
+                  <span>PAN Card (lead passenger only)</span>
                 </div>
               </div>
-              <p className="text-xs text-green-700 mt-2">
-                <strong>Development Mode:</strong> Document uploads are disabled. Only passenger information is required.
-                Documents will be handled in production.
+              <p className="text-xs text-blue-700 mt-2">
+                Only one PAN card is required for the entire group. Upload it for the lead passenger.
               </p>
             </div>
 
-            {data.passengers.map((passenger, index) => (
-              <Card key={index} className="p-4 border border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h6 className="font-medium text-gray-900">
-                    Passenger {index + 1} {passenger.isLeadPassenger && '(Lead Passenger)'}
-                  </h6>
-                  <div className="flex items-center space-x-2">
-                    {index === 0 && (
-                      <div className="flex items-center space-x-2 mr-4">
-                        <input
-                          type="checkbox"
-                          id={`lead-${index}`}
-                          checked={passenger.isLeadPassenger}
-                          onChange={(e) => updatePassenger(index, 'isLeadPassenger', e.target.checked)}
-                          className="rounded"
-                          disabled={disabled}
-                        />
-                        <Label htmlFor={`lead-${index}`} className="text-sm">
-                          Lead Passenger
-                        </Label>
-                      </div>
-                    )}
+            {/* Passenger List */}
+            <div className="space-y-3">
+              {data.passengers.map((passenger, index) => (
+                <Card key={index} className="p-4 border border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h6 className="font-medium text-gray-900">
+                      Passenger {index + 1} {passenger.isLeadPassenger && <span className="text-red-600">(Lead Passenger)</span>}
+                    </h6>
                     {data.passengers.length > 1 && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={() => onRemovePassenger(index)}
-                        disabled={disabled}
+                        disabled={disabled || index === 0}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         Remove
                       </Button>
                     )}
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Full Name *</Label>
-                    <Input
-                      placeholder="As per passport"
-                      value={passenger.fullName}
-                      onChange={(e) => updatePassenger(index, 'fullName', e.target.value)}
-                      disabled={disabled}
-                    />
-                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Full Name *</Label>
+                      <Input
+                        placeholder="As per passport"
+                        value={passenger.fullName}
+                        onChange={(e) => updatePassenger(index, 'fullName', e.target.value)}
+                        disabled={disabled}
+                      />
+                    </div>
 
-                  {/* Document uploads disabled for development */}
-                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                    📝 Document uploads will be enabled in production
+                    {/* PAN Card Upload - Only for Lead Passenger */}
+                    {passenger.isLeadPassenger && (
+                      <div className="space-y-2">
+                        <Label>PAN Card *</Label>
+                        <div className="flex items-center gap-4">
+                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              <FileUpload className="w-8 h-8 mb-2 text-gray-500" />
+                              <p className="mb-2 text-sm text-gray-500">
+                                <span className="font-semibold">Click to upload</span> or drag and drop
+                              </p>
+                              <p className="text-xs text-gray-500">PNG, JPG, PDF (MAX. 10MB)</p>
+                            </div>
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/*,.pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                handleFileUpload(index, 'panCardPhoto', file);
+                              }}
+                              disabled={disabled}
+                            />
+                          </label>
+                        </div>
+                        {passenger.panCardPhoto && (
+                          <p className="text-sm text-green-600">
+                            ✓ {passenger.panCardPhoto.name}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              ))}
+            </div>
 
             {data.passengers.length < 50 && (
               <Button
@@ -206,20 +191,11 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
                 disabled={disabled}
                 className="w-full"
               >
-                <Users className="h-4 w-4 mr-2" />
                 Add Another Passenger
               </Button>
             )}
           </div>
         </Card>
-      </div>
-
-      <div className="bg-green-50 p-4 rounded-lg">
-        <p className="text-sm text-green-800">
-          <strong>Development Mode:</strong> Group booking with passenger information only. Document uploads are disabled to match backend development mode.
-          <br />
-          <strong>Backend Status:</strong> Group bookings skip document validation in development mode.
-        </p>
       </div>
     </div>
   );

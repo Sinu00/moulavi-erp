@@ -36,7 +36,7 @@ export class TransportPricingService {
       // Build where clause based on available parameters
       const whereClause: any = {
         vehicleType: transportType,
-        pax: paxCount,
+        paxCount: paxCount,
         isActive: true
       };
 
@@ -390,7 +390,7 @@ export class TransportPricingService {
       // Check if exact configuration exists using TransportMaster
       const whereClause: any = {
         vehicleType: transportType,
-        pax: paxCount,
+        paxCount: paxCount,
         isActive: true
       };
 

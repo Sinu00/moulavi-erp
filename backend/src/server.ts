@@ -6,6 +6,7 @@ import path from 'path';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import partyRoutes from './routes/party.routes';
+import partyContactRoutes from './routes/partyContact.routes';
 import serviceRoutes from './routes/service.routes';
 import uploadRoutes from './routes/upload.routes';
 import userMasterRoutes from './routes/userMaster.routes';
@@ -15,10 +16,9 @@ import transportPricingRoutes from './routes/transportPricing.routes';
 import transportMasterRoutes from './routes/transportMaster.routes';
 import currencyMasterRoutes from './routes/currencyMaster.routes';
 import countryMasterRoutes from './routes/countryMaster.routes';
-import destinationMasterRoutes from './routes/destinationMaster.routes';
 import hotelMasterRoutes from './routes/hotelMaster.routes';
 import airportMasterRoutes from './routes/airportMaster.routes';
-import partyLimitsRoutes from './routes/partyLimits.routes';
+import locationMasterRoutes from './routes/locationMaster.routes';
 import cancellationRoutes from './routes/cancellation.routes';
 import notificationRoutes from './routes/notifications.routes';
 
@@ -51,6 +51,7 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/parties', partyRoutes);
+app.use('/api', partyContactRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userMasterRoutes);
@@ -60,10 +61,9 @@ app.use('/api/transport-pricing', transportPricingRoutes);
 app.use('/api/transport-masters', transportMasterRoutes);
 app.use('/api/currency-masters', currencyMasterRoutes);
 app.use('/api/country-masters', countryMasterRoutes);
-app.use('/api/destination-masters', destinationMasterRoutes);
 app.use('/api/hotel-masters', hotelMasterRoutes);
 app.use('/api/airport-masters', airportMasterRoutes);
-app.use('/api/party-limits', partyLimitsRoutes);
+app.use('/api/location-masters', locationMasterRoutes);
 app.use('/api/cancellation', cancellationRoutes);
 app.use('/api/notifications', notificationRoutes);
 

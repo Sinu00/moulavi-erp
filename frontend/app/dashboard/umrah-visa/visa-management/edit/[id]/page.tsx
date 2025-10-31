@@ -135,6 +135,7 @@ export default function EditUmrahVisaBookingPage() {
       await umrahVisaAPI.updateTransportBookings(bookingId, transportBookings.map(t => ({
         id: t.id,
         travelDate: t.travelDate,
+        travelTime: t.travelTime,
         vehicleType: t.vehicleType,
         paxCount: t.paxCount,
         price: t.price,
@@ -383,7 +384,7 @@ export default function EditUmrahVisaBookingPage() {
                     }}>Add Transport Row</Button>
                   </div>
                   {transportBookings.map((t, idx) => (
-                    <div key={t.id || idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 p-3 bg-gray-50 rounded-md">
+                    <div key={t.id || idx} className="grid grid-cols-1 md:grid-cols-6 gap-3 p-3 bg-gray-50 rounded-md">
                       <div>
                         <label className="text-xs text-gray-600">From</label>
                         <Select value={t.fromLocationId} onValueChange={(val)=> updateTransport(idx, 'fromLocationId', val)}>
@@ -407,6 +408,10 @@ export default function EditUmrahVisaBookingPage() {
                         <Input type="date" value={(t.travelDate || '').slice(0,10)} onChange={(e) => updateTransport(idx, 'travelDate', e.target.value)} />
                       </div>
                       <div>
+                        <label className="text-xs text-gray-600">Time</label>
+                        <Input type="time" value={t.travelTime ? (typeof t.travelTime === 'string' && t.travelTime.includes('T') ? t.travelTime.split('T')[1].slice(0,5) : t.travelTime.slice(0,5)) : ''} onChange={(e) => updateTransport(idx, 'travelTime', e.target.value)} />
+                      </div>
+                      <div>
                         <label className="text-xs text-gray-600">Vehicle</label>
                         <Input value={t.vehicleType || ''} onChange={(e) => updateTransport(idx, 'vehicleType', e.target.value)} />
                       </div>
@@ -414,7 +419,7 @@ export default function EditUmrahVisaBookingPage() {
                         <label className="text-xs text-gray-600">Pax</label>
                         <Input value={t.paxCount || ''} onChange={(e) => updateTransport(idx, 'paxCount', e.target.value)} />
                       </div>
-                      <div className="col-span-1 md:col-span-5 flex justify-end">
+                      <div className="col-span-1 md:col-span-6 flex justify-end">
                         <Button type="button" variant="outline" onClick={async ()=>{
                           if (!t.id) return; try{ await umrahVisaAPI.deleteTransportBooking(t.id); setTransportBookings(prev=> prev.filter((x,i)=>i!==idx)); } catch(e){ toast.error('Delete failed'); }
                         }}>Delete</Button>

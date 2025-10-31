@@ -159,26 +159,6 @@ export class CacheService {
   }
 
   /**
-   * Cache party limits
-   */
-  static async getCachedPartyLimits(partyId: string) {
-    const key = this.generateKey('party-limits', partyId);
-    let limits = this.get(key);
-
-    if (!limits) {
-      limits = await prisma.partyLimits.findUnique({
-        where: { partyId }
-      });
-
-      if (limits) {
-        this.set(key, limits, 15 * 60 * 1000); // 15 minutes
-      }
-    }
-
-    return limits;
-  }
-
-  /**
    * Cache cancellation policies
    */
   static async getCachedCancellationPolicies() {
@@ -266,7 +246,6 @@ export class CacheService {
    */
   static invalidatePartyCache(partyId: string): void {
     this.invalidatePattern(`^party:${partyId}`);
-    this.invalidatePattern(`^party-limits:${partyId}`);
   }
 
   /**

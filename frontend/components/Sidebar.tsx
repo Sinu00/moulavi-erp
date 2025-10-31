@@ -89,6 +89,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Country Master', icon: MapPin, path: '/dashboard/masters/country' },
     { name: 'Currency Master', icon: DollarSign, path: '/dashboard/masters/currency' },
     { name: 'Destination Master', icon: MapPin, path: '/dashboard/masters/destination' },
+    { name: 'Location Master', icon: Database, path: '/dashboard/masters/location' },
     { name: 'Hotel Master', icon: Building, path: '/dashboard/masters/hotel' },
     { name: 'Airport Master', icon: Plane, path: '/dashboard/masters/airport' },
     { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
@@ -349,6 +350,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                             item.path === '/dashboard/masters/country' || 
                             item.path === '/dashboard/masters/currency' ||
                             item.path === '/dashboard/masters/destination' ||
+                            item.path === '/dashboard/masters/location' ||
                             item.path === '/dashboard/masters/hotel' ||
                             item.path === '/dashboard/masters/service-type' ||
                             item.path === '/dashboard/masters/user-role' ||

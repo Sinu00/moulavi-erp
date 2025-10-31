@@ -30,6 +30,8 @@ export const useGroupUmrahBooking = () => {
     step3Data: {
       accommodationType: 'hotel', // Always hotel for group bookings
       hotelBookings: [],
+      transportSegments: [],
+      ziyarah: [],
     },
     step4Data: {
       passengers: [{
@@ -43,7 +45,6 @@ export const useGroupUmrahBooking = () => {
         ticketCopy: null,
       }],
     },
-    skipDocuments: false,
     showDurationDialog: false,
     remainingDays: 0,
     uncoveredDates: [],
@@ -128,10 +129,6 @@ export const useGroupUmrahBooking = () => {
     setBookingState(prev => ({ ...prev, currentStep: step }));
   }, []);
 
-  const setSkipDocuments = useCallback((skip: boolean) => {
-    setBookingState(prev => ({ ...prev, skipDocuments: skip }));
-  }, []);
-
   const submitStep1 = async () => {
     if (!partyId) return false;
 
@@ -154,20 +151,19 @@ export const useGroupUmrahBooking = () => {
       if (response.ok) {
         setBookingState(prev => ({
           ...prev,
-          bookingId: data.bookingId,
           completedSteps: [...prev.completedSteps, 1],
           currentStep: 2,
         }));
         setStepDataHashes(prev => ({ ...prev, 1: generateStepDataHash(1) }));
-        toast.success('Step 1 completed successfully');
+        toast.success('Step 1 validated successfully');
         return true;
       } else {
-        toast.error(data.error || 'Failed to complete step 1');
+        toast.error(data.error || 'Failed to validate step 1');
         return false;
       }
     } catch (error) {
-      console.error('Error submitting step 1:', error);
-      toast.error('Failed to complete step 1');
+      console.error('Error validating step 1:', error);
+      toast.error('Failed to validate step 1');
       return false;
     } finally {
       setIsLoading(false);
@@ -175,11 +171,9 @@ export const useGroupUmrahBooking = () => {
   };
 
   const submitStep2 = async () => {
-    if (!bookingState.bookingId) return false;
-
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/umrah-visa/group/step2/${bookingState.bookingId}`, {
+      const response = await fetch(`${API_URL}/umrah-visa/group/step2`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -197,15 +191,15 @@ export const useGroupUmrahBooking = () => {
           currentStep: 3,
         }));
         setStepDataHashes(prev => ({ ...prev, 2: generateStepDataHash(2) }));
-        toast.success('Step 2 completed successfully');
+        toast.success('Step 2 validated successfully');
         return true;
       } else {
-        toast.error(data.error || 'Failed to complete step 2');
+        toast.error(data.error || 'Failed to validate step 2');
         return false;
       }
     } catch (error) {
-      console.error('Error submitting step 2:', error);
-      toast.error('Failed to complete step 2');
+      console.error('Error validating step 2:', error);
+      toast.error('Failed to validate step 2');
       return false;
     } finally {
       setIsLoading(false);
@@ -213,11 +207,9 @@ export const useGroupUmrahBooking = () => {
   };
 
   const submitStep3 = async () => {
-    if (!bookingState.bookingId) return false;
-
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/umrah-visa/group/step3/${bookingState.bookingId}`, {
+      const response = await fetch(`${API_URL}/umrah-visa/group/step3`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -235,15 +227,15 @@ export const useGroupUmrahBooking = () => {
           currentStep: 4,
         }));
         setStepDataHashes(prev => ({ ...prev, 3: generateStepDataHash(3) }));
-        toast.success('Step 3 completed successfully');
+        toast.success('Step 3 validated successfully');
         return true;
       } else {
-        toast.error(data.error || 'Failed to complete step 3');
+        toast.error(data.error || 'Failed to validate step 3');
         return false;
       }
     } catch (error) {
-      console.error('Error submitting step 3:', error);
-      toast.error('Failed to complete step 3');
+      console.error('Error validating step 3:', error);
+      toast.error('Failed to validate step 3');
       return false;
     } finally {
       setIsLoading(false);
@@ -251,19 +243,26 @@ export const useGroupUmrahBooking = () => {
   };
 
   const submitStep4 = async () => {
-    if (!bookingState.bookingId) return false;
+    if (!partyId) return false;
 
     setIsLoading(true);
     try {
       const payload = {
-        passengerCount: bookingState.step4Data.passengers.length,
-        passengers: JSON.stringify(bookingState.step4Data.passengers.map(p => ({
-          fullName: p.fullName,
-          isLeadPassenger: p.isLeadPassenger,
-        }))),
+        partyId,
+        step1: bookingState.step1Data,
+        step2: bookingState.step2Data,
+        step3: bookingState.step3Data,
+        step4: {
+          passengerCount: bookingState.step4Data.passengers.length,
+          passengers: bookingState.step4Data.passengers.map(p => ({
+            fullName: p.fullName,
+            isLeadPassenger: p.isLeadPassenger,
+            panCardPhoto: p.panCardPhoto,
+          })),
+        },
       };
 
-      const response = await fetch(`${API_URL}/umrah-visa/group/step4/${bookingState.bookingId}`, {
+      const response = await fetch(`${API_URL}/umrah-visa/group/create-booking`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -275,15 +274,20 @@ export const useGroupUmrahBooking = () => {
       const data = await response.json();
       
       if (response.ok) {
+        setBookingState(prev => ({
+          ...prev,
+          bookingId: data.data.bookingId,
+          completedSteps: [...prev.completedSteps, 4],
+        }));
         toast.success('Group Umrah visa booking completed successfully!');
         return true;
       } else {
-        toast.error(data.error || 'Failed to complete step 4');
+        toast.error(data.error || 'Failed to create booking');
         return false;
       }
     } catch (error) {
-      console.error('Error submitting step 4:', error);
-      toast.error('Failed to complete step 4');
+      console.error('Error creating group booking:', error);
+      toast.error('Failed to create booking');
       return false;
     } finally {
       setIsLoading(false);
@@ -407,7 +411,6 @@ export const useGroupUmrahBooking = () => {
     updateStep3Data,
     updateStep4Data,
     setCurrentStep,
-    setSkipDocuments,
     loadPartyData,
     submitStep,
     addPassenger,

@@ -38,7 +38,7 @@ export function useDestinationMaster() {
   const createDestination = async (data: CreateDestinationMasterRequest): Promise<boolean> => {
     try {
       await destinationMasterAPI.create(data);
-      toast.success('Destination created successfully');
+      // Don't show success toast here - parent component will handle it
       await loadDestinations();
       return true;
     } catch (error: any) {
@@ -52,7 +52,7 @@ export function useDestinationMaster() {
   const updateDestination = async (id: string, data: UpdateDestinationMasterRequest): Promise<boolean> => {
     try {
       await destinationMasterAPI.update(id, data);
-      toast.success('Destination updated successfully');
+      // Don't show success toast here - parent component will handle it
       await loadDestinations();
       return true;
     } catch (error: any) {
@@ -66,7 +66,7 @@ export function useDestinationMaster() {
   const deleteDestination = async (id: string): Promise<boolean> => {
     try {
       await destinationMasterAPI.delete(id);
-      toast.success('Destination deleted successfully');
+      // Don't show success toast here - parent component will handle it
       await loadDestinations();
       return true;
     } catch (error: any) {
@@ -80,7 +80,7 @@ export function useDestinationMaster() {
   const toggleDestinationStatus = async (destination: DestinationMaster): Promise<boolean> => {
     try {
       await destinationMasterAPI.toggleStatus(destination.id);
-      toast.success(`Destination ${destination.isActive ? 'deactivated' : 'activated'} successfully`);
+      // Don't show success toast here - parent component will handle it
       await loadDestinations();
       return true;
     } catch (error: any) {

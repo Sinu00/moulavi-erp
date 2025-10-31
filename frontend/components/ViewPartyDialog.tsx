@@ -77,8 +77,50 @@ export default function ViewPartyDialog({
                   <Label className="text-sm font-medium text-gray-500">GST Number</Label>
                   <p className="text-sm text-gray-900 mt-1">{party.gstNumber || 'N/A'}</p>
                 </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">PAN Number</Label>
+                  <p className="text-sm text-gray-900 mt-1">{party.panNumber || 'N/A'}</p>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Aadhaar Number</Label>
+                  <p className="text-sm text-gray-900 mt-1">{party.aadhaarNumber || 'N/A'}</p>
+                </div>
               </div>
             </div>
+
+            {/* Contact Person Details */}
+            {party.contacts && party.contacts.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                  Contact Person Details
+                </h3>
+                
+                <div className="space-y-3">
+                  {party.contacts.map((contact, index) => (
+                    <div key={contact.id || index} className="p-3 border rounded-lg bg-gray-50">
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-xs font-medium text-gray-500">Contact Person Name</Label>
+                          <p className="text-sm text-gray-900 mt-1">{contact.contactName}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-medium text-gray-500">Contact Number</Label>
+                          <p className="text-sm text-gray-900 mt-1">{contact.contactNumber}</p>
+                        </div>
+                        {contact.department && (
+                          <div>
+                            <Label className="text-xs font-medium text-gray-500">Department</Label>
+                            <p className="text-sm text-gray-900 mt-1">{contact.department}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Business Information */}
             <div className="space-y-4">
@@ -123,6 +165,19 @@ export default function ViewPartyDialog({
                     )}
                   </div>
                 </div>
+
+                {party.isSupplier && party.supplierServiceTypes && party.supplierServiceTypes.length > 0 && (
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Supplier Service Types</Label>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {party.supplierServiceTypes.map((type) => (
+                        <Badge key={type} variant="outline" className="text-xs">
+                          {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Login Access</Label>
@@ -182,6 +237,28 @@ export default function ViewPartyDialog({
                 </div>
               </div>
             </div>
+
+            {/* Documents */}
+            {party.documents && party.documents.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                  Documents
+                </h3>
+                
+                <div className="space-y-2">
+                  {party.documents.map((doc) => (
+                    <div key={doc.id} className="p-2 border rounded-lg bg-gray-50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{doc.fileName}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {doc.documentType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Timestamps */}
             <div className="space-y-4">

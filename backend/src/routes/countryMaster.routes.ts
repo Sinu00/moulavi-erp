@@ -48,7 +48,7 @@ router.post(
 
     res.status(201).json({
       success: true,
-      data: country,
+      data: { countryMaster: country },
       message: 'Country created successfully'
     });
   })
@@ -60,14 +60,14 @@ router.get(
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Get all countries (both active and inactive for admin view)
     const countries = await prisma.countryMaster.findMany({
-      where: { isActive: true },
       orderBy: { countryCode: 'asc' }
     });
 
     res.json({
       success: true,
-      data: countries
+      data: { countryMasters: countries }
     });
   })
 );
@@ -83,7 +83,7 @@ router.get(
 
     res.json({
       success: true,
-      data: countries
+      data: { countryMasters: countries }
     });
   })
 );
@@ -106,7 +106,7 @@ router.get(
 
     res.json({
       success: true,
-      data: country
+      data: { countryMaster: country }
     });
   })
 );
@@ -156,7 +156,7 @@ router.put(
 
     res.json({
       success: true,
-      data: updatedCountry,
+      data: { countryMaster: updatedCountry },
       message: 'Country updated successfully'
     });
   })
@@ -214,7 +214,7 @@ router.patch(
 
     res.json({
       success: true,
-      data: updatedCountry,
+      data: { countryMaster: updatedCountry },
       message: `Country ${updatedCountry.isActive ? 'activated' : 'deactivated'} successfully`
     });
   })

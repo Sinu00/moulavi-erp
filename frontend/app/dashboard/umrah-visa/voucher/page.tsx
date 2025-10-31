@@ -34,6 +34,7 @@ import { getUser, hasRole } from '@/lib/auth';
 import { TripInfo, UmrahVisaStatus } from '@/types';
 import { umrahVisaAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
+import { VoucherPreviewDialog } from '@/components/voucher/VoucherPreviewDialog';
 
 export default function VoucherPage() {
   const user = getUser();
@@ -46,32 +47,39 @@ export default function VoucherPage() {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<TripInfo | null>(null);
 
-  if (!user || !hasRole(['admin', 'staff'])) {
-    return null;
-  }
-
-  useEffect(() => {
-    fetchTripInfo();
-  }, []);
-
-  useEffect(() => {
-    filterData();
-  }, [searchQuery, tripInfoList]);
-
   const fetchTripInfo = async () => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('accessToken');
       
+      // Fetch ALL bookings - don't filter on backend, we'll filter by booking.status OR tripInfo.status
       const response = await umrahVisaAPI.getBookings({ limit: 1000 });
-
-      if (response.error) throw new Error('Failed to fetch');
       const data = response.data;
       
+      // Include ALL bookings where booking.status is 'voucher' OR tripInfo.status is 'voucher'
+      // Even if tripInfo doesn't exist, if booking.status is 'voucher', include it
       const tripInfoData = data.bookings
-        .filter((booking: any) => booking.tripInfo)
+        .filter((booking: any) => {
+          // Include if booking status is 'voucher' OR tripInfo status is 'voucher'
+          return booking.status === 'voucher' || booking.tripInfo?.status === 'voucher';
+        })
         .map((booking: any) => ({
-          ...booking.tripInfo,
+          // Use tripInfo if exists, otherwise create a minimal tripInfo from booking data
+          ...(booking.tripInfo || {
+            id: `temp-${booking.id}`,
+            bookingId: booking.id,
+            partyName: booking.service?.party?.partyName || '',
+            groupNumber: booking.groupNumber || '',
+            groupName: booking.groupName || '',
+            arrivalDate: booking.travelDetails?.arrivalDate || new Date().toISOString(),
+            departureDate: booking.travelDetails?.departureDate || new Date().toISOString(),
+            status: booking.status, // Use booking status as tripInfo status
+            createdAt: booking.createdAt,
+            updatedAt: booking.updatedAt,
+            documentsDownloadCount: 0,
+            updatedBy: '',
+          }),
+          visaType: booking.visaType,
           booking: { id: booking.id, passengerCount: booking.passengerCount, service: booking.service },
         }));
 
@@ -85,6 +93,7 @@ export default function VoucherPage() {
   };
 
   const filterData = () => {
+    // Filter by tripInfo status 'voucher' (all entries should be 'voucher' at this point)
     let filtered = tripInfoList.filter(trip => trip.status === 'voucher');
 
     if (searchQuery) {
@@ -99,6 +108,22 @@ export default function VoucherPage() {
     setFilteredData(filtered);
   };
 
+  useEffect(() => {
+    if (user && hasRole(['admin', 'staff'])) {
+      fetchTripInfo();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    filterData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, tripInfoList]);
+
+  if (!user || !hasRole(['admin', 'staff'])) {
+    return null;
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -107,22 +132,22 @@ export default function VoucherPage() {
     });
   };
 
-  const handleGenerateVoucher = async () => {
-    if (!selectedTrip) return;
-
-    try {
-      toast.info('Generating voucher...');
-      const token = localStorage.getItem('accessToken');
-      const response = await umrahVisaAPI.generateVoucher(selectedTrip.bookingId);
-
-      if (response.error) throw new Error('Failed');
-      toast.success('Voucher generated successfully!');
-      setShowGenerateDialog(false);
-      setSelectedTrip(null);
-      fetchTripInfo();
-    } catch (error: any) {
-      toast.error(error.message);
+  const handleGenerateVoucherClick = (trip: TripInfo) => {
+    // Ensure we have the correct booking ID
+    const bookingId = (trip as any).booking?.id || trip.bookingId;
+    if (!bookingId) {
+      toast.error('Booking ID not found');
+      return;
     }
+    // Store booking ID in trip for later use
+    const tripWithBookingId = { ...trip, bookingId };
+    setSelectedTrip(tripWithBookingId);
+    setShowGenerateDialog(true);
+  };
+
+  const handleVoucherSuccess = () => {
+    setSelectedTrip(null);
+    fetchTripInfo();
   };
 
   return (
@@ -173,6 +198,7 @@ export default function VoucherPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[130px]">Visa Type</TableHead>
                         <TableHead className="w-[200px]">Group Details</TableHead>
                         <TableHead className="w-[180px]">Party Name</TableHead>
                         <TableHead className="w-[150px]">Arrival Date</TableHead>
@@ -183,15 +209,20 @@ export default function VoucherPage() {
                     <TableBody>
                       {isLoading ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8">Loading...</TableCell>
+                          <TableCell colSpan={6} className="text-center py-8">Loading...</TableCell>
                         </TableRow>
                       ) : filteredData.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-gray-500">No bookings found</TableCell>
+                          <TableCell colSpan={6} className="text-center py-8 text-gray-500">No bookings found</TableCell>
                         </TableRow>
                       ) : (
                         filteredData.map((trip) => (
                           <TableRow key={trip.id}>
+                            <TableCell>
+                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              </Badge>
+                            </TableCell>
                             <TableCell>
                               <div className="space-y-1">
                                 <div className="font-semibold">{trip.groupNumber || 'N/A'}</div>
@@ -206,7 +237,7 @@ export default function VoucherPage() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Button size="sm" onClick={() => { setSelectedTrip(trip); setShowGenerateDialog(true); }} className="flex items-center gap-1">
+                              <Button size="sm" onClick={() => handleGenerateVoucherClick(trip)} className="flex items-center gap-1">
                                 <Ticket className="h-3 w-3" />
                                 Generate Voucher
                               </Button>
@@ -223,23 +254,14 @@ export default function VoucherPage() {
         </div>
       </div>
 
-      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate Transport Voucher</DialogTitle>
-            <DialogDescription>Generate voucher for this booking</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              This will generate a transport voucher and move the booking to bill status.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>Cancel</Button>
-            <Button onClick={handleGenerateVoucher}>Generate Voucher</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selectedTrip && (
+        <VoucherPreviewDialog
+          open={showGenerateDialog}
+          onOpenChange={setShowGenerateDialog}
+          bookingId={(selectedTrip as any).booking?.id || selectedTrip.bookingId}
+          onSuccess={handleVoucherSuccess}
+        />
+      )}
     </div>
   );
 }

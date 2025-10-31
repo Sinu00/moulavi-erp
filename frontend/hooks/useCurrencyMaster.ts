@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { currencyMasterAPI } from '@/lib/api';
 
@@ -28,10 +28,20 @@ export function useCurrencyMaster() {
     try {
       setLoading(true);
       const response = await currencyMasterAPI.getAll();
-      setCurrencies(response.data.data || []);
+      console.log('Currency getAll Response:', response);
+      console.log('Response data:', response.data);
+      // Backend returns: { success: true, data: { currencyMasters: [...] }, pagination: {...} }
+      // Axios wraps it in response.data, so we need response.data.data.currencyMasters
+      const currencies = response.data?.data?.currencyMasters || response.data?.currencyMasters || response.data || [];
+      console.log('Extracted currencies:', currencies);
+      // Ensure it's always an array
+      const currencyArray = Array.isArray(currencies) ? currencies : [];
+      console.log('Setting currencies array:', currencyArray);
+      setCurrencies(currencyArray);
     } catch (error) {
       toast.error('Failed to load currencies');
       console.error('Error loading currencies:', error);
+      setCurrencies([]);
     } finally {
       setLoading(false);
     }
@@ -40,7 +50,7 @@ export function useCurrencyMaster() {
   const createCurrency = async (data: CreateCurrencyMasterRequest) => {
     try {
       await currencyMasterAPI.create(data);
-      toast.success('Currency created successfully');
+      // Don't show success toast here - parent component will handle it
       await loadCurrencies();
       return true;
     } catch (error: any) {
@@ -54,7 +64,7 @@ export function useCurrencyMaster() {
   const updateCurrency = async (id: string, data: CreateCurrencyMasterRequest) => {
     try {
       await currencyMasterAPI.update(id, data);
-      toast.success('Currency updated successfully');
+      // Don't show success toast here - parent component will handle it
       await loadCurrencies();
       return true;
     } catch (error: any) {
@@ -68,7 +78,7 @@ export function useCurrencyMaster() {
   const deleteCurrency = async (id: string) => {
     try {
       await currencyMasterAPI.delete(id);
-      toast.success('Currency deleted successfully');
+      // Don't show success toast here - parent component will handle it
       await loadCurrencies();
       return true;
     } catch (error: any) {
@@ -80,11 +90,20 @@ export function useCurrencyMaster() {
   };
 
 
-  const filteredCurrencies = currencies.filter(currency =>
-    currency.currencyCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    currency.currencyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    currency.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCurrencies = useMemo(() => {
+    if (!Array.isArray(currencies)) {
+      return [];
+    }
+    if (!searchTerm) {
+      return currencies;
+    }
+    const term = searchTerm.toLowerCase();
+    return currencies.filter(currency =>
+      currency.currencyCode.toLowerCase().includes(term) ||
+      currency.currencyName.toLowerCase().includes(term) ||
+      currency.symbol.toLowerCase().includes(term)
+    );
+  }, [currencies, searchTerm]);
 
   useEffect(() => {
     loadCurrencies();

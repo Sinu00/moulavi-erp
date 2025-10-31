@@ -43,16 +43,6 @@ export class ConflictService {
       }
     }
 
-    // Check passenger limit conflicts
-    const passengerConflict = await this.checkPassengerLimitConflict(
-      bookingData.serviceId,
-      bookingData.passengerCount,
-      bookingData.accommodationType || 'hotel'
-    );
-    if (passengerConflict) {
-      conflicts.push(passengerConflict);
-    }
-
     // Check for date overlaps
     if (bookingData.travelDetails?.arrivalDate && bookingData.travelDetails?.departureDate) {
       const dateConflict = await this.checkDateOverlap(
@@ -147,77 +137,6 @@ export class ConflictService {
         message: `Flight ${flightNumber} on ${arrivalDate} to ${departureDate} is already booked`,
         severity: 'error',
         conflictingData: existingBooking
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Check passenger limits for party
-   */
-  private static async checkPassengerLimitConflict(
-    serviceId: string,
-    passengerCount: number,
-    accommodationType: string
-  ): Promise<ConflictDetail | null> {
-    // Get the service to find the party
-    const service = await prisma.service.findUnique({
-      where: { id: serviceId },
-      select: { partyId: true }
-    });
-
-    if (!service) {
-      return {
-        type: 'passenger_limit',
-        message: 'Service not found',
-        severity: 'error'
-      };
-    }
-
-    // Get party limits
-    const partyLimits = await prisma.partyLimits.findUnique({
-      where: { partyId: service.partyId }
-    });
-
-    if (!partyLimits) {
-      return null; // No limits set
-    }
-
-    const maxPassengers = accommodationType === 'iqama' 
-      ? partyLimits.maxPassengersIqama 
-      : partyLimits.maxPassengers;
-
-    // Check for existing bookings on the same dates that might exceed limits
-    const existingBookings = await prisma.umrahVisaBooking.findMany({
-      where: {
-        service: {
-          partyId: service.partyId
-        },
-        isDeleted: false,
-        status: {
-          not: 'cancelled'
-        }
-      },
-      select: {
-        passengerCount: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
-
-    const totalPassengers = existingBookings.reduce((sum: number, booking: any) => sum + booking.passengerCount, 0);
-    
-    if (totalPassengers + passengerCount > maxPassengers * 2) { // Allow some flexibility
-      return {
-        type: 'passenger_limit',
-        message: `Total passengers ${totalPassengers + passengerCount} may exceed party capacity`,
-        severity: 'warning',
-        conflictingData: {
-          existing: totalPassengers,
-          requested: passengerCount,
-          limit: maxPassengers
-        }
       };
     }
 

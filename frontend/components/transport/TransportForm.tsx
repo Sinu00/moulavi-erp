@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { DestinationMaster } from '@/types';
+import { LocationMaster } from '@/types';
 
 interface TransportMaster {
   id: string;
@@ -19,12 +19,12 @@ interface TransportMaster {
   updatedAt: string;
   fromLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
   toLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
 }
@@ -41,7 +41,7 @@ interface CreateTransportMasterRequest {
 interface TransportFormProps {
   formData: CreateTransportMasterRequest;
   editingTransport: TransportMaster | null;
-  destinations: DestinationMaster[];
+  destinations: LocationMaster[];
   onFormDataChange: (data: CreateTransportMasterRequest) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
@@ -84,7 +84,7 @@ export default function TransportForm({
             <SelectContent>
               {destinations.map((destination) => (
                 <SelectItem key={destination.id} value={destination.id}>
-                  {destination.destinationName}
+                  {destination.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -103,7 +103,7 @@ export default function TransportForm({
             <SelectContent>
               {destinations.map((destination) => (
                 <SelectItem key={destination.id} value={destination.id}>
-                  {destination.destinationName}
+                  {destination.name}
                 </SelectItem>
               ))}
             </SelectContent>

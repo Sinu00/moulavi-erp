@@ -47,7 +47,7 @@ export function useUserMaster() {
   const createUser = async (data: CreateUserRequest) => {
     try {
       await userAPI.create(data);
-      toast.success('User created successfully');
+      // Don't show success toast here - parent component will handle it
       await loadUsers();
       return true;
     } catch (error: any) {
@@ -61,7 +61,7 @@ export function useUserMaster() {
   const updateUser = async (id: string, data: CreateUserRequest) => {
     try {
       await userAPI.update(id, data);
-      toast.success('User updated successfully');
+      // Don't show success toast here - parent component will handle it
       await loadUsers();
       return true;
     } catch (error: any) {
@@ -75,7 +75,7 @@ export function useUserMaster() {
   const deleteUser = async (id: string) => {
     try {
       await userAPI.delete(id);
-      toast.success('User deleted successfully');
+      // Don't show success toast here - parent component will handle it
       await loadUsers();
       return true;
     } catch (error: any) {

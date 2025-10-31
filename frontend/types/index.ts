@@ -58,6 +58,9 @@ export interface Party {
   whatsappNumber?: string;
   address?: string;
   gstNumber?: string;
+  panNumber?: string;
+  aadhaarNumber?: string;
+  supplierServiceTypes?: string[];
   customerType: 'direct' | 'b2b';
   accountCurrencyId: string;
   accountCurrency?: CurrencyMaster;
@@ -71,6 +74,8 @@ export interface Party {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  contacts?: PartyContact[];
+  documents?: PartyDocument[];
 }
 
 export interface CreatePartyRequest {
@@ -80,6 +85,10 @@ export interface CreatePartyRequest {
   whatsapp_number?: string;
   address?: string;
   gst_number?: string;
+  pan_number?: string;
+  aadhaar_number?: string;
+  supplier_service_types?: string[];
+  contacts?: CreatePartyContactRequest[];
   customer_type: 'direct' | 'b2b' | '';
   account_currency_id: string;
   is_supplier?: boolean;
@@ -88,6 +97,43 @@ export interface CreatePartyRequest {
   email_notification?: boolean;
   sms_notification?: boolean;
   marketing_notification?: boolean;
+}
+
+export interface PartyContact {
+  id: string;
+  partyId: string;
+  contactName: string;
+  contactNumber: string;
+  department?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePartyContactRequest {
+  contact_name: string;
+  contact_number: string;
+  department?: string;
+}
+
+export interface UpdatePartyContactRequest {
+  contact_name?: string;
+  contact_number?: string;
+  department?: string;
+}
+
+export type PartyDocumentType = 'gst_certificate' | 'pan_card' | 'aadhaar_card' | 'other';
+
+export interface PartyDocument {
+  id: string;
+  partyId: string;
+  documentType: PartyDocumentType;
+  fileName: string;
+  filePath: string;
+  fileSize?: number;
+  mimeType?: string;
+  uploadedAt: string;
+  isDeleted: boolean;
+  deletedAt?: string;
 }
 
 // Umrah Visa Status Type
@@ -211,6 +257,7 @@ export interface TripInfo {
   confirmationUploadedAt?: string;
   updatedBy: string;
   status: UmrahVisaStatus;
+  visaType?: 'individual_visa' | 'group_visa';
   createdAt: string;
   updatedAt: string;
   updatedByUser?: {
@@ -371,7 +418,7 @@ export interface CountryMaster {
   id: string;
   countryCode: string;
   countryName: string;
-  nationality: string;
+  currencyCode: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -380,13 +427,13 @@ export interface CountryMaster {
 export interface CreateCountryMasterRequest {
   countryCode: string;
   countryName: string;
-  nationality: string;
+  currencyCode: string;
 }
 
 export interface UpdateCountryMasterRequest {
   countryCode?: string;
   countryName?: string;
-  nationality?: string;
+  currencyCode?: string;
   isActive?: boolean;
 }
 
@@ -438,6 +485,44 @@ export interface UpdateDestinationMasterRequest {
   destinationName?: string;
   city?: string;
   country?: string;
+  isActive?: boolean;
+}
+
+// Location Master Types
+export type LocationType = 'AIRPORT' | 'DESTINATION' | 'ZIYARAT';
+
+export interface LocationMaster {
+  id: string;
+  code: string;
+  name: string;
+  locationType: LocationType;
+  countryId: string;
+  city: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  country?: {
+    id: string;
+    countryCode: string;
+    countryName: string;
+  };
+}
+
+export interface CreateLocationMasterRequest {
+  code: string;
+  name: string;
+  locationType: LocationType;
+  countryId: string;
+  city: string;
+  isActive?: boolean;
+}
+
+export interface UpdateLocationMasterRequest {
+  code?: string;
+  name?: string;
+  locationType?: LocationType;
+  countryId?: string;
+  city?: string;
   isActive?: boolean;
 }
 

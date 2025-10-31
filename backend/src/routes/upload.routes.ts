@@ -4,7 +4,7 @@ import multerS3 from 'multer-s3';
 import path from 'path';
 import fs from 'fs';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { prisma } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -384,6 +384,221 @@ router.delete(
     // Delete database record
     await prisma.document.delete({
       where: { id: documentId }
+    });
+    
+    res.json({ message: 'Document deleted successfully' });
+  })
+);
+
+// Party Document Upload Routes
+
+// Configure multer storage for party documents
+const partyDocumentStorage = isS3Configured()
+  ? multerS3({
+      s3: s3Client!,
+      bucket: S3_CONFIG.BUCKET_NAME,
+      key: (req: any, file: Express.Multer.File, cb: any) => {
+        const { partyId } = req.params;
+        const { document_type } = req.body;
+        
+        // Generate unique filename
+        const uniqueFileName = generateUniqueFileName(file.originalname, file.mimetype);
+        
+        // Generate S3 key for party documents
+        const timestamp = Date.now();
+        const sanitizedFileName = uniqueFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const key = `parties/${partyId}/${document_type || 'general'}/${timestamp}_${sanitizedFileName}`;
+        cb(null, key);
+      },
+      metadata: (req: any, file: Express.Multer.File, cb: any) => {
+        cb(null, {
+          originalName: file.originalname,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: req.user?.id || 'unknown'
+        });
+      },
+      contentType: multerS3.AUTO_CONTENT_TYPE,
+    })
+  : multer.diskStorage({
+      destination: (req, file, cb) => {
+        const uploadsDir = path.join(__dirname, '../../uploads/parties');
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        cb(null, uploadsDir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = `${Date.now()}-${uuidv4()}`;
+        cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+      },
+    });
+
+const partyDocumentUpload = multer({
+  storage: partyDocumentStorage,
+  fileFilter: (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    // Validate file type
+    if (!isValidFileType(file.mimetype)) {
+      return cb(new Error(`Invalid file type. Allowed types: ${S3_CONFIG.ALLOWED_FILE_TYPES.join(', ')}`));
+    }
+    
+    // Validate document type for party documents
+    const { document_type } = req.body;
+    const validPartyDocumentTypes = ['gst_certificate', 'pan_card', 'aadhaar_card', 'other'];
+    if (document_type && !validPartyDocumentTypes.includes(document_type)) {
+      return cb(new Error(`Invalid document type. Allowed types: ${validPartyDocumentTypes.join(', ')}`));
+    }
+    
+    cb(null, true);
+  },
+  limits: {
+    fileSize: S3_CONFIG.MAX_FILE_SIZE,
+  },
+});
+
+// Upload document for a party
+router.post(
+  '/party/:partyId',
+  authenticate,
+  authorize('admin', 'staff'),
+  partyDocumentUpload.single('document'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { partyId } = req.params;
+    const { document_type } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    // Verify party exists
+    const party = await prisma.party.findUnique({
+      where: { id: partyId },
+      select: { id: true }
+    });
+    
+    if (!party) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    
+    // Validate document type
+    const validPartyDocumentTypes = ['gst_certificate', 'pan_card', 'aadhaar_card', 'other'];
+    if (!document_type || !validPartyDocumentTypes.includes(document_type)) {
+      return res.status(400).json({ error: 'Valid document_type is required. Allowed types: gst_certificate, pan_card, aadhaar_card, other' });
+    }
+    
+    // Save document record
+    const document = await prisma.partyDocument.create({
+      data: {
+        partyId,
+        documentType: document_type as any,
+        fileName: req.file.originalname,
+        filePath: isS3Configured() ? (req.file as any).location : req.file.path,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype
+      }
+    });
+    
+    res.status(201).json({
+      document,
+      message: 'Document uploaded successfully',
+    });
+  })
+);
+
+// Get all documents for a party
+router.get(
+  '/party/:partyId/documents',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { partyId } = req.params;
+    
+    // Verify party exists
+    const party = await prisma.party.findUnique({
+      where: { id: partyId },
+      select: { id: true }
+    });
+    
+    if (!party) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    
+    const documents = await prisma.partyDocument.findMany({
+      where: {
+        partyId,
+        isDeleted: false
+      },
+      orderBy: { uploadedAt: 'desc' }
+    });
+    
+    res.json({ documents });
+  })
+);
+
+// Get party document download
+router.get(
+  '/party-document/:documentId',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { documentId } = req.params;
+    
+    const document = await prisma.partyDocument.findUnique({
+      where: { id: documentId }
+    });
+    
+    if (!document || document.isDeleted) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    // Handle file download based on storage type
+    if (isS3Configured()) {
+      // Generate presigned URL for S3 file
+      try {
+        const downloadUrl = await generateDownloadUrl(document.filePath);
+        res.json({
+          downloadUrl,
+          fileName: document.fileName,
+          fileSize: document.fileSize,
+          mimeType: document.mimeType
+        });
+      } catch (error) {
+        console.error('Error generating download URL:', error);
+        res.status(500).json({ error: 'Failed to generate download URL' });
+      }
+    } else {
+      // Serve local file
+      if (fs.existsSync(document.filePath)) {
+        res.download(document.filePath, document.fileName);
+      } else {
+        res.status(404).json({ error: 'File not found' });
+      }
+    }
+  })
+);
+
+// Delete party document (soft delete)
+router.delete(
+  '/party-document/:documentId',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { documentId } = req.params;
+    
+    const document = await prisma.partyDocument.findUnique({
+      where: { id: documentId }
+    });
+    
+    if (!document || document.isDeleted) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    // Soft delete
+    await prisma.partyDocument.update({
+      where: { id: documentId },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date()
+      }
     });
     
     res.json({ message: 'Document deleted successfully' });

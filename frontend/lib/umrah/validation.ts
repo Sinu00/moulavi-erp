@@ -1,6 +1,6 @@
 // Umrah Visa Booking Validation Utilities
 
-import { BOOKING_LIMITS, FLIGHT_NUMBER_REGEX, BOOKING_RULES } from './constants';
+import { BOOKING_LIMITS, FLIGHT_NUMBER_REGEX } from './constants';
 import { Step1Data, Step2Data, Step3Data, Step4Data, Passenger } from './types';
 
 export const formatFlightNumber = (value: string): string => {
@@ -111,12 +111,8 @@ export const validateStep2 = (data: Step2Data, airports: any[]): string | null =
     return durationResult.error;
   }
 
-  const selectedAirport = airports.find(a => a.id === data.arrivalAirportId);
-  if (selectedAirport && ['JED', 'MED'].includes(selectedAirport.airportCode)) {
-    if (!data.transportBookings || data.transportBookings.length === 0) {
-      return 'Transport selection is required for Jeddah/Medina airports';
-    }
-  }
+  // Transport validation moved to Step 3 (accommodation step)
+  // No transport validation needed in Step 2
 
   return null;
 };
@@ -148,92 +144,86 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
     if (coverage.remainingDays > 0) {
       return `You have ${coverage.remainingDays} day${coverage.remainingDays > 1 ? 's' : ''} without accommodation coverage`;
     }
+
+    // Ziyarah basic validations
+    if (data.ziyarah && data.ziyarah.length) {
+      for (const z of data.ziyarah) {
+        if (!z.date) continue;
+        const d = new Date(z.date + 'T00:00:00');
+        // 5 = Friday when using getUTCDay with date-only baseline
+        if (d.getUTCDay() === 5) {
+          return `${z.city} Ziyarah cannot be scheduled on Friday. Please adjust the date.`;
+        }
+        if (departureDate && z.date === departureDate) {
+          return `${z.city} Ziyarah collides with departure date. Please choose another day.`;
+        }
+      }
+    }
   }
   return null;
 };
 
-export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: Step3Data, skipDocuments: boolean): string | null => {
-  const isGroupBooking = step1Data.bookingMode === 'group_number';
-  
-  if (isGroupBooking) {
-    // Group booking validation (matches backend - no document validation in dev mode)
-    if (!step1Data.groupName?.trim()) {
-      return 'Group name is required';
+export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: Step3Data): string | null => {
+  const hasGroupNumber = step1Data.bookingMode === 'group_number';
+  const passengerCount = data.passengers.length;
+
+  // Basic validation
+  if (passengerCount < 1) {
+    return 'At least one passenger is required';
+  }
+
+  if (step3Data.accommodationType === 'iqama' && passengerCount > BOOKING_LIMITS.MAX_PASSENGERS_IQAMA) {
+    return `Maximum ${BOOKING_LIMITS.MAX_PASSENGERS_IQAMA} passengers allowed for iqama accommodation`;
+  }
+
+  const leadPassengers = data.passengers.filter(p => p.isLeadPassenger);
+  if (leadPassengers.length !== 1) {
+    return 'Exactly one lead passenger is required';
+  }
+
+  // Validate passenger names
+  for (const passenger of data.passengers) {
+    if (!passenger.fullName.trim()) {
+      return 'All passengers must have a full name';
+    }
+  }
+
+  // Document validation based on booking mode
+  if (hasGroupNumber) {
+    // Individual booking WITH group number: Only lead passenger needs documents
+    const leadPassenger = data.passengers.find(p => p.isLeadPassenger);
+    if (!leadPassenger) {
+      return 'Lead passenger not found';
     }
 
-    const passengerCount = data.passengers.length;
-    if (passengerCount < 1 || passengerCount > 50) {
-      return 'Passenger count must be between 1 and 50';
+    if (!leadPassenger.panCardPhoto) {
+      return 'Lead passenger PAN card is required';
     }
 
-    const leadPassengers = data.passengers.filter(p => p.isLeadPassenger);
-    if (leadPassengers.length !== 1) {
-      return 'Exactly one lead passenger is required';
-    }
-
-    for (const passenger of data.passengers) {
-      if (!passenger.fullName.trim()) {
-        return 'All passengers must have a full name';
+    if (step3Data.accommodationType === 'hotel') {
+      if (!leadPassenger.ticketCopy) {
+        return 'Ticket copy is required for lead passenger';
+      }
+      if (!leadPassenger.hotelBooking) {
+        return 'Hotel copy is required for lead passenger';
+      }
+    } else if (step3Data.accommodationType === 'iqama') {
+      if (!leadPassenger.iqamaPhoto) {
+        return 'Iqama copy is required for lead passenger';
       }
     }
-
-    // Group bookings skip document validation in development mode (matches backend)
-    return null;
   } else {
-    // Individual booking validation (matches backend - requires documents)
-    const passengerCount = data.passengers.length;
-    
-    if (step3Data.accommodationType === 'iqama' && passengerCount > BOOKING_LIMITS.MAX_PASSENGERS_IQAMA) {
-      return `Maximum ${BOOKING_LIMITS.MAX_PASSENGERS_IQAMA} passengers allowed for iqama accommodation`;
-    }
-
-    if (passengerCount < 1) {
-      return 'At least one passenger is required';
-    }
-
-    const leadPassengers = data.passengers.filter(p => p.isLeadPassenger);
-    if (leadPassengers.length !== 1) {
-      return 'Exactly one lead passenger is required';
-    }
-
+    // Individual booking WITHOUT group number: All passengers need passport, lead needs PAN
     for (const passenger of data.passengers) {
-      if (!passenger.fullName.trim()) {
-        return 'All passengers must have a full name';
+      if (!passenger.passportFront) {
+        return `Passport front is required for ${passenger.fullName || 'passenger'}`;
       }
-      
-      // Document validation only if not in skip mode
-      if (!skipDocuments) {
-        if (passenger.isLeadPassenger) {
-          // Lead passenger requirements (matches backend)
-          if (!passenger.panCardPhoto) {
-            return 'Lead passenger PAN card photo is required';
-          }
-          if (!passenger.passportFront) {
-            return 'Lead passenger passport front is required';
-          }
-          if (!passenger.passportBack) {
-            return 'Lead passenger passport back is required';
-          }
-          
-          // Conditional documents for lead passenger
-          if (step3Data.accommodationType === 'iqama' && !passenger.iqamaPhoto) {
-            return 'Iqama photo is required for iqama accommodation';
-          }
-          if (step3Data.accommodationType === 'hotel' && !passenger.hotelBooking) {
-            return 'Hotel booking document is required for hotel accommodation';
-          }
-          if (step3Data.accommodationType === 'hotel' && !passenger.ticketCopy) {
-            return 'Ticket copy is required for hotel accommodation';
-          }
-        } else {
-          // Other passengers requirements (matches backend)
-          if (!passenger.passportFront) {
-            return `Passport front is required for ${passenger.fullName}`;
-          }
-          if (!passenger.passportBack) {
-            return `Passport back is required for ${passenger.fullName}`;
-          }
-        }
+      if (!passenger.passportBack) {
+        return `Passport back is required for ${passenger.fullName || 'passenger'}`;
+      }
+
+      if (passenger.isLeadPassenger && !passenger.panCardPhoto) {
+        return 'Lead passenger PAN card is required';
       }
     }
   }

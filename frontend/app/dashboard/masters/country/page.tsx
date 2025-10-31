@@ -1,36 +1,85 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
+import { useCountryMaster } from '@/hooks/useCountryMaster';
 import Sidebar from '@/components/Sidebar';
-import { countryMasterAPI } from '@/lib/api';
-import { CountryMaster, CreateCountryMasterRequest, UpdateCountryMasterRequest } from '@/types';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, MapPin, Menu } from 'lucide-react';
+import CountryStatsCards from '@/components/country/CountryStatsCards';
+import CountryTable from '@/components/CountryTable';
+import CountryForm from '@/components/country/CountryForm';
+import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
+import { currencyMasterAPI, countryMasterAPI } from '@/lib/api';
+import { Plus, Menu, Trash2, Download } from 'lucide-react';
+import { CountryMaster, CreateCountryMasterRequest } from '@/types';
 
 export default function CountryMasterPage() {
   const router = useRouter();
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [countries, setCountries] = useState<CountryMaster[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCountry, setEditingCountry] = useState<CountryMaster | null>(null);
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState<{
+    open: boolean;
+    loading: boolean;
+  }>({
+    open: false,
+    loading: false
+  });
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [formData, setFormData] = useState<CreateCountryMasterRequest>({
     countryCode: '',
     countryName: '',
-    nationality: ''
+    currencyCode: ''
   });
+  const [mounted, setMounted] = useState(false);
+  const [currencies, setCurrencies] = useState<any[]>([]);
+
+  const {
+    countries,
+    loading,
+    searchTerm,
+    setSearchTerm,
+    filteredCountries,
+    loadCountries
+  } = useCountryMaster();
+
+  useEffect(() => {
+    const loadCurrencies = async () => {
+      try {
+        const response = await currencyMasterAPI.getActive();
+        console.log('Currency getActive Response:', response);
+        console.log('Response data:', response.data);
+        // Backend returns: { success: true, data: { currencyMasters: [...] } }
+        // Axios wraps it in response.data, so we need response.data.data.currencyMasters
+        const currencies = response.data?.data?.currencyMasters || response.data?.currencyMasters || response.data || [];
+        console.log('Extracted currencies:', currencies);
+        const currencyArray = Array.isArray(currencies) ? currencies : [];
+        console.log('Setting currencies array (length:', currencyArray.length, '):', currencyArray);
+        if (currencyArray.length === 0) {
+          console.warn('No currencies found - array is empty');
+        }
+        setCurrencies(currencyArray);
+      } catch (error: any) {
+        console.error('Error loading currencies:', error);
+        console.error('Error response:', error.response);
+        toast.error('Failed to load currencies. Please check if currencies are seeded.');
+        setCurrencies([]);
+      }
+    };
+    if (user && hasRole(['admin', 'staff'])) {
+      loadCurrencies();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -39,47 +88,42 @@ export default function CountryMasterPage() {
     }
   }, [user, router]);
 
-  useEffect(() => {
-    if (user && hasRole(['admin', 'staff'])) {
-      loadCountries();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.countryCode || !formData.countryName || !formData.currencyCode) {
+      return;
     }
-  }, []);
-
-  const loadCountries = async () => {
+    
     try {
-      setLoading(true);
-      const response = await countryMasterAPI.getAll({ limit: 1000 });
-      setCountries(response.data.countryMasters || []);
-    } catch (error) {
-      toast.error('Failed to load countries');
-      console.error('Error loading countries:', error);
-    } finally {
-      setLoading(false);
+      if (editingCountry) {
+        const response = await countryMasterAPI.update(editingCountry.id, formData);
+        console.log('Update response:', response);
+        handleCountryUpdated();
+      } else {
+        const response = await countryMasterAPI.create(formData);
+        console.log('Create response:', response);
+        handleCountryCreated();
+      }
+    } catch (error: any) {
+      console.error('Error saving country:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to save country';
+      toast.error(errorMessage);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (editingCountry) {
-        await countryMasterAPI.update(editingCountry.id, formData);
-        toast.success('Country updated successfully');
-      } else {
-        await countryMasterAPI.create(formData);
-        toast.success('Country created successfully');
-      }
-      setShowCreateForm(false);
-      setEditingCountry(null);
-      setFormData({
-        countryCode: '',
-        countryName: '',
-        nationality: '',
-      });
-      loadCountries();
-    } catch (error) {
-      toast.error('Failed to save country');
-      console.error('Error saving country:', error);
-    }
+  const handleCountryCreated = () => {
+    setShowCreateForm(false);
+    setEditingCountry(null);
+    toast.success('Country created successfully!');
+    loadCountries();
+  };
+
+  const handleCountryUpdated = () => {
+    setEditingCountry(null);
+    setShowCreateForm(false);
+    toast.success('Country updated successfully!');
+    loadCountries();
   };
 
   const handleEdit = (country: CountryMaster) => {
@@ -87,42 +131,99 @@ export default function CountryMasterPage() {
     setFormData({
       countryCode: country.countryCode,
       countryName: country.countryName,
-      nationality: country.nationality,
+      currencyCode: country.currencyCode,
     });
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this country?')) return;
-    try {
-      await countryMasterAPI.delete(id);
-      toast.success('Country deleted successfully');
-      loadCountries();
-    } catch (error) {
-      toast.error('Failed to delete country');
-      console.error('Error deleting country:', error);
+  const handleSelectCountry = (countryId: string) => {
+    setSelectedCountries(prev => 
+      prev.includes(countryId) 
+        ? prev.filter(id => id !== countryId)
+        : [...prev, countryId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedCountries.length === filteredCountries.length) {
+      setSelectedCountries([]);
+    } else {
+      setSelectedCountries(filteredCountries.map(country => country.id));
     }
   };
 
-  const handleToggleStatus = async (id: string) => {
+  const handleBulkDelete = async () => {
+    if (selectedCountries.length === 0) {
+      toast.error('Please select countries to delete');
+      return false;
+    }
+
     try {
-      await countryMasterAPI.toggleStatus(id);
-      toast.success('Country status updated');
-      loadCountries();
+      for (const countryId of selectedCountries) {
+        await countryMasterAPI.delete(countryId);
+      }
+      setSelectedCountries([]);
+      return true;
     } catch (error) {
-      toast.error('Failed to update country status');
-      console.error('Error updating country status:', error);
+      return false;
     }
   };
 
-  const filteredCountries = countries.filter(country =>
-    country.countryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    country.countryCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    country.nationality.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleBulkDeleteClick = () => {
+    if (selectedCountries.length === 0) {
+      toast.error('Please select countries to delete');
+      return;
+    }
+
+    setBulkDeleteDialog({
+      open: true,
+      loading: false
+    });
+  };
+
+  const confirmBulkDelete = async () => {
+    setBulkDeleteDialog(prev => ({ ...prev, loading: true }));
+
+    const success = await handleBulkDelete();
+    if (success) {
+      toast.success(`${selectedCountries.length} country(s) deleted successfully!`);
+      setBulkDeleteDialog({ open: false, loading: false });
+      loadCountries();
+    } else {
+      setBulkDeleteDialog(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleCountryDeleted = () => {
+    loadCountries();
+  };
+
+  const handleToggleStatus = async (country: CountryMaster) => {
+    try {
+      await countryMasterAPI.toggleStatus(country.id);
+      toast.success(`Country ${country.isActive ? 'deactivated' : 'activated'} successfully`);
+      loadCountries();
+    } catch (error) {
+      // Error handling is done by API interceptor
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      countryCode: '',
+      countryName: '',
+      currencyCode: '',
+    });
+    setEditingCountry(null);
+    setShowCreateForm(false);
+  };
+
+  if (!mounted) {
+    return null; // Prevent hydration mismatch
+  }
 
   if (!user) {
-    return null;
+    return null; // Prevent flash of content
   }
 
   if (loading) {
@@ -173,44 +274,45 @@ export default function CountryMasterPage() {
           </div>
 
           <div className="p-4 lg:p-8 space-y-6">
+            {/* Stats Cards Skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(3)].map((_, i) => (
+                <Card key={i} className="shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="h-10 w-10 rounded-full bg-gray-200 animate-pulse" />
+                      <div className="flex-1">
+                        <div className="h-4 w-24 bg-gray-200 rounded animate-pulse mb-2" />
+                        <div className="h-6 w-12 bg-gray-200 rounded animate-pulse" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Table Skeleton */}
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-xl font-semibold">Countries</CardTitle>
+                <CardTitle className="text-xl font-semibold">Country Management</CardTitle>
                 <CardDescription>
-                  Manage countries and their information
+                  Manage countries and their currencies
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {/* Search */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search countries..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-
-                  {/* Loading Skeleton */}
-                  <div className="space-y-4">
-                    {[...Array(5)].map((_, i) => (
-                      <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
-                        <Skeleton className="h-12 w-12 rounded-full" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-1/3" />
-                          <Skeleton className="h-3 w-1/2" />
-                        </div>
-                        <div className="flex space-x-2">
-                          <Skeleton className="h-8 w-8" />
-                          <Skeleton className="h-8 w-8" />
-                          <Skeleton className="h-8 w-8" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <CountryTable
+                  countries={[]}
+                  loading={true}
+                  searchTerm=""
+                  selectedCountries={[]}
+                  setSearchTerm={() => {}}
+                  onSelectCountry={() => {}}
+                  onSelectAll={() => {}}
+                  onBulkDelete={() => {}}
+                  onCountryDeleted={() => {}}
+                  onEditCountry={() => {}}
+                  onToggleStatus={() => {}}
+                />
               </CardContent>
             </Card>
           </div>
@@ -266,157 +368,98 @@ export default function CountryMasterPage() {
         </div>
 
         <div className="p-4 lg:p-8 space-y-6">
-          {/* Search */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center space-x-2">
-                <Search className="h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search countries..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1"
-                />
-              </div>
-            </CardContent>
-          </Card>
+          {/* Stats Cards */}
+          <CountryStatsCards countries={countries} />
 
-          {/* Create/Edit Form */}
-          {showCreateForm && (
-            <Card>
+          {/* Country Management */}
+          <Card className="shadow-sm">
             <CardHeader>
-                <CardTitle>{editingCountry ? 'Edit Country' : 'Create New Country'}</CardTitle>
-                <CardDescription>
-                  {editingCountry ? 'Update country information' : 'Add a new country to the system'}
-                </CardDescription>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl font-semibold">Country Management</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Manage countries and their currencies
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedCountries.length > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleBulkDeleteClick}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Selected ({selectedCountries.length})
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toast.info('Export functionality coming soon')}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="countryCode">Country Code *</Label>
-                      <Input
-                        id="countryCode"
-                        value={formData.countryCode}
-                        onChange={(e) => setFormData({ ...formData, countryCode: e.target.value })}
-                        placeholder="e.g., SA, AE, IN"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="countryName">Country Name *</Label>
-                      <Input
-                        id="countryName"
-                        value={formData.countryName}
-                        onChange={(e) => setFormData({ ...formData, countryName: e.target.value })}
-                        placeholder="e.g., Saudi Arabia, UAE, India"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="nationality">Nationality *</Label>
-                      <Input
-                        id="nationality"
-                        value={formData.nationality}
-                        onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
-                        placeholder="e.g., Saudi, Emirati, Indian"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setShowCreateForm(false);
-                        setEditingCountry(null);
-                        setFormData({
-                          countryCode: '',
-                          countryName: '',
-                          nationality: '',
-                        });
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit">
-                      {editingCountry ? 'Update' : 'Create'}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Countries List */}
-          <div className="grid gap-4">
-            {filteredCountries.map((country) => (
-              <Card key={country.id}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                        <MapPin className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{country.countryName}</h3>
-                        <p className="text-sm text-gray-600">Nationality: {country.nationality}</p>
-                        <p className="text-xs text-gray-500">Code: {country.countryCode}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={country.isActive ? 'default' : 'secondary'}>
-                        {country.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleStatus(country.id)}
-                      >
-                        {country.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(country)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(country.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {filteredCountries.length === 0 && (
-            <Card>
-              <CardContent className="pt-6 text-center">
-                <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No countries found</h3>
-                <p className="text-gray-600 mb-4">
-                  {searchTerm ? 'Try adjusting your search terms' : 'Get started by creating your first country'}
-                </p>
-                {!searchTerm && (
-                  <Button onClick={() => setShowCreateForm(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Country
-                  </Button>
-                )}
+              <CountryTable
+                countries={filteredCountries}
+                loading={loading}
+                searchTerm={searchTerm}
+                selectedCountries={selectedCountries}
+                setSearchTerm={setSearchTerm}
+                onSelectCountry={handleSelectCountry}
+                onSelectAll={handleSelectAll}
+                onBulkDelete={handleBulkDeleteClick}
+                onCountryDeleted={handleCountryDeleted}
+                onEditCountry={handleEdit}
+                onToggleStatus={handleToggleStatus}
+              />
             </CardContent>
           </Card>
-          )}
         </div>
       </div>
+
+      {/* Create/Edit Form */}
+      <Sheet open={showCreateForm} onOpenChange={(open) => {
+        setShowCreateForm(open);
+        if (!open) {
+          resetForm();
+        }
+      }}>
+        <SheetContent side="right" className="w-96">
+          <SheetHeader>
+            <SheetTitle>
+              {editingCountry ? 'Edit Country' : 'Add New Country'}
+            </SheetTitle>
+            <SheetDescription>
+              {editingCountry ? 'Update country information' : 'Create a new country with its currency'}
+            </SheetDescription>
+          </SheetHeader>
+          <CountryForm
+            formData={formData}
+            editingCountry={editingCountry}
+            currencies={currencies}
+            onFormDataChange={setFormData}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={bulkDeleteDialog.open}
+        onOpenChange={(open) => setBulkDeleteDialog(prev => ({ ...prev, open }))}
+        title="Delete Countries"
+        message="Are you sure you want to delete the selected countries? This will permanently remove all associated data."
+        onConfirm={confirmBulkDelete}
+        loading={bulkDeleteDialog.loading}
+        type="bulk"
+        count={selectedCountries.length}
+      />
     </div>
   );
 }

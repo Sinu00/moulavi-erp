@@ -13,8 +13,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
 import Sidebar from '@/components/Sidebar';
-import { airportRouteMasterAPI, destinationMasterAPI } from '@/lib/api';
-import { AirportRouteMaster, DestinationMaster, CreateAirportRouteMasterRequest, UpdateAirportRouteMasterRequest } from '@/types';
+import { airportRouteMasterAPI, locationMasterAPI } from '@/lib/api';
+import { AirportRouteMaster, LocationMaster, CreateAirportRouteMasterRequest, UpdateAirportRouteMasterRequest } from '@/types';
 import { Plus, Search, Edit, Trash2, Eye, EyeOff, Plane, MapPin, Menu } from 'lucide-react';
 
 export default function AirportRouteMasterPage() {
@@ -23,7 +23,7 @@ export default function AirportRouteMasterPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [airportRoutes, setAirportRoutes] = useState<AirportRouteMaster[]>([]);
-  const [destinations, setDestinations] = useState<DestinationMaster[]>([]);
+  const [destinations, setDestinations] = useState<LocationMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFromDestination, setSelectedFromDestination] = useState<string>('');
@@ -69,8 +69,8 @@ export default function AirportRouteMasterPage() {
 
   const loadDestinations = async () => {
     try {
-      const response = await destinationMasterAPI.getActive();
-      setDestinations(response.data.destinationMasters || []);
+      const response = await locationMasterAPI.getActive({ locationType: 'DESTINATION' });
+      setDestinations(response.data.locationMasters || []);
     } catch (error) {
       toast.error('Failed to load destinations');
       console.error('Error loading destinations:', error);
@@ -232,7 +232,7 @@ export default function AirportRouteMasterPage() {
                         <SelectItem value="all">All From Destinations</SelectItem>
                         {destinations.map((destination) => (
                           <SelectItem key={destination.id} value={destination.id}>
-                            {destination.destinationName}
+                            {destination.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -245,7 +245,7 @@ export default function AirportRouteMasterPage() {
                         <SelectItem value="all">All To Destinations</SelectItem>
                         {destinations.map((destination) => (
                           <SelectItem key={destination.id} value={destination.id}>
-                            {destination.destinationName}
+                            {destination.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

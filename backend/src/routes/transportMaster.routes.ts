@@ -85,8 +85,8 @@ router.get(
     if (search) {
       where.OR = [
         { vehicleType: { contains: search, mode: 'insensitive' } },
-        { fromLocation: { destinationName: { contains: search, mode: 'insensitive' } } },
-        { toLocation: { destinationName: { contains: search, mode: 'insensitive' } } }
+        { fromLocation: { name: { contains: search, mode: 'insensitive' } } },
+        { toLocation: { name: { contains: search, mode: 'insensitive' } } }
       ];
     }
     
@@ -112,8 +112,8 @@ router.get(
         skip,
         take: limitNum,
         orderBy: [
-          { fromLocation: { destinationName: 'asc' } },
-          { toLocation: { destinationName: 'asc' } },
+          { fromLocation: { name: 'asc' } },
+          { toLocation: { name: 'asc' } },
           { vehicleType: 'asc' },
           { paxCount: 'asc' }
         ],

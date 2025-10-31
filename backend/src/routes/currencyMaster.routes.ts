@@ -85,13 +85,29 @@ router.get(
 
     res.json({
       success: true,
-      data: currencies,
+      data: { currencyMasters: currencies },
       pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
         pages: Math.ceil(total / Number(limit)),
       },
+    });
+  })
+);
+
+// Get active currencies (public endpoint)
+router.get(
+  '/active',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const currencies = await prisma.currencyMaster.findMany({
+      where: { isActive: true },
+      orderBy: { currencyCode: 'asc' }
+    });
+
+    res.json({
+      success: true,
+      data: { currencyMasters: currencies }
     });
   })
 );

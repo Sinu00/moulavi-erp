@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import { transportMasterAPI, destinationMasterAPI } from '@/lib/api';
-import { TransportMaster, CreateTransportMasterRequest, UpdateTransportMasterRequest, DestinationMaster } from '@/types';
+import { transportMasterAPI, locationMasterAPI } from '@/lib/api';
+import { TransportMaster, CreateTransportMasterRequest, UpdateTransportMasterRequest, LocationMaster } from '@/types';
 
 export function useTransportMaster() {
   const [transports, setTransports] = useState<TransportMaster[]>([]);
-  const [destinations, setDestinations] = useState<DestinationMaster[]>([]);
+  const [destinations, setDestinations] = useState<LocationMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -17,8 +17,8 @@ export function useTransportMaster() {
     const term = searchTerm.toLowerCase();
     return transports.filter(transport =>
       transport.vehicleType.toLowerCase().includes(term) ||
-      transport.fromLocation?.destinationName.toLowerCase().includes(term) ||
-      transport.toLocation?.destinationName.toLowerCase().includes(term) ||
+      transport.fromLocation?.name?.toLowerCase().includes(term) ||
+      transport.toLocation?.name?.toLowerCase().includes(term) ||
       transport.paxCount.toString().includes(term) ||
       transport.price.toString().includes(term)
     );
@@ -39,8 +39,8 @@ export function useTransportMaster() {
 
   const loadDestinations = async () => {
     try {
-      const response = await destinationMasterAPI.getActive();
-      setDestinations(response.data.destinationMasters || []);
+      const response = await locationMasterAPI.getActive({ locationType: 'DESTINATION' });
+      setDestinations(response.data.locationMasters || []);
     } catch (error) {
       console.error('Error loading destinations:', error);
       toast.error('Failed to load destinations');
@@ -50,7 +50,7 @@ export function useTransportMaster() {
   const createTransport = async (data: CreateTransportMasterRequest): Promise<boolean> => {
     try {
       await transportMasterAPI.create(data);
-      toast.success('Transport route created successfully');
+      // Don't show success toast here - parent component will handle it
       await loadTransports();
       return true;
     } catch (error: any) {
@@ -64,7 +64,7 @@ export function useTransportMaster() {
   const updateTransport = async (id: string, data: UpdateTransportMasterRequest): Promise<boolean> => {
     try {
       await transportMasterAPI.update(id, data);
-      toast.success('Transport route updated successfully');
+      // Don't show success toast here - parent component will handle it
       await loadTransports();
       return true;
     } catch (error: any) {
@@ -78,7 +78,7 @@ export function useTransportMaster() {
   const deleteTransport = async (id: string): Promise<boolean> => {
     try {
       await transportMasterAPI.delete(id);
-      toast.success('Transport route deleted successfully');
+      // Don't show success toast here - parent component will handle it
       await loadTransports();
       return true;
     } catch (error: any) {
@@ -92,7 +92,7 @@ export function useTransportMaster() {
   const toggleTransportStatus = async (transport: TransportMaster): Promise<boolean> => {
     try {
       await transportMasterAPI.toggleStatus(transport.id);
-      toast.success(`Transport route ${transport.isActive ? 'deactivated' : 'activated'} successfully`);
+      // Don't show success toast here - parent component will handle it
       await loadTransports();
       return true;
     } catch (error: any) {

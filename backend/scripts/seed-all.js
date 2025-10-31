@@ -61,36 +61,80 @@ async function seedAll() {
     console.log(`✅ Created ${countries.length} countries\n`);
 
 
-    // 3. Seed Destination Master (Saudi cities)
-    console.log('3️⃣ Seeding Destination Master...');
+    // 3. Seed Location Master - Destinations (Saudi cities)
+    console.log('3️⃣ Seeding Location Master - Destinations...');
+    const saudiArabia = await prisma.countryMaster.findUnique({ where: { countryCode: 'SAU' } });
+    if (!saudiArabia) {
+      throw new Error('Saudi Arabia country not found. Please ensure country master is seeded first.');
+    }
+
     const destinations = [
-      { destinationCode: 'MAK', destinationName: 'Makkah (Holy City)', city: 'Makkah', country: 'Saudi Arabia' },
-      { destinationCode: 'MED', destinationName: 'Madinah (Prophet\'s City)', city: 'Madinah', country: 'Saudi Arabia' },
-      { destinationCode: 'JED', destinationName: 'Jeddah (Port City)', city: 'Jeddah', country: 'Saudi Arabia' },
-      { destinationCode: 'RUH', destinationName: 'Riyadh (Capital)', city: 'Riyadh', country: 'Saudi Arabia' },
-      { destinationCode: 'TAF', destinationName: 'Taif (Mountain City)', city: 'Taif', country: 'Saudi Arabia' }
+      { code: 'MAK', name: 'Makkah (Holy City)', city: 'Makkah', locationType: 'DESTINATION' },
+      { code: 'MED', name: 'Madinah (Prophet\'s City)', city: 'Madinah', locationType: 'DESTINATION' },
+      { code: 'JED', name: 'Jeddah (Port City)', city: 'Jeddah', locationType: 'DESTINATION' },
+      { code: 'RUH', name: 'Riyadh (Capital)', city: 'Riyadh', locationType: 'DESTINATION' },
+      { code: 'TAF', name: 'Taif (Mountain City)', city: 'Taif', locationType: 'DESTINATION' }
     ];
     for (const dest of destinations) {
-      await prisma.destinationMaster.upsert({
-        where: { destinationCode: dest.destinationCode },
-        update: dest,
-        create: dest
+      await prisma.locationMaster.upsert({
+        where: { 
+          code_locationType: { 
+            code: dest.code, 
+            locationType: dest.locationType 
+          } 
+        },
+        update: { name: dest.name, city: dest.city, countryId: saudiArabia.id },
+        create: { 
+          code: dest.code, 
+          name: dest.name, 
+          city: dest.city, 
+          locationType: dest.locationType,
+          countryId: saudiArabia.id,
+          isActive: true
+        }
       });
     }
-    console.log(`✅ Created ${destinations.length} destinations\n`);
+    console.log(`✅ Created ${destinations.length} destination locations\n`);
 
-    // 5. Seed Airport Master (Saudi airports)
-    console.log('4️⃣ Seeding Airport Master...');
-    
-    // Delete related records first to avoid foreign key constraints
-    await prisma.umrahTravelDetails.deleteMany({});
-    console.log('   Cleared travel details...');
-    
-    // Now safe to delete airports
-    await prisma.airportMaster.deleteMany({});
-    console.log('   Cleared existing airports...');
-    
+    // 4. Seed Location Master - Airports (Saudi airports)
+    console.log('4️⃣ Seeding Location Master - Airports...');
     const airports = [
+      { code: 'JED', name: 'King Abdulaziz International Airport', city: 'Jeddah', locationType: 'AIRPORT' },
+      { code: 'MED', name: 'Prince Mohammad Bin Abdulaziz Airport', city: 'Medina', locationType: 'AIRPORT' },
+      { code: 'RUH', name: 'King Khalid International Airport', city: 'Riyadh', locationType: 'AIRPORT' },
+      { code: 'DMM', name: 'King Fahd International Airport', city: 'Dammam', locationType: 'AIRPORT' },
+      { code: 'TIF', name: 'Taif Regional Airport', city: 'Taif', locationType: 'AIRPORT' },
+      { code: 'AHB', name: 'Abha Regional Airport', city: 'Abha', locationType: 'AIRPORT' },
+      { code: 'GIZ', name: 'Jazan Regional Airport', city: 'Jazan', locationType: 'AIRPORT' },
+      { code: 'ELQ', name: 'Gassim Regional Airport', city: 'Buraidah', locationType: 'AIRPORT' }
+    ];
+    for (const airport of airports) {
+      await prisma.locationMaster.upsert({
+        where: { 
+          code_locationType: { 
+            code: airport.code, 
+            locationType: airport.locationType 
+          } 
+        },
+        update: { name: airport.name, city: airport.city, countryId: saudiArabia.id },
+        create: { 
+          code: airport.code, 
+          name: airport.name, 
+          city: airport.city, 
+          locationType: airport.locationType,
+          countryId: saudiArabia.id,
+          isActive: true
+        }
+      });
+    }
+    console.log(`✅ Created ${airports.length} airport locations\n`);
+
+    // 5. Seed Airport Master (for backward compatibility with existing code)
+    console.log('5️⃣ Seeding Airport Master (legacy table)...');
+    await prisma.umrahTravelDetails.deleteMany({});
+    await prisma.airportMaster.deleteMany({});
+    
+    const airportMasterData = [
       { airportCode: 'JED', airportName: 'King Abdulaziz International Airport', city: 'Jeddah', country: 'Saudi Arabia' },
       { airportCode: 'MED', airportName: 'Prince Mohammad Bin Abdulaziz Airport', city: 'Medina', country: 'Saudi Arabia' },
       { airportCode: 'RUH', airportName: 'King Khalid International Airport', city: 'Riyadh', country: 'Saudi Arabia' },
@@ -100,44 +144,76 @@ async function seedAll() {
       { airportCode: 'GIZ', airportName: 'Jazan Regional Airport', city: 'Jazan', country: 'Saudi Arabia' },
       { airportCode: 'ELQ', airportName: 'Gassim Regional Airport', city: 'Buraidah', country: 'Saudi Arabia' }
     ];
-    await prisma.airportMaster.createMany({ data: airports });
-    console.log(`✅ Created ${airports.length} airports\n`);
+    await prisma.airportMaster.createMany({ data: airportMasterData });
+    console.log(`✅ Created ${airportMasterData.length} airports\n`);
 
     // 6. Seed Hotel Master
-    console.log('5️⃣ Seeding Hotel Master...');
-    const makkah = await prisma.destinationMaster.findUnique({ where: { destinationCode: 'MAK' } });
-    const madinah = await prisma.destinationMaster.findUnique({ where: { destinationCode: 'MED' } });
-    const jeddah = await prisma.destinationMaster.findUnique({ where: { destinationCode: 'JED' } });
+    console.log('6️⃣ Seeding Hotel Master...');
+    
+    // Delete related records first to avoid foreign key constraints
+    await prisma.umrahHotelBooking.deleteMany({});
+    await prisma.hotelMaster.deleteMany({});
+    console.log('   Cleared existing hotel bookings and hotels...');
+    
+    const makkah = await prisma.locationMaster.findUnique({ 
+      where: { code_locationType: { code: 'MAK', locationType: 'DESTINATION' } } 
+    });
+    const madinah = await prisma.locationMaster.findUnique({ 
+      where: { code_locationType: { code: 'MED', locationType: 'DESTINATION' } } 
+    });
+    const jeddah = await prisma.locationMaster.findUnique({ 
+      where: { code_locationType: { code: 'JED', locationType: 'DESTINATION' } } 
+    });
+
+    if (!makkah || !madinah || !jeddah) {
+      console.error('   Error: Missing location data:');
+      console.error(`   Makkah: ${makkah ? 'Found (ID: ' + makkah.id + ')' : 'NOT FOUND'}`);
+      console.error(`   Madinah: ${madinah ? 'Found (ID: ' + madinah.id + ')' : 'NOT FOUND'}`);
+      console.error(`   Jeddah: ${jeddah ? 'Found (ID: ' + jeddah.id + ')' : 'NOT FOUND'}`);
+      throw new Error('Required destination locations not found. Please ensure location master destinations are seeded first.');
+    }
+    
+    console.log(`   Found locations: MAK(${makkah.id}), MED(${madinah.id}), JED(${jeddah.id})`);
 
     const hotels = [
       // Makkah Hotels
       { hotelCode: 'MAK001', hotelName: 'Makkah Clock Royal Tower', locationId: makkah.id },
-      { hotelCode: 'MAK002', hotelName: 'Fairmont Makkah', locationId: makkah.id },
+      { hotelCode: 'MAK002', hotelName: 'Fairmont Makkah Clock Royal Tower', locationId: makkah.id },
       { hotelCode: 'MAK003', hotelName: 'Swissotel Makkah', locationId: makkah.id },
       { hotelCode: 'MAK004', hotelName: 'Conrad Makkah', locationId: makkah.id },
       { hotelCode: 'MAK005', hotelName: 'Pullman Zamzam Makkah', locationId: makkah.id },
+      { hotelCode: 'MAK006', hotelName: 'Makkah Hilton Towers', locationId: makkah.id },
+      { hotelCode: 'MAK007', hotelName: 'Raffles Makkah Palace', locationId: makkah.id },
+      { hotelCode: 'MAK008', hotelName: 'Hyatt Regency Makkah', locationId: makkah.id },
+      { hotelCode: 'MAK009', hotelName: 'Makkah Millennium Hotel', locationId: makkah.id },
+      { hotelCode: 'MAK010', hotelName: 'Al Kiswah Towers Hotel', locationId: makkah.id },
       // Madinah Hotels
       { hotelCode: 'MED001', hotelName: 'Madinah Hilton', locationId: madinah.id },
       { hotelCode: 'MED002', hotelName: 'Dar Al Hijra InterContinental', locationId: madinah.id },
       { hotelCode: 'MED003', hotelName: 'Madinah Millennium Hotel', locationId: madinah.id },
-      { hotelCode: 'MED004', hotelName: 'Pullman Madinah', locationId: madinah.id },
+      { hotelCode: 'MED004', hotelName: 'Pullman Madinah Al Madinah', locationId: madinah.id },
       { hotelCode: 'MED005', hotelName: 'Madinah Marriott Hotel', locationId: madinah.id },
+      { hotelCode: 'MED006', hotelName: 'Crowne Plaza Madinah', locationId: madinah.id },
+      { hotelCode: 'MED007', hotelName: 'Madinah Holiday Inn', locationId: madinah.id },
+      { hotelCode: 'MED008', hotelName: 'Al Madinah Concorde', locationId: madinah.id },
+      { hotelCode: 'MED009', hotelName: 'Madinah Golden Tulip', locationId: madinah.id },
+      { hotelCode: 'MED010', hotelName: 'Al Eman Royal Hotel', locationId: madinah.id },
       // Jeddah Hotels
       { hotelCode: 'JED001', hotelName: 'Jeddah Hilton', locationId: jeddah.id },
-      { hotelCode: 'JED002', hotelName: 'Four Seasons Jeddah', locationId: jeddah.id },
-      { hotelCode: 'JED003', hotelName: 'Jeddah Marriott', locationId: jeddah.id }
+      { hotelCode: 'JED002', hotelName: 'Four Seasons Hotel Jeddah', locationId: jeddah.id },
+      { hotelCode: 'JED003', hotelName: 'Jeddah Marriott Hotel', locationId: jeddah.id },
+      { hotelCode: 'JED004', hotelName: 'Pullman Jeddah Al Hamra', locationId: jeddah.id },
+      { hotelCode: 'JED005', hotelName: 'Jeddah Holiday Inn', locationId: jeddah.id },
+      { hotelCode: 'JED006', hotelName: 'Crowne Plaza Jeddah', locationId: jeddah.id },
+      { hotelCode: 'JED007', hotelName: 'Jeddah Millennium Hotel', locationId: jeddah.id },
+      { hotelCode: 'JED008', hotelName: 'Al Hamra Hotel Jeddah', locationId: jeddah.id }
     ];
-    for (const hotel of hotels) {
-      await prisma.hotelMaster.upsert({
-        where: { hotelCode: hotel.hotelCode },
-        update: hotel,
-        create: hotel
-      });
-    }
+    // Use createMany instead of upsert since we cleared the table
+    await prisma.hotelMaster.createMany({ data: hotels });
     console.log(`✅ Created ${hotels.length} hotels\n`);
 
     // 7. Seed Transport Master
-    console.log('6️⃣ Seeding Transport Master...');
+    console.log('7️⃣ Seeding Transport Master...');
     
     // Delete related records first
     await prisma.umrahTransportBooking.deleteMany({});
@@ -191,8 +267,9 @@ async function seedAll() {
     console.log('📊 Summary:');
     console.log(`   - ${currencies.length} Currencies`);
     console.log(`   - ${countries.length} Countries`);
-    console.log(`   - ${destinations.length} Destinations`);
-    console.log(`   - ${airports.length} Airports`);
+    console.log(`   - ${destinations.length} Destination Locations`);
+    console.log(`   - ${airports.length} Airport Locations`);
+    console.log(`   - ${airportMasterData.length} Airports (legacy table)`);
     console.log(`   - ${hotels.length} Hotels`);
     console.log(`   - ${transportData.length} Transport Options`);
 

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { PartyLayout } from '@/components/layouts/PartyLayout';
-import { ArrowLeft, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ChevronLeft, Plane, Users, Home, User } from 'lucide-react';
 
 // Import our new components and hooks
 import { useGroupUmrahBooking } from '@/hooks/useGroupUmrahBooking';
@@ -36,7 +36,6 @@ export default function GroupUmrahVisaPage() {
     updateStep3Data,
     updateStep4Data,
     setCurrentStep,
-    setSkipDocuments,
     loadPartyData,
     submitStep,
     addPassenger,
@@ -49,7 +48,6 @@ export default function GroupUmrahVisaPage() {
   const {
     masterData,
     loadInitialData,
-    loadTransportOptions,
     loadHotels,
     getHotelsForLocation,
   } = useMasterData();
@@ -64,7 +62,7 @@ export default function GroupUmrahVisaPage() {
     {
       id: 2,
       title: 'Travel Details',
-      description: 'Flight and transport information',
+      description: 'Flight information',
       icon: 'Plane',
     },
     {
@@ -106,7 +104,7 @@ export default function GroupUmrahVisaPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data, bookingState.skipDocuments);
+        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data);
       default:
         return null;
     }
@@ -152,8 +150,6 @@ export default function GroupUmrahVisaPage() {
             data={bookingState.step2Data}
             onChange={updateStep2Data}
             airports={masterData.airports}
-            transportOptions={masterData.transportOptions}
-            onLoadTransportOptions={loadTransportOptions}
             disabled={isLoading}
           />
         );
@@ -167,6 +163,10 @@ export default function GroupUmrahVisaPage() {
             hotels={masterData.hotels}
             arrivalDate={bookingState.step2Data.arrivalDate}
             departureDate={bookingState.step2Data.departureDate}
+            arrivalTime={bookingState.step2Data.arrivalTime}
+            departureTime={bookingState.step2Data.departureTime}
+            arrivalAirportId={bookingState.step2Data.arrivalAirportId}
+            departureAirportId={bookingState.step2Data.departureAirportId}
             onLoadHotels={loadHotels}
             getHotelsForLocation={getHotelsForLocation}
             onAddHotelBooking={addHotelBooking}
@@ -181,9 +181,7 @@ export default function GroupUmrahVisaPage() {
             data={bookingState.step4Data}
             step1Data={bookingState.step1Data}
             step3Data={bookingState.step3Data}
-            skipDocuments={bookingState.skipDocuments}
             onChange={updateStep4Data}
-            onSkipDocumentsChange={setSkipDocuments}
             onStep1DataChange={updateStep1Data}
             onAddPassenger={addPassenger}
             onRemovePassenger={removePassenger}
@@ -226,7 +224,11 @@ export default function GroupUmrahVisaPage() {
                 <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                   <div className="flex items-center space-x-3 mb-6">
                     <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
-                      {React.createElement(steps[bookingState.currentStep - 1].icon, { className: "h-5 w-5 text-red-600" })}
+                      {(() => {
+                        const map:any = { Users, Plane, Home, User };
+                        const Icon = map[steps[bookingState.currentStep - 1].icon];
+                        return <Icon className="h-5 w-5 text-red-600" />;
+                      })()}
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">

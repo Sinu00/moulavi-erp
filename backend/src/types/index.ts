@@ -7,15 +7,16 @@ import {
   RefreshToken,
   TransportMaster,
   CurrencyMaster,
-  DestinationMaster,
   HotelMaster,
+  LocationMaster,
   UserRole,
   CustomerType,
   AccountCurrency,
   ServiceStatus,
   UmrahVisaStatus,
   VisaType,
-  Gender
+  Gender,
+  LocationType
 } from '@prisma/client';
 
 // Re-export Prisma types for convenience (Updated for cleanup)
@@ -27,15 +28,16 @@ export type {
   RefreshToken,
   TransportMaster,
   CurrencyMaster,
-  DestinationMaster,
   HotelMaster,
+  LocationMaster,
   UserRole,
   CustomerType,
   AccountCurrency,
   ServiceStatus,
   UmrahVisaStatus,
   VisaType,
-  Gender
+  Gender,
+  LocationType
 };
 
 
@@ -171,20 +173,23 @@ export interface UpdateCurrencyMasterRequest {
   isActive?: boolean;
 }
 
-// Destination Master Types (Simplified - removed description)
-export interface CreateDestinationMasterRequest {
-  destinationCode: string;
-  destinationName: string;
+
+// Location Master Types
+export interface CreateLocationMasterRequest {
+  code: string;
+  name: string;
+  locationType: LocationType;
+  countryId: string;
   city: string;
-  country: string;
   isActive?: boolean;
 }
 
-export interface UpdateDestinationMasterRequest {
-  destinationCode?: string;
-  destinationName?: string;
+export interface UpdateLocationMasterRequest {
+  code?: string;
+  name?: string;
+  locationType?: LocationType;
+  countryId?: string;
   city?: string;
-  country?: string;
   isActive?: boolean;
 }
 

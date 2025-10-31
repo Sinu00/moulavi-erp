@@ -37,7 +37,6 @@ export const useUmrahBooking = () => {
         ticketCopy: null 
       }]
     },
-    skipDocuments: false,
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -75,10 +74,6 @@ export const useUmrahBooking = () => {
     setBookingState(prev => ({ ...prev, currentStep: step }));
   }, []);
 
-  const setSkipDocuments = useCallback((skip: boolean) => {
-    setBookingState(prev => ({ ...prev, skipDocuments: skip }));
-  }, []);
-
   const loadPartyData = useCallback(async () => {
     try {
       const response = await partyAPI.getMyParty();
@@ -96,101 +91,106 @@ export const useUmrahBooking = () => {
   }, []);
 
   const submitStep = useCallback(async (stepNumber: number) => {
-    if (!partyId && stepNumber === 1) {
+    if (!partyId) {
       toast.error('Party information not found');
-      return false;
-    }
-
-    if (!bookingState.bookingId && stepNumber > 1) {
-      toast.error('Please complete previous steps first');
       return false;
     }
 
     setIsLoading(true);
     try {
-      const endpoint = `${API_URL}${API_ENDPOINTS[`STEP${stepNumber}` as keyof typeof API_ENDPOINTS]}`;
-      const url = stepNumber > 1 ? `${endpoint}/${bookingState.bookingId}` : endpoint;
-      
-      let payload: any;
-      
-      switch (stepNumber) {
-        case 1:
-          payload = { partyId, ...bookingState.step1Data };
-          break;
-        case 2:
-          payload = bookingState.step2Data;
-          break;
-        case 3:
-          payload = bookingState.step3Data;
-          break;
-        case 4:
-          const isGroupBooking = bookingState.step1Data.bookingMode === 'group_number';
-          
-          if (isGroupBooking) {
-            const passenger = bookingState.step4Data.passengers[0];
-            payload = {
-              passengerCount: 1,
-              passengers: [{
-                fullName: bookingState.step1Data.groupName || 'Group Booking',
-                isLeadPassenger: true,
-                documents: {
-                  panCardPhoto: passenger.panCardPhoto,
-                  passportFront: passenger.passportFront,
-                  passportBack: passenger.passportBack,
-                  iqamaPhoto: passenger.iqamaPhoto,
-                  hotelBooking: passenger.hotelBooking,
-                  ticketCopy: passenger.ticketCopy,
-                }
-              }],
-            };
-          } else {
-            payload = {
-              passengerCount: bookingState.step4Data.passengers.length,
-              passengers: bookingState.step4Data.passengers.map(p => ({
-                fullName: p.fullName,
-                isLeadPassenger: p.isLeadPassenger,
-                documents: {
-                  panCardPhoto: p.panCardPhoto,
-                  passportFront: p.passportFront,
-                  passportBack: p.passportBack,
-                  iqamaPhoto: p.iqamaPhoto,
-                  hotelBooking: p.hotelBooking,
-                  ticketCopy: p.ticketCopy,
-                }
-              })),
-            };
-          }
-          break;
-      }
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        if (stepNumber === 1) {
-          setBookingState(prev => ({ ...prev, bookingId: data.bookingId }));
+      // Steps 1-3: Only validate (no DB writes)
+      if (stepNumber < 4) {
+        const endpoint = `${API_URL}${API_ENDPOINTS[`STEP${stepNumber}` as keyof typeof API_ENDPOINTS]}`;
+        let payload: any;
+        
+        switch (stepNumber) {
+          case 1:
+            payload = { partyId, ...bookingState.step1Data };
+            break;
+          case 2:
+            payload = bookingState.step2Data;
+            break;
+          case 3:
+            payload = bookingState.step3Data;
+            break;
         }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
         
-        setBookingState(prev => ({
-          ...prev,
-          completedSteps: [...prev.completedSteps, stepNumber],
-          currentStep: stepNumber < 4 ? stepNumber + 1 : stepNumber
-        }));
+        if (response.ok) {
+          setBookingState(prev => ({
+            ...prev,
+            completedSteps: [...prev.completedSteps, stepNumber],
+            currentStep: stepNumber + 1
+          }));
+          
+          toast.success(`Step ${stepNumber} validated successfully`);
+          return true;
+        } else {
+          toast.error(data.error || `Failed to validate step ${stepNumber}`);
+          return false;
+        }
+      } 
+      // Step 4: Send ALL data to create-booking endpoint
+      else if (stepNumber === 4) {
+        const payload = {
+          partyId,
+          step1: bookingState.step1Data,
+          step2: bookingState.step2Data,
+          step3: bookingState.step3Data,
+          step4: {
+            passengerCount: bookingState.step4Data.passengers.length,
+            passengers: bookingState.step4Data.passengers.map(p => ({
+              fullName: p.fullName,
+              isLeadPassenger: p.isLeadPassenger,
+              documents: {
+                panCardPhoto: p.panCardPhoto,
+                passportFront: p.passportFront,
+                passportBack: p.passportBack,
+                iqamaPhoto: p.iqamaPhoto,
+                hotelBooking: p.hotelBooking,
+                ticketCopy: p.ticketCopy,
+              }
+            })),
+          },
+        };
+
+        const response = await fetch(`${API_URL}/umrah-visa/create-booking`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
         
-        toast.success(`Step ${stepNumber} completed successfully`);
-        return true;
-      } else {
-        toast.error(data.error || `Failed to complete step ${stepNumber}`);
-        return false;
+        if (response.ok) {
+          setBookingState(prev => ({
+            ...prev,
+            bookingId: data.data.bookingId,
+            completedSteps: [...prev.completedSteps, 4],
+          }));
+          
+          toast.success('Booking completed successfully!');
+          return true;
+        } else {
+          toast.error(data.error || 'Failed to create booking');
+          return false;
+        }
       }
+      
+      return false;
     } catch (error) {
       console.error(`Error submitting step ${stepNumber}:`, error);
       toast.error(`Failed to complete step ${stepNumber}`);
@@ -209,7 +209,6 @@ export const useUmrahBooking = () => {
     updateStep3Data,
     updateStep4Data,
     setCurrentStep,
-    setSkipDocuments,
     loadPartyData,
     submitStep,
   };
@@ -232,7 +231,20 @@ export const useMasterData = () => {
         },
       });
       const data = await response.json();
-      setMasterData(prev => ({ ...prev, airports: data }));
+      
+      // Handle new LocationMaster format: { locationMasters: [...] }
+      // Transform to backward compatible format if needed
+      const airports = data.locationMasters 
+        ? data.locationMasters.map((loc: any) => ({
+            id: loc.id,
+            airportCode: loc.code,
+            airportName: loc.name,
+            city: loc.city,
+            country: loc.country?.countryName || 'Saudi Arabia',
+          }))
+        : data; // Fallback to old format if array
+      
+      setMasterData(prev => ({ ...prev, airports }));
     } catch (error) {
       console.error('Error loading airports:', error);
     }
@@ -240,15 +252,32 @@ export const useMasterData = () => {
 
   const loadLocations = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}${API_ENDPOINTS.DESTINATIONS}`, {
+      // Load from LocationMaster endpoint with locationType='DESTINATION'
+      const locationResponse = await fetch(`${API_URL}/umrah-visa/masters/locations?locationType=DESTINATION`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
       });
-      const data = await response.json();
-      setMasterData(prev => ({ ...prev, locations: data.destinationMasters || [] }));
+      
+      if (locationResponse.ok) {
+        const locationData = await locationResponse.json();
+        // Convert LocationMaster to Location format for compatibility
+        const convertedLocations = (locationData.locations || []).map((loc: any) => ({
+          id: loc.id,
+          destinationCode: loc.code,
+          destinationName: loc.name,
+          city: loc.city,
+          country: loc.country?.countryName || 'Saudi Arabia',
+          isActive: loc.isActive,
+        }));
+        setMasterData(prev => ({ ...prev, locations: convertedLocations }));
+      } else {
+        console.error('Failed to load locations from LocationMaster');
+        setMasterData(prev => ({ ...prev, locations: [] }));
+      }
     } catch (error) {
       console.error('Error loading locations:', error);
+      setMasterData(prev => ({ ...prev, locations: [] }));
     }
   }, []);
 

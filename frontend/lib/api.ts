@@ -87,6 +87,40 @@ export const partyAPI = {
   delete: (id: string) => api.delete(`/parties/${id}`),
 };
 
+// Party Contact API
+export const partyContactAPI = {
+  getContacts: (partyId: string) => api.get(`/party/${partyId}/contacts`),
+  
+  createContact: (partyId: string, data: any) => api.post(`/party/${partyId}/contacts`, data),
+  
+  updateContact: (partyId: string, contactId: string, data: any) => 
+    api.put(`/party/${partyId}/contacts/${contactId}`, data),
+  
+  deleteContact: (partyId: string, contactId: string) => 
+    api.delete(`/party/${partyId}/contacts/${contactId}`),
+};
+
+// Party Document API
+export const partyDocumentAPI = {
+  uploadDocument: (partyId: string, file: File, documentType: string) => {
+    const formData = new FormData();
+    formData.append('document', file);
+    formData.append('document_type', documentType);
+    
+    return api.post(`/upload/party/${partyId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  
+  getDocuments: (partyId: string) => api.get(`/upload/party/${partyId}/documents`),
+  
+  downloadDocument: (documentId: string) => api.get(`/upload/party-document/${documentId}`),
+  
+  deleteDocument: (documentId: string) => api.delete(`/upload/party-document/${documentId}`),
+};
+
 // Service API
 export const serviceAPI = {
   createUmrahVisa: (data: any) => api.post('/services/umrah-visa', data),
@@ -138,6 +172,10 @@ export const uploadAPI = {
   },
   
   deleteDocument: (documentId: string) => api.delete(`/upload/${documentId}`),
+  
+  // Party document methods - use partyDocumentAPI instead
+  uploadPartyDocument: (partyId: string, file: File, documentType: string) =>
+    partyDocumentAPI.uploadDocument(partyId, file, documentType),
 };
 
 // Umrah Visa Booking API
@@ -174,8 +212,11 @@ export const umrahVisaAPI = {
   uploadConfirmation: (bookingId: string, confirmationImagePath: string) =>
     api.post(`/umrah-visa/${bookingId}/upload-confirmation`, { confirmationImagePath }),
 
-  generateVoucher: (bookingId: string) =>
-    api.post(`/umrah-visa/${bookingId}/generate-voucher`),
+  getVoucherData: (bookingId: string) =>
+    api.get(`/umrah-visa/${bookingId}/voucher-data`),
+
+  generateVoucher: (bookingId: string, voucherData: any) =>
+    api.post(`/umrah-visa/${bookingId}/generate-voucher`, voucherData),
 
   getTripInfo: (bookingId: string) =>
     api.get(`/umrah-visa/${bookingId}/trip-info`),
@@ -298,6 +339,16 @@ export const airportMasterAPI = {
   delete: (id: string) => api.delete(`/airport-masters/${id}`),
   search: (query: string, limit?: number) => api.get(`/airport-masters/search/${query}`, { params: { limit } }),
   validateFlight: (flightNumber: string) => api.post('/airport-masters/validate-flight', { flightNumber }),
+};
+
+export const locationMasterAPI = {
+  create: (data: any) => api.post('/location-masters', data),
+  getAll: (params?: any) => api.get('/location-masters', { params }),
+  getActive: (params?: { locationType?: string }) => api.get('/location-masters/active', { params }),
+  getById: (id: string) => api.get(`/location-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/location-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/location-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/location-masters/${id}/toggle-status`),
 };
 
 export const airportRouteMasterAPI = {

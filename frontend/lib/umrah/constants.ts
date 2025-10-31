@@ -27,20 +27,24 @@ export const DOCUMENT_TYPES = {
   TICKET_COPY: 'ticketCopy',
 } as const;
 
-export const BOOKING_RULES = {
-  group: {
-    iqama: {
-      documents: ['panCardPhoto', 'passportFront', 'passportBack', 'iqamaPhoto'],
-      description: 'Group + Iqama: PAN Card, Passport Front & Back, Iqama Photo required',
-    },
-    hotel: {
-      documents: ['panCardPhoto', 'passportFront', 'passportBack', 'hotelBooking', 'ticketCopy'],
-      description: 'Group + Hotel: PAN Card, Passport Front & Back, Hotel Booking & Ticket Copy required',
-    },
+// Document requirements are now handled dynamically in validation logic
+// This constant is kept for reference but not used in validation
+export const DOCUMENT_REQUIREMENTS = {
+  GROUP_VISA: {
+    description: 'Group Umrah Visa: Only PAN card required (lead passenger)',
+    documents: ['panCardPhoto'],
   },
-  regular: {
-    documents: ['panCardPhoto', 'passportFront', 'passportBack'],
-    description: 'Individual booking: PAN Card, Passport Front & Back required',
+  INDIVIDUAL_WITH_GROUP_HOTEL: {
+    description: 'Individual booking with group number + hotel: PAN card + ticket copy + hotel copy (lead passenger)',
+    documents: ['panCardPhoto', 'ticketCopy', 'hotelBooking'],
+  },
+  INDIVIDUAL_WITH_GROUP_IQAMA: {
+    description: 'Individual booking with group number + iqama: PAN card + iqama copy (lead passenger)',
+    documents: ['panCardPhoto', 'iqamaPhoto'],
+  },
+  INDIVIDUAL_WITHOUT_GROUP: {
+    description: 'Individual booking without group number: Passport front & back (all passengers), PAN card (lead passenger)',
+    documents: ['passportFront', 'passportBack', 'panCardPhoto'], // panCardPhoto only for lead
   },
 } as const;
 
@@ -72,8 +76,8 @@ export const STEPS = [
 ] as const;
 
 export const API_ENDPOINTS = {
-  AIRPORTS: '/airport-masters/active',
-  DESTINATIONS: '/destination-masters/active',
+  AIRPORTS: '/location-masters/active?locationType=AIRPORT',
+  DESTINATIONS: '/location-masters/active?locationType=DESTINATION',
   TRANSPORT_OPTIONS: '/umrah-visa/transport-options',
   HOTELS: '/umrah-visa/hotels',
   STEP1: '/umrah-visa/step1',

@@ -44,6 +44,20 @@ const createPartyValidation = [
     .withMessage('WhatsApp number must be 10-15 digits, optionally starting with +'),
   body('address').optional().isString(),
   body('gst_number').optional().isString(),
+  body('pan_number').optional().isString().trim(),
+  body('aadhaar_number').optional().isString().trim(),
+  body('supplier_service_types').optional().isArray().custom((value) => {
+    if (!Array.isArray(value)) return false;
+    const validTypes = ['ticket_issuing', 'umrah_service', 'hotel_service'];
+    return value.every((type: string) => validTypes.includes(type));
+  }).withMessage('Supplier service types must be an array containing one or more of: ticket_issuing, umrah_service, hotel_service'),
+  body('contacts').optional().isArray().custom((value) => {
+    if (!Array.isArray(value)) return false;
+    return value.every((contact: any) => 
+      contact.contact_name && typeof contact.contact_name === 'string' &&
+      contact.contact_number && typeof contact.contact_number === 'string'
+    );
+  }).withMessage('Contacts must be an array of objects with contact_name and contact_number'),
   body('customer_type')
     .isIn(['direct', 'b2b'])
     .withMessage('Customer type must be either direct or b2b'),
@@ -70,6 +84,10 @@ router.post(
       whatsapp_number,
       address,
       gst_number,
+      pan_number,
+      aadhaar_number,
+      supplier_service_types,
+      contacts,
       customer_type,
       account_currency_id,
       is_supplier = false,
@@ -79,6 +97,11 @@ router.post(
       sms_notification = true,
       marketing_notification = false,
     } = req.body;
+    
+    // Validate supplier service types if supplier is selected
+    if (is_supplier && (!supplier_service_types || !Array.isArray(supplier_service_types) || supplier_service_types.length === 0)) {
+      return res.status(400).json({ error: 'At least one supplier service type is required when is_supplier is true' });
+    }
     
     // Check if party email already exists
     const existingParty = await prisma.party.findUnique({
@@ -126,6 +149,9 @@ router.post(
         whatsappNumber: whatsapp_number,
         address,
         gstNumber: gst_number,
+        panNumber: pan_number,
+        aadhaarNumber: aadhaar_number,
+        supplierServiceTypes: supplier_service_types ? JSON.parse(JSON.stringify(supplier_service_types)) : null,
         customerType: customer_type,
         accountCurrencyId: account_currency_id,
         isSupplier: is_supplier,
@@ -135,7 +161,20 @@ router.post(
         smsNotification: sms_notification,
         marketingNotification: marketing_notification,
         userId,
-        createdBy: req.user!.id
+        createdBy: req.user!.id,
+        contacts: contacts && Array.isArray(contacts) ? {
+          create: contacts.map((contact: any) => ({
+            contactName: contact.contact_name,
+            contactNumber: contact.contact_number,
+            department: contact.department || null
+          }))
+        } : undefined
+      },
+      include: {
+        contacts: true,
+        documents: {
+          where: { isDeleted: false }
+        }
       }
     });
     
@@ -207,7 +246,11 @@ router.get(
         take: limitNum,
         orderBy: { createdAt: 'desc' },
         include: {
-          accountCurrency: true
+          accountCurrency: true,
+          contacts: true,
+          documents: {
+            where: { isDeleted: false }
+          }
         }
       }),
       prisma.party.count({ where })
@@ -286,6 +329,10 @@ router.put(
       whatsapp_number,
       address,
       gst_number,
+      pan_number,
+      aadhaar_number,
+      supplier_service_types,
+      contacts,
       customer_type,
       account_currency_id,
       is_supplier,
@@ -295,6 +342,17 @@ router.put(
       marketing_notification,
     } = req.body;
     
+    // Validate supplier service types if supplier is being set to true
+    const existingParty = await prisma.party.findUnique({
+      where: { id },
+      select: { isSupplier: true }
+    });
+    
+    const willBeSupplier = is_supplier !== undefined ? is_supplier : existingParty?.isSupplier;
+    if (willBeSupplier && supplier_service_types !== undefined && (!Array.isArray(supplier_service_types) || supplier_service_types.length === 0)) {
+      return res.status(400).json({ error: 'At least one supplier service type is required when is_supplier is true' });
+    }
+    
     const updateData: any = {};
     
     if (party_name !== undefined) updateData.partyName = party_name;
@@ -302,6 +360,9 @@ router.put(
     if (whatsapp_number !== undefined) updateData.whatsappNumber = whatsapp_number;
     if (address !== undefined) updateData.address = address;
     if (gst_number !== undefined) updateData.gstNumber = gst_number;
+    if (pan_number !== undefined) updateData.panNumber = pan_number;
+    if (aadhaar_number !== undefined) updateData.aadhaarNumber = aadhaar_number;
+    if (supplier_service_types !== undefined) updateData.supplierServiceTypes = JSON.parse(JSON.stringify(supplier_service_types));
     if (customer_type !== undefined) updateData.customerType = customer_type;
     if (account_currency_id !== undefined) updateData.accountCurrencyId = account_currency_id;
     if (is_supplier !== undefined) updateData.isSupplier = is_supplier;
@@ -310,9 +371,33 @@ router.put(
     if (sms_notification !== undefined) updateData.smsNotification = sms_notification;
     if (marketing_notification !== undefined) updateData.marketingNotification = marketing_notification;
     
+    // Handle contacts update
+    if (contacts !== undefined && Array.isArray(contacts)) {
+      // Delete existing contacts and create new ones
+      await prisma.partyContact.deleteMany({
+        where: { partyId: id }
+      });
+      
+      if (contacts.length > 0) {
+        updateData.contacts = {
+          create: contacts.map((contact: any) => ({
+            contactName: contact.contact_name,
+            contactNumber: contact.contact_number,
+            department: contact.department || null
+          }))
+        };
+      }
+    }
+    
     const party = await prisma.party.update({
       where: { id },
-      data: updateData
+      data: updateData,
+      include: {
+        contacts: true,
+        documents: {
+          where: { isDeleted: false }
+        }
+      }
     });
     
     res.json({ party });
