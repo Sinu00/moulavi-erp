@@ -16,10 +16,10 @@ export function useTransportMaster() {
     
     const term = searchTerm.toLowerCase();
     return transports.filter(transport =>
-      transport.vehicleType.toLowerCase().includes(term) ||
+      transport.vehicleType?.vehicleName?.toLowerCase().includes(term) ||
       transport.fromLocation?.name?.toLowerCase().includes(term) ||
       transport.toLocation?.name?.toLowerCase().includes(term) ||
-      transport.paxCount.toString().includes(term) ||
+      transport.vehicleType?.paxCount.toString().includes(term) ||
       transport.price.toString().includes(term)
     );
   }, [transports, searchTerm]);

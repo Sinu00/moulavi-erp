@@ -299,16 +299,6 @@ export const currencyMasterAPI = {
   toggleStatus: (id: string) => api.patch(`/currency-masters/${id}/toggle-status`),
 };
 
-export const destinationMasterAPI = {
-  create: (data: any) => api.post('/destination-masters', data),
-  getAll: (params?: any) => api.get('/destination-masters', { params }),
-  getActive: () => api.get('/destination-masters/active'),
-  getById: (id: string) => api.get(`/destination-masters/${id}`),
-  update: (id: string, data: any) => api.put(`/destination-masters/${id}`, data),
-  delete: (id: string) => api.delete(`/destination-masters/${id}`),
-  toggleStatus: (id: string) => api.patch(`/destination-masters/${id}/toggle-status`),
-};
-
 export const hotelMasterAPI = {
   create: (data: any) => api.post('/hotel-masters', data),
   getAll: (params?: any) => api.get('/hotel-masters', { params }),
@@ -330,17 +320,6 @@ export const userRoleMasterAPI = {
   toggleStatus: (id: string) => api.patch(`/user-role-masters/${id}/toggle-status`),
 };
 
-export const airportMasterAPI = {
-  create: (data: any) => api.post('/airport-masters', data),
-  getAll: (params?: any) => api.get('/airport-masters', { params }),
-  getActive: () => api.get('/airport-masters/active'),
-  getById: (id: string) => api.get(`/airport-masters/${id}`),
-  update: (id: string, data: any) => api.put(`/airport-masters/${id}`, data),
-  delete: (id: string) => api.delete(`/airport-masters/${id}`),
-  search: (query: string, limit?: number) => api.get(`/airport-masters/search/${query}`, { params: { limit } }),
-  validateFlight: (flightNumber: string) => api.post('/airport-masters/validate-flight', { flightNumber }),
-};
-
 export const locationMasterAPI = {
   create: (data: any) => api.post('/location-masters', data),
   getAll: (params?: any) => api.get('/location-masters', { params }),
@@ -349,6 +328,16 @@ export const locationMasterAPI = {
   update: (id: string, data: any) => api.put(`/location-masters/${id}`, data),
   delete: (id: string) => api.delete(`/location-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/location-masters/${id}/toggle-status`),
+};
+
+export const vehicleTypeMasterAPI = {
+  create: (data: any) => api.post('/vehicle-type-masters', data),
+  getAll: (params?: any) => api.get('/vehicle-type-masters', { params }),
+  getActive: () => api.get('/vehicle-type-masters/active'),
+  getById: (id: string) => api.get(`/vehicle-type-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/vehicle-type-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/vehicle-type-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/vehicle-type-masters/${id}/toggle-status`),
 };
 
 export const airportRouteMasterAPI = {

@@ -373,34 +373,55 @@ export interface DashboardStats {
   completedServices?: number;
 }
 
+// Vehicle Type Master Types
+export interface VehicleTypeMaster {
+  id: string;
+  vehicleName: string;
+  paxCount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateVehicleTypeMasterRequest {
+  vehicleName: string;
+  paxCount: number;
+  isActive?: boolean;
+}
+
+export interface UpdateVehicleTypeMasterRequest {
+  vehicleName?: string;
+  paxCount?: number;
+  isActive?: boolean;
+}
+
 // Transport Master Types
 export interface TransportMaster {
   id: string;
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   fromLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
   toLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
+  vehicleType?: VehicleTypeMaster;
 }
 
 export interface CreateTransportMasterRequest {
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive?: boolean;
 }
@@ -408,8 +429,7 @@ export interface CreateTransportMasterRequest {
 export interface UpdateTransportMasterRequest {
   fromLocationId?: string;
   toLocationId?: string;
-  vehicleType?: string;
-  paxCount?: number;
+  vehicleTypeId?: string;
   price?: number;
   isActive?: boolean;
 }
@@ -457,34 +477,6 @@ export interface UpdateCurrencyMasterRequest {
   currencyCode?: string;
   currencyName?: string;
   symbol?: string;
-  isActive?: boolean;
-}
-
-// Destination Master Types
-export interface DestinationMaster {
-  id: string;
-  destinationCode: string;
-  destinationName: string;
-  city: string;
-  country: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateDestinationMasterRequest {
-  destinationCode: string;
-  destinationName: string;
-  city: string;
-  country: string;
-  isActive?: boolean;
-}
-
-export interface UpdateDestinationMasterRequest {
-  destinationCode?: string;
-  destinationName?: string;
-  city?: string;
-  country?: string;
   isActive?: boolean;
 }
 
@@ -594,15 +586,19 @@ export interface AirportRouteMaster {
   toDestinationId?: string;
   fromDestination?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
-    country?: string;
+    country?: {
+      countryName: string;
+    };
   };
   toDestination?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
-    country?: string;
+    country?: {
+      countryName: string;
+    };
   };
   description?: string;
   isActive: boolean;

@@ -957,11 +957,11 @@ router.get('/transport-options/:airportId', authenticate, async (req, res) => {
       include: {
         fromLocation: true,
         toLocation: true,
+        vehicleType: true,
       },
       orderBy: [
         { toLocation: { name: 'asc' } },
-        { vehicleType: 'asc' },
-        { paxCount: 'asc' },
+        { vehicleType: { vehicleName: 'asc' } },
       ],
     });
 

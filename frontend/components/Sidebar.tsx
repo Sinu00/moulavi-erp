@@ -28,7 +28,8 @@ import {
   ChevronsRight,
   Building,
   Shield,
-  Truck
+  Truck,
+  Car
 } from 'lucide-react';
 import { getUser, removeUser } from '@/lib/auth';
 import { authAPI } from '@/lib/api';
@@ -88,10 +89,9 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'User Master', icon: User, path: '/dashboard/masters/user' },
     { name: 'Country Master', icon: MapPin, path: '/dashboard/masters/country' },
     { name: 'Currency Master', icon: DollarSign, path: '/dashboard/masters/currency' },
-    { name: 'Destination Master', icon: MapPin, path: '/dashboard/masters/destination' },
     { name: 'Location Master', icon: Database, path: '/dashboard/masters/location' },
+    { name: 'Vehicle Type Master', icon: Car, path: '/dashboard/masters/vehicle-type' },
     { name: 'Hotel Master', icon: Building, path: '/dashboard/masters/hotel' },
-    { name: 'Airport Master', icon: Plane, path: '/dashboard/masters/airport' },
     { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
     { name: 'Transport Master', icon: Truck, path: '/dashboard/masters/transport' },
     { name: 'Expense Master', icon: Receipt, path: '/dashboard/masters/expense' },
@@ -349,12 +349,10 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                             item.path === '/dashboard/masters/transport' || 
                             item.path === '/dashboard/masters/country' || 
                             item.path === '/dashboard/masters/currency' ||
-                            item.path === '/dashboard/masters/destination' ||
                             item.path === '/dashboard/masters/location' ||
+                            item.path === '/dashboard/masters/vehicle-type' ||
                             item.path === '/dashboard/masters/hotel' ||
-                            item.path === '/dashboard/masters/service-type' ||
                             item.path === '/dashboard/masters/user-role' ||
-                            item.path === '/dashboard/masters/airport' ||
                             item.path === '/dashboard/masters/airport-route') {
                           router.push(item.path);
                         } else {

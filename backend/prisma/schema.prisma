@@ -249,25 +249,38 @@ model CancellationPolicy {
   @@map("cancellation_policies")
 }
 
-model TransportMaster {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  vehicleType    String         @map("vehicle_type") @db.VarChar(50)
-  paxCount       Int            @map("pax_count")
-  price          Decimal        @db.Decimal(10, 2)
-  isActive       Boolean        @default(true) @map("is_active")
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  fromLocationId String         @map("from_location_id") @db.Uuid
-  toLocationId   String         @map("to_location_id") @db.Uuid
-  fromLocation   LocationMaster @relation("TransportMasterFrom", fields: [fromLocationId], references: [id])
-  toLocation     LocationMaster @relation("TransportMasterTo", fields: [toLocationId], references: [id])
+model VehicleTypeMaster {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vehicleName  String            @unique @map("vehicle_name") @db.VarChar(100)
+  paxCount     Int               @map("pax_count")
+  isActive     Boolean           @default(true) @map("is_active")
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  transports   TransportMaster[]
 
-  @@unique([fromLocationId, toLocationId, vehicleType, paxCount])
-  @@unique([fromLocationId, toLocationId, vehicleType, paxCount], map: "transport_masters_from_location_id_to_location_id_vehicle__key")
+  @@index([vehicleName])
+  @@index([paxCount])
+  @@index([isActive])
+  @@map("vehicle_type_masters")
+}
+
+model TransportMaster {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  vehicleTypeId  String            @map("vehicle_type_id") @db.Uuid
+  price          Decimal           @db.Decimal(10, 2)
+  isActive       Boolean           @default(true) @map("is_active")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  fromLocationId String            @map("from_location_id") @db.Uuid
+  toLocationId   String            @map("to_location_id") @db.Uuid
+  fromLocation   LocationMaster    @relation("TransportMasterFrom", fields: [fromLocationId], references: [id])
+  toLocation     LocationMaster    @relation("TransportMasterTo", fields: [toLocationId], references: [id])
+  vehicleType    VehicleTypeMaster @relation(fields: [vehicleTypeId], references: [id])
+
+  @@unique([fromLocationId, toLocationId, vehicleTypeId])
   @@index([fromLocationId])
   @@index([toLocationId])
-  @@index([vehicleType])
-  @@index([paxCount])
+  @@index([vehicleTypeId])
   @@index([isActive])
   @@map("transport_masters")
 }
@@ -324,6 +337,8 @@ model LocationMaster {
   transportToMaster   UmrahTransportBooking[] @relation("TransportTo")
   arrivalFlights      UmrahTravelDetails[]    @relation("ArrivalAirport")
   departureFlights    UmrahTravelDetails[]    @relation("DepartureAirport")
+  airportRoutesFrom   AirportRouteMaster[]    @relation("AirportRouteFrom")
+  airportRoutesTo     AirportRouteMaster[]     @relation("AirportRouteTo")
 
   @@unique([code, locationType])
   @@index([code])
@@ -350,6 +365,47 @@ model HotelMaster {
   @@index([locationId])
   @@index([isActive])
   @@map("hotel_masters")
+}
+
+model AirportRouteMaster {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  routeCode        String          @unique @map("route_code") @db.VarChar(20)
+  routeName        String          @map("route_name") @db.VarChar(255)
+  fromAirport      String          @map("from_airport") @db.VarChar(50)
+  toAirport        String          @map("to_airport") @db.VarChar(50)
+  fromDestinationId String?       @map("from_destination_id") @db.Uuid
+  toDestinationId   String?         @map("to_destination_id") @db.Uuid
+  description      String?         @db.Text
+  isActive         Boolean         @default(true) @map("is_active")
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  fromDestination  LocationMaster? @relation("AirportRouteFrom", fields: [fromDestinationId], references: [id])
+  toDestination    LocationMaster? @relation("AirportRouteTo", fields: [toDestinationId], references: [id])
+
+  @@index([routeCode])
+  @@index([routeName])
+  @@index([fromAirport])
+  @@index([toAirport])
+  @@index([fromDestinationId])
+  @@index([toDestinationId])
+  @@index([isActive])
+  @@map("airport_route_masters")
+}
+
+model UserRoleMaster {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roleCode     String   @unique @map("role_code") @db.VarChar(50)
+  roleName     String   @map("role_name") @db.VarChar(100)
+  permissions  Json     @db.JsonB
+  description  String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([roleCode])
+  @@index([roleName])
+  @@index([isActive])
+  @@map("user_role_masters")
 }
 
 

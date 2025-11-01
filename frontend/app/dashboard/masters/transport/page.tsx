@@ -9,39 +9,47 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUser, hasRole } from '@/lib/auth';
 import { useTransportMaster } from '@/hooks/useTransportMaster';
+import { vehicleTypeMasterAPI } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import TransportCard from '@/components/transport/TransportCard';
 import TransportForm from '@/components/transport/TransportForm';
 import TransportDeleteConfirmationModal from '@/components/transport/TransportDeleteConfirmationModal';
 import { Plus, Search, Truck, Menu } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface VehicleTypeMaster {
+  id: string;
+  vehicleName: string;
+  paxCount: number;
+  isActive: boolean;
+}
 
 interface TransportMaster {
   id: string;
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   fromLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
   toLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
+  vehicleType?: VehicleTypeMaster;
 }
 
 interface CreateTransportMasterRequest {
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive?: boolean;
 }
@@ -58,11 +66,11 @@ export default function TransportMasterPage() {
   const [formData, setFormData] = useState<CreateTransportMasterRequest>({
     fromLocationId: '',
     toLocationId: '',
-    vehicleType: '',
-    paxCount: 0,
+    vehicleTypeId: '',
     price: 0,
     isActive: true
   });
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleTypeMaster[]>([]);
 
   const [mounted, setMounted] = useState(false);
 
@@ -90,6 +98,20 @@ export default function TransportMasterPage() {
     }
   }, [user, router]);
 
+  useEffect(() => {
+    const loadVehicleTypes = async () => {
+      try {
+        const response = await vehicleTypeMasterAPI.getActive();
+        const vehicleTypes = response.data?.data?.vehicleTypeMasters || [];
+        setVehicleTypes(vehicleTypes);
+      } catch (error) {
+        toast.error('Failed to load vehicle types');
+        console.error('Error loading vehicle types:', error);
+      }
+    };
+    loadVehicleTypes();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -107,8 +129,7 @@ export default function TransportMasterPage() {
     setFormData({
       fromLocationId: transport.fromLocationId,
       toLocationId: transport.toLocationId,
-      vehicleType: transport.vehicleType,
-      paxCount: transport.paxCount,
+      vehicleTypeId: transport.vehicleTypeId,
       price: transport.price,
       isActive: transport.isActive
     });
@@ -139,8 +160,7 @@ export default function TransportMasterPage() {
     setFormData({
       fromLocationId: '',
       toLocationId: '',
-      vehicleType: '',
-      paxCount: 0,
+      vehicleTypeId: '',
       price: 0,
       isActive: true
     });
@@ -297,6 +317,7 @@ export default function TransportMasterPage() {
             formData={formData}
             editingTransport={editingTransport}
             destinations={destinations}
+            vehicleTypes={vehicleTypes}
             onFormDataChange={setFormData}
             onSubmit={handleSubmit}
             onCancel={resetForm}

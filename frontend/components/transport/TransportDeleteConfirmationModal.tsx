@@ -4,26 +4,33 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Trash2, AlertTriangle } from 'lucide-react';
 
+interface VehicleTypeMaster {
+  id: string;
+  vehicleName: string;
+  paxCount: number;
+  isActive: boolean;
+}
+
 interface TransportMaster {
   id: string;
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   fromLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
   toLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
+  vehicleType?: VehicleTypeMaster;
 }
 
 interface TransportDeleteConfirmationModalProps {
@@ -64,10 +71,10 @@ export default function TransportDeleteConfirmationModal({
           </p>
           <div className="mt-2 p-3 bg-gray-50 rounded-lg">
             <p className="text-sm font-medium">
-              {transport.vehicleType} ({transport.paxCount} PAX)
+              {transport.vehicleType?.vehicleName || 'Unknown Vehicle'} ({transport.vehicleType?.paxCount || 0} PAX)
             </p>
             <p className="text-xs text-gray-500">
-              {transport.fromLocation?.destinationName || 'Unknown'} → {transport.toLocation?.destinationName || 'Unknown'}
+              {transport.fromLocation?.name || 'Unknown'} → {transport.toLocation?.name || 'Unknown'}
             </p>
             <p className="text-xs text-gray-500">
               Price: SAR {transport.price}

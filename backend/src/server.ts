@@ -17,8 +17,10 @@ import transportMasterRoutes from './routes/transportMaster.routes';
 import currencyMasterRoutes from './routes/currencyMaster.routes';
 import countryMasterRoutes from './routes/countryMaster.routes';
 import hotelMasterRoutes from './routes/hotelMaster.routes';
-import airportMasterRoutes from './routes/airportMaster.routes';
 import locationMasterRoutes from './routes/locationMaster.routes';
+import airportRouteMasterRoutes from './routes/airportRouteMaster.routes';
+import userRoleMasterRoutes from './routes/userRoleMaster.routes';
+import vehicleTypeMasterRoutes from './routes/vehicleTypeMaster.routes';
 import cancellationRoutes from './routes/cancellation.routes';
 import notificationRoutes from './routes/notifications.routes';
 
@@ -62,8 +64,10 @@ app.use('/api/transport-masters', transportMasterRoutes);
 app.use('/api/currency-masters', currencyMasterRoutes);
 app.use('/api/country-masters', countryMasterRoutes);
 app.use('/api/hotel-masters', hotelMasterRoutes);
-app.use('/api/airport-masters', airportMasterRoutes);
 app.use('/api/location-masters', locationMasterRoutes);
+app.use('/api/airport-route-masters', airportRouteMasterRoutes);
+app.use('/api/user-role-masters', userRoleMasterRoutes);
+app.use('/api/vehicle-type-masters', vehicleTypeMasterRoutes);
 app.use('/api/cancellation', cancellationRoutes);
 app.use('/api/notifications', notificationRoutes);
 

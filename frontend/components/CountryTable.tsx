@@ -66,7 +66,9 @@ export default function CountryTable({
       toast.success('Country deleted successfully!');
       onCountryDeleted();
       setDeleteDialog({ open: false, country: null, loading: false });
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to delete country';
+      toast.error(errorMessage);
       setDeleteDialog(prev => ({ ...prev, loading: false }));
     }
   };

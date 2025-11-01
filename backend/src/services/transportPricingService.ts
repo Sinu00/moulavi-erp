@@ -33,10 +33,26 @@ export class TransportPricingService {
     const { fromLocationId, toLocationId, routeId, transportType, paxCount } = request;
 
     try {
+      // Find the vehicle type by name
+      const vehicleType = await prisma.vehicleTypeMaster.findFirst({
+        where: {
+          vehicleName: transportType,
+          paxCount: paxCount,
+          isActive: true
+        }
+      });
+
+      if (!vehicleType) {
+        return {
+          price: null,
+          isValid: false,
+          message: `No vehicle type found for ${transportType} with ${paxCount} PAX`
+        };
+      }
+
       // Build where clause based on available parameters
       const whereClause: any = {
-        vehicleType: transportType,
-        paxCount: paxCount,
+        vehicleTypeId: vehicleType.id,
         isActive: true
       };
 
@@ -92,9 +108,11 @@ export class TransportPricingService {
 
       const transportOptions = await prisma.transportMaster.findMany({
         where: whereClause,
+        include: {
+          vehicleType: true
+        },
         orderBy: [
-          { vehicleType: 'asc' },
-          { paxCount: 'asc' }
+          { vehicleType: { vehicleName: 'asc' } }
         ]
       });
 
@@ -102,17 +120,23 @@ export class TransportPricingService {
       const groupedOptions: { [key: string]: TransportOption } = {};
 
       for (const transport of transportOptions) {
-        if (!groupedOptions[transport.vehicleType]) {
-          groupedOptions[transport.vehicleType] = {
-            type: transport.vehicleType,
+        if (!transport.vehicleType) continue;
+
+        const vehicleName = transport.vehicleType.vehicleName;
+        if (!groupedOptions[vehicleName]) {
+          groupedOptions[vehicleName] = {
+            type: vehicleName,
             paxOptions: [],
             pricePerPax: {},
             isAvailable: true
           };
         }
 
-        groupedOptions[transport.vehicleType].paxOptions.push(transport.paxCount);
-        groupedOptions[transport.vehicleType].pricePerPax[transport.paxCount] = Number(transport.price);
+        const paxCount = transport.vehicleType.paxCount;
+        if (!groupedOptions[vehicleName].paxOptions.includes(paxCount)) {
+          groupedOptions[vehicleName].paxOptions.push(paxCount);
+        }
+        groupedOptions[vehicleName].pricePerPax[paxCount] = Number(transport.price);
       }
 
       return Object.values(groupedOptions);
@@ -387,12 +411,27 @@ export class TransportPricingService {
     const queryDate = date || new Date();
 
     try {
+      // Find the vehicle type by name and paxCount
+      let vehicleTypeId: string | undefined;
+      if (transportType && paxCount) {
+        const vehicleType = await prisma.vehicleTypeMaster.findFirst({
+          where: {
+            vehicleName: transportType,
+            paxCount: paxCount,
+            isActive: true
+          }
+        });
+        vehicleTypeId = vehicleType?.id;
+      }
+
       // Check if exact configuration exists using TransportMaster
       const whereClause: any = {
-        vehicleType: transportType,
-        paxCount: paxCount,
         isActive: true
       };
+
+      if (vehicleTypeId) {
+        whereClause.vehicleTypeId = vehicleTypeId;
+      }
 
       if (fromLocationId && toLocationId) {
         whereClause.fromLocationId = fromLocationId;

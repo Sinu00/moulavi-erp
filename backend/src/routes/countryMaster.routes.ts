@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { body } from 'express-validator';
 import { authenticate, authorize } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errorHandler';
-import prisma from '../lib/prisma';
+import { prisma } from '../config/database';
 import type { AuthRequest } from '../types';
 
 const router = Router();
@@ -162,7 +162,7 @@ router.put(
   })
 );
 
-// Delete country (soft delete)
+// Delete country
 router.delete(
   '/:id',
   authenticate,
@@ -171,17 +171,36 @@ router.delete(
     const { id } = req.params;
 
     const country = await prisma.countryMaster.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        locations: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
     });
 
     if (!country) {
       return res.status(404).json({ error: 'Country not found' });
     }
 
-    // Soft delete by setting isActive to false
-    await prisma.countryMaster.update({
-      where: { id },
-      data: { isActive: false }
+    // Check if country has related locations
+    if (country.locations && country.locations.length > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete country',
+        message: `This country has ${country.locations.length} location(s) associated with it. Please remove or reassign all locations before deleting the country.`,
+        details: {
+          locationCount: country.locations.length,
+          locations: country.locations.map(loc => ({ id: loc.id, name: loc.name }))
+        }
+      });
+    }
+
+    // Hard delete the country
+    await prisma.countryMaster.delete({
+      where: { id }
     });
 
     res.json({

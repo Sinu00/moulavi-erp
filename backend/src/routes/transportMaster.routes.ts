@@ -10,8 +10,7 @@ const router = Router();
 const createTransportMasterValidation = [
   body('fromLocationId').isUUID().notEmpty(),
   body('toLocationId').isUUID().notEmpty(),
-  body('vehicleType').isString().notEmpty().trim(),
-  body('paxCount').isInt({ min: 1 }),
+  body('vehicleTypeId').isUUID().notEmpty(),
   body('price').isDecimal({ decimal_digits: '0,2' }),
   body('isActive').isBoolean().optional(),
 ];
@@ -19,8 +18,7 @@ const createTransportMasterValidation = [
 const updateTransportMasterValidation = [
   body('fromLocationId').optional().isUUID(),
   body('toLocationId').optional().isUUID(),
-  body('vehicleType').optional().isString().notEmpty().trim(),
-  body('paxCount').optional().isInt({ min: 1 }),
+  body('vehicleTypeId').optional().isUUID(),
   body('price').optional().isDecimal({ decimal_digits: '0,2' }),
   body('isActive').optional().isBoolean(),
 ];
@@ -32,16 +30,15 @@ router.post(
   authorize('admin'),
   createTransportMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { fromLocationId, toLocationId, vehicleType, paxCount, price, isActive } = req.body;
+    const { fromLocationId, toLocationId, vehicleTypeId, price, isActive } = req.body;
     
     // Check if combination already exists
     const existingTransport = await prisma.transportMaster.findUnique({
       where: {
-        fromLocationId_toLocationId_vehicleType_paxCount: {
+        fromLocationId_toLocationId_vehicleTypeId: {
           fromLocationId,
           toLocationId,
-          vehicleType,
-          paxCount
+          vehicleTypeId
         }
       }
     });
@@ -49,7 +46,7 @@ router.post(
     if (existingTransport) {
       return res.status(400).json({ 
         error: 'Transport combination already exists',
-        details: 'A transport with this route, type, and PAX already exists'
+        details: 'A transport with this route and vehicle type already exists'
       });
     }
     
@@ -57,10 +54,14 @@ router.post(
       data: {
         fromLocationId,
         toLocationId,
-        vehicleType,
-        paxCount,
+        vehicleTypeId,
         price: parseFloat(price),
         isActive: isActive ?? true
+      },
+      include: {
+        fromLocation: true,
+        toLocation: true,
+        vehicleType: true
       }
     });
     
@@ -74,7 +75,7 @@ router.get(
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = '1', limit = '10', search, fromLocationId, toLocationId, vehicleType, isActive } = req.query;
+    const { page = '1', limit = '10', search, fromLocationId, toLocationId, vehicleTypeId, isActive } = req.query;
     
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -84,7 +85,7 @@ router.get(
     
     if (search) {
       where.OR = [
-        { vehicleType: { contains: search, mode: 'insensitive' } },
+        { vehicleType: { vehicleName: { contains: search, mode: 'insensitive' } } },
         { fromLocation: { name: { contains: search, mode: 'insensitive' } } },
         { toLocation: { name: { contains: search, mode: 'insensitive' } } }
       ];
@@ -98,8 +99,8 @@ router.get(
       where.toLocationId = toLocationId;
     }
     
-    if (vehicleType) {
-      where.vehicleType = vehicleType;
+    if (vehicleTypeId) {
+      where.vehicleTypeId = vehicleTypeId;
     }
     
     if (isActive !== undefined) {
@@ -114,12 +115,12 @@ router.get(
         orderBy: [
           { fromLocation: { name: 'asc' } },
           { toLocation: { name: 'asc' } },
-          { vehicleType: 'asc' },
-          { paxCount: 'asc' }
+          { vehicleType: { vehicleName: 'asc' } }
         ],
         include: {
           fromLocation: true,
-          toLocation: true
+          toLocation: true,
+          vehicleType: true
         }
       }),
       prisma.transportMaster.count({ where })
@@ -153,11 +154,11 @@ router.get(
       },
       include: {
         fromLocation: true,
-        toLocation: true
+        toLocation: true,
+        vehicleType: true
       },
       orderBy: [
-        { vehicleType: 'asc' },
-        { paxCount: 'asc' }
+        { vehicleType: { vehicleName: 'asc' } }
       ]
     });
     
@@ -198,7 +199,12 @@ router.get(
     const { id } = req.params;
     
     const transportMaster = await prisma.transportMaster.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        fromLocation: true,
+        toLocation: true,
+        vehicleType: true
+      }
     });
     
     if (!transportMaster) {
@@ -229,18 +235,16 @@ router.put(
     }
     
     // If updating unique combination, check for conflicts
-    if (updateData.fromLocationId || updateData.toLocationId || updateData.vehicleType || updateData.paxCount) {
+    if (updateData.fromLocationId || updateData.toLocationId || updateData.vehicleTypeId) {
       const fromLocationId = updateData.fromLocationId || existingTransport.fromLocationId;
       const toLocationId = updateData.toLocationId || existingTransport.toLocationId;
-      const vehicleType = updateData.vehicleType || existingTransport.vehicleType;
-      const paxCount = updateData.paxCount || existingTransport.paxCount;
+      const vehicleTypeId = updateData.vehicleTypeId || existingTransport.vehicleTypeId;
       
       const conflictingTransport = await prisma.transportMaster.findFirst({
         where: {
           fromLocationId,
           toLocationId,
-          vehicleType,
-          paxCount,
+          vehicleTypeId,
           id: { not: id }
         }
       });
@@ -248,7 +252,7 @@ router.put(
       if (conflictingTransport) {
         return res.status(400).json({ 
           error: 'Transport combination already exists',
-          details: 'A transport with this route, type, and PAX already exists'
+          details: 'A transport with this route and vehicle type already exists'
         });
       }
     }

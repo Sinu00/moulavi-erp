@@ -4,26 +4,33 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Edit, Trash2, Eye, EyeOff, Truck } from 'lucide-react';
 
+interface VehicleTypeMaster {
+  id: string;
+  vehicleName: string;
+  paxCount: number;
+  isActive: boolean;
+}
+
 interface TransportMaster {
   id: string;
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   fromLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
   toLocation?: {
     id: string;
-    destinationName: string;
+    name: string;
     city: string;
   };
+  vehicleType?: VehicleTypeMaster;
 }
 
 interface TransportCardProps {
@@ -41,12 +48,12 @@ export default function TransportCard({ transport, onEdit, onDelete, onToggleSta
           <Truck className="h-6 w-6 text-orange-600" />
         </div>
         <div>
-          <h3 className="font-medium text-gray-900">{transport.vehicleType}</h3>
+          <h3 className="font-medium text-gray-900">{transport.vehicleType?.vehicleName || 'Unknown Vehicle'}</h3>
           <p className="text-sm text-gray-500">
-            {transport.fromLocation?.destinationName || 'Unknown'} → {transport.toLocation?.destinationName || 'Unknown'}
+            {transport.fromLocation?.name || 'Unknown'} → {transport.toLocation?.name || 'Unknown'}
           </p>
           <p className="text-xs text-gray-400">
-            {transport.paxCount} PAX • SAR {transport.price}
+            {transport.vehicleType?.paxCount || 0} PAX • SAR {transport.price}
           </p>
         </div>
       </div>

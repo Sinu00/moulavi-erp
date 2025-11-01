@@ -7,63 +7,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
-import { useAirportMaster } from '@/hooks/useAirportMaster';
+import { useVehicleTypeMaster } from '@/hooks/useVehicleTypeMaster';
 import Sidebar from '@/components/Sidebar';
-import AirportCard from '@/components/airport/AirportCard';
-import AirportForm from '@/components/airport/AirportForm';
-import AirportDeleteConfirmationModal from '@/components/airport/AirportDeleteConfirmationModal';
-import { Plus, Search, Plane, Menu } from 'lucide-react';
+import VehicleTypeCard from '@/components/vehicle-type/VehicleTypeCard';
+import VehicleTypeForm from '@/components/vehicle-type/VehicleTypeForm';
+import VehicleTypeDeleteConfirmationModal from '@/components/vehicle-type/VehicleTypeDeleteConfirmationModal';
+import { Plus, Search, Menu, Car } from 'lucide-react';
 
-interface AirportMaster {
+interface VehicleTypeMaster {
   id: string;
-  airportCode: string;
-  airportName: string;
-  city: string;
-  country: string;
+  vehicleName: string;
+  paxCount: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-interface CreateAirportMasterRequest {
-  airportCode: string;
-  airportName: string;
-  city: string;
-  country: string;
+interface CreateVehicleTypeMasterRequest {
+  vehicleName: string;
+  paxCount: number;
   isActive?: boolean;
 }
 
-export default function AirportMasterPage() {
+export default function VehicleTypeMasterPage() {
   const router = useRouter();
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingAirport, setEditingAirport] = useState<AirportMaster | null>(null);
+  const [editingVehicleType, setEditingVehicleType] = useState<VehicleTypeMaster | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [airportToDelete, setAirportToDelete] = useState<AirportMaster | null>(null);
-  const [formData, setFormData] = useState<CreateAirportMasterRequest>({
-    airportCode: '',
-    airportName: '',
-    city: '',
-    country: '',
+  const [vehicleTypeToDelete, setVehicleTypeToDelete] = useState<VehicleTypeMaster | null>(null);
+  const [formData, setFormData] = useState<CreateVehicleTypeMasterRequest>({
+    vehicleName: '',
+    paxCount: 0,
     isActive: true
   });
 
   const [mounted, setMounted] = useState(false);
 
   const {
-    airports,
+    vehicleTypes,
     loading,
     searchTerm,
     setSearchTerm,
-    filteredAirports,
-    createAirport,
-    updateAirport,
-    deleteAirport,
-    toggleAirportStatus
-  } = useAirportMaster();
+    filteredVehicleTypes,
+    createVehicleType,
+    updateVehicleType,
+    deleteVehicleType,
+    toggleVehicleTypeStatus
+  } = useVehicleTypeMaster();
 
   useEffect(() => {
     setMounted(true);
@@ -79,59 +74,61 @@ export default function AirportMasterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const success = editingAirport 
-      ? await updateAirport(editingAirport.id, formData)
-      : await createAirport(formData);
+    if (!formData.vehicleName || formData.paxCount <= 0) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    
+    const success = editingVehicleType 
+      ? await updateVehicleType(editingVehicleType.id, formData)
+      : await createVehicleType(formData);
     
     if (success) {
       resetForm();
+      toast.success(editingVehicleType ? 'Vehicle type updated successfully!' : 'Vehicle type created successfully!');
     }
   };
 
-  const handleEdit = (airport: AirportMaster) => {
-    setEditingAirport(airport);
+  const handleEdit = (vehicleType: VehicleTypeMaster) => {
+    setEditingVehicleType(vehicleType);
     setFormData({
-      airportCode: airport.airportCode,
-      airportName: airport.airportName,
-      city: airport.city,
-      country: airport.country,
-      isActive: airport.isActive
+      vehicleName: vehicleType.vehicleName,
+      paxCount: vehicleType.paxCount,
+      isActive: vehicleType.isActive
     });
     setShowCreateForm(true);
   };
 
-  const handleDeleteClick = (airport: AirportMaster) => {
-    setAirportToDelete(airport);
+  const handleDeleteClick = (vehicleType: VehicleTypeMaster) => {
+    setVehicleTypeToDelete(vehicleType);
     setShowDeleteModal(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!airportToDelete) return;
+    if (!vehicleTypeToDelete) return;
 
-    const success = await deleteAirport(airportToDelete.id);
+    const success = await deleteVehicleType(vehicleTypeToDelete.id);
     if (success) {
       setShowDeleteModal(false);
-      setAirportToDelete(null);
+      setVehicleTypeToDelete(null);
+      toast.success('Vehicle type deleted successfully!');
     }
   };
 
   const handleDeleteCancel = () => {
     setShowDeleteModal(false);
-    setAirportToDelete(null);
+    setVehicleTypeToDelete(null);
   };
 
   const resetForm = () => {
     setFormData({
-      airportCode: '',
-      airportName: '',
-      city: '',
-      country: '',
+      vehicleName: '',
+      paxCount: 0,
       isActive: true
     });
-    setEditingAirport(null);
+    setEditingVehicleType(null);
     setShowCreateForm(false);
   };
-
 
   if (!mounted) {
     return null; // Prevent hydration mismatch
@@ -139,6 +136,26 @@ export default function AirportMasterPage() {
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
+  }
+
+  // Show loading state while checking permissions
+  if (loading && vehicleTypes.length === 0 && !searchTerm) {
+    return (
+      <div className="flex h-screen bg-gray-50/50">
+        <div className="hidden lg:block">
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            onCollapsedChange={setSidebarCollapsed}
+          />
+        </div>
+        <div className="flex-1 overflow-auto flex items-center justify-center">
+          <div className="text-center">
+            <Car className="h-12 w-12 text-gray-400 mx-auto mb-4 animate-pulse" />
+            <p className="text-gray-500">Loading vehicle types...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -174,15 +191,15 @@ export default function AirportMasterPage() {
               </Button>
               
               <div>
-                <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Airport Master</h1>
+                <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Vehicle Type Master</h1>
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">
-                  Manage airports for travel bookings
+                  Manage vehicle types and passenger capacities
                 </p>
               </div>
             </div>
             <Button onClick={() => setShowCreateForm(true)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
-              Add Airport
+              Add Vehicle Type
             </Button>
           </div>
         </div>
@@ -195,7 +212,7 @@ export default function AirportMasterPage() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
-                    placeholder="Search airports..."
+                    placeholder="Search vehicle types..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -205,15 +222,15 @@ export default function AirportMasterPage() {
             </CardContent>
           </Card>
 
-          {/* Airports List */}
+          {/* Vehicle Types List */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Plane className="h-5 w-5" />
-                Airports ({filteredAirports.length})
+                <Car className="h-5 w-5" />
+                Vehicle Types ({filteredVehicleTypes.length})
               </CardTitle>
               <CardDescription>
-                Manage airport information for travel bookings
+                Manage vehicle types and their passenger capacities
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -230,29 +247,29 @@ export default function AirportMasterPage() {
                     </div>
                   ))}
                 </div>
-              ) : filteredAirports.length === 0 ? (
+              ) : filteredVehicleTypes.length === 0 ? (
                 <div className="text-center py-12">
-                  <Plane className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No airports found</h3>
+                  <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No vehicle types found</h3>
                   <p className="text-gray-500 mb-4">
-                    {searchTerm ? 'No airports match your search criteria' : 'Get started by adding your first airport'}
+                    {searchTerm ? 'No vehicle types match your search criteria' : 'Get started by adding your first vehicle type'}
                   </p>
                   {!searchTerm && (
                     <Button onClick={() => setShowCreateForm(true)}>
                       <Plus className="h-4 w-4 mr-2" />
-                      Add Airport
+                      Add Vehicle Type
                     </Button>
                   )}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredAirports.map((airport) => (
-                    <AirportCard
-                      key={airport.id}
-                      airport={airport}
+                  {filteredVehicleTypes.map((vehicleType) => (
+                    <VehicleTypeCard
+                      key={vehicleType.id}
+                      vehicleType={vehicleType}
                       onEdit={handleEdit}
                       onDelete={handleDeleteClick}
-                      onToggleStatus={toggleAirportStatus}
+                      onToggleStatus={toggleVehicleTypeStatus}
                     />
                   ))}
                 </div>
@@ -272,15 +289,15 @@ export default function AirportMasterPage() {
         <SheetContent side="right" className="w-96">
           <SheetHeader>
             <SheetTitle>
-              {editingAirport ? 'Edit Airport' : 'Add New Airport'}
+              {editingVehicleType ? 'Edit Vehicle Type' : 'Add New Vehicle Type'}
             </SheetTitle>
             <SheetDescription>
-              {editingAirport ? 'Update airport information' : 'Add a new airport to the system'}
+              {editingVehicleType ? 'Update vehicle type information' : 'Add a new vehicle type to the system'}
             </SheetDescription>
           </SheetHeader>
-          <AirportForm
+          <VehicleTypeForm
             formData={formData}
-            editingAirport={editingAirport}
+            editingVehicleType={editingVehicleType}
             onFormDataChange={setFormData}
             onSubmit={handleSubmit}
             onCancel={resetForm}
@@ -289,12 +306,13 @@ export default function AirportMasterPage() {
       </Sheet>
 
       {/* Delete Confirmation Modal */}
-      <AirportDeleteConfirmationModal
+      <VehicleTypeDeleteConfirmationModal
         isOpen={showDeleteModal}
-        airport={airportToDelete}
+        vehicleType={vehicleTypeToDelete}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
       />
     </div>
   );
 }
+

@@ -7,12 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { LocationMaster } from '@/types';
 
+interface VehicleTypeMaster {
+  id: string;
+  vehicleName: string;
+  paxCount: number;
+  isActive: boolean;
+}
+
 interface TransportMaster {
   id: string;
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive: boolean;
   createdAt: string;
@@ -27,13 +33,13 @@ interface TransportMaster {
     name: string;
     city: string;
   };
+  vehicleType?: VehicleTypeMaster;
 }
 
 interface CreateTransportMasterRequest {
   fromLocationId: string;
   toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
+  vehicleTypeId: string;
   price: number;
   isActive?: boolean;
 }
@@ -42,25 +48,17 @@ interface TransportFormProps {
   formData: CreateTransportMasterRequest;
   editingTransport: TransportMaster | null;
   destinations: LocationMaster[];
+  vehicleTypes: VehicleTypeMaster[];
   onFormDataChange: (data: CreateTransportMasterRequest) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
 }
 
-const VEHICLE_TYPES = [
-  'Lexus ES 250',
-  'GMC',
-  'Staria',
-  'Hiace',
-  'Bus',
-  'Van',
-  'SUV'
-];
-
 export default function TransportForm({ 
   formData, 
   editingTransport, 
   destinations,
+  vehicleTypes,
   onFormDataChange, 
   onSubmit, 
   onCancel 
@@ -111,36 +109,23 @@ export default function TransportForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="vehicleType">Vehicle Type *</Label>
+          <Label htmlFor="vehicleTypeId">Vehicle Type *</Label>
           <Select 
-            value={formData.vehicleType} 
-            onValueChange={(value) => handleInputChange('vehicleType', value)}
+            value={formData.vehicleTypeId} 
+            onValueChange={(value) => handleInputChange('vehicleTypeId', value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select vehicle type" />
             </SelectTrigger>
             <SelectContent>
-              {VEHICLE_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
+              {vehicleTypes.filter(vt => vt.isActive).map((vehicleType) => (
+                <SelectItem key={vehicleType.id} value={vehicleType.id}>
+                  {vehicleType.vehicleName} ({vehicleType.paxCount} PAX)
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="paxCount">Passenger Count *</Label>
-          <Input
-            id="paxCount"
-            type="number"
-            min="1"
-            max="50"
-            placeholder="e.g., 5"
-            value={formData.paxCount || ''}
-            onChange={(e) => handleInputChange('paxCount', parseInt(e.target.value) || 0)}
-            required
-          />
+          <p className="text-xs text-gray-500">Select a vehicle type from the master list</p>
         </div>
 
         <div className="space-y-2">
