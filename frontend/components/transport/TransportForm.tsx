@@ -80,13 +80,14 @@ export default function TransportForm({
               <SelectValue placeholder="Select from location" />
             </SelectTrigger>
             <SelectContent>
-              {destinations.map((destination) => (
-                <SelectItem key={destination.id} value={destination.id}>
-                  {destination.name}
+              {destinations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {location.name} ({location.locationType})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-gray-500">Select any location type (Airport, Destination, or Ziyarat)</p>
         </div>
 
         <div className="space-y-2">
@@ -99,13 +100,14 @@ export default function TransportForm({
               <SelectValue placeholder="Select to location" />
             </SelectTrigger>
             <SelectContent>
-              {destinations.map((destination) => (
-                <SelectItem key={destination.id} value={destination.id}>
-                  {destination.name}
+              {destinations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {location.name} ({location.locationType})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-gray-500">Select any location type (Airport, Destination, or Ziyarat)</p>
         </div>
 
         <div className="space-y-2">
@@ -129,7 +131,7 @@ export default function TransportForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="price">Price (SAR) *</Label>
+          <Label htmlFor="price">Price (INR) *</Label>
           <Input
             id="price"
             type="number"

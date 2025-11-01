@@ -240,11 +240,13 @@ export default function PartyMasterPage() {
         onSubmit={async (partyData) => {
           try {
             if (editingParty) {
-              await partyAPI.update(editingParty.id, partyData);
+              const response = await partyAPI.update(editingParty.id, partyData);
               handlePartyUpdated();
+              return response.data; // Return the updated party data
             } else {
-              await partyAPI.create(partyData);
+              const response = await partyAPI.create(partyData);
               handlePartyCreated();
+              return response.data; // Return the created party data
             }
           } catch (error) {
             throw error; // Re-throw to let the dialog handle the error display

@@ -39,11 +39,12 @@ export function useTransportMaster() {
 
   const loadDestinations = async () => {
     try {
-      const response = await locationMasterAPI.getActive({ locationType: 'DESTINATION' });
+      // Load all location types (AIRPORT, DESTINATION, ZIYARAT)
+      const response = await locationMasterAPI.getActive();
       setDestinations(response.data.locationMasters || []);
     } catch (error) {
-      console.error('Error loading destinations:', error);
-      toast.error('Failed to load destinations');
+      console.error('Error loading locations:', error);
+      toast.error('Failed to load locations');
     }
   };
 

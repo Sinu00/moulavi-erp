@@ -337,6 +337,7 @@ router.put(
       account_currency_id,
       is_supplier,
       is_customer,
+      login_required,
       email_notification,
       sms_notification,
       marketing_notification,
@@ -345,15 +346,70 @@ router.put(
     // Validate supplier service types if supplier is being set to true
     const existingParty = await prisma.party.findUnique({
       where: { id },
-      select: { isSupplier: true }
+      select: { 
+        isSupplier: true,
+        userId: true,
+        email: true,
+        partyName: true,
+        whatsappNumber: true
+      }
     });
+    
+    if (!existingParty) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    
+    const updateData: any = {};
+    
+    // Handle login account creation if login_required is being enabled
+    if (login_required !== undefined && login_required === true && !existingParty.userId) {
+      // Check if user with this email already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email: existingParty.email }
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({ error: 'User with this email already exists. Cannot create login account.' });
+      }
+      
+      // Generate password and create user account
+      const generatedPassword = generateRandomPassword();
+      const hashedPassword = await hashPassword(generatedPassword);
+      
+      const user = await prisma.user.create({
+        data: {
+          name: existingParty.partyName,
+          email: existingParty.email,
+          password: hashedPassword,
+          role: 'party'
+        }
+      });
+      
+      // Add userId to update data
+      updateData.userId = user.id;
+      updateData.loginRequired = true;
+      
+      // Send credentials email
+      try {
+        await sendCredentialsEmail(
+          existingParty.email,
+          existingParty.partyName,
+          existingParty.email,
+          generatedPassword,
+          existingParty.whatsappNumber || undefined
+        );
+      } catch (error) {
+        console.error('Failed to send credentials email:', error);
+        // Don't fail the request if email fails
+      }
+    } else if (login_required !== undefined) {
+      updateData.loginRequired = login_required;
+    }
     
     const willBeSupplier = is_supplier !== undefined ? is_supplier : existingParty?.isSupplier;
     if (willBeSupplier && supplier_service_types !== undefined && (!Array.isArray(supplier_service_types) || supplier_service_types.length === 0)) {
       return res.status(400).json({ error: 'At least one supplier service type is required when is_supplier is true' });
     }
-    
-    const updateData: any = {};
     
     if (party_name !== undefined) updateData.partyName = party_name;
     if (contact_number !== undefined) updateData.contactNumber = contact_number;

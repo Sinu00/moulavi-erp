@@ -53,7 +53,7 @@ export default function TransportCard({ transport, onEdit, onDelete, onToggleSta
             {transport.fromLocation?.name || 'Unknown'} → {transport.toLocation?.name || 'Unknown'}
           </p>
           <p className="text-xs text-gray-400">
-            {transport.vehicleType?.paxCount || 0} PAX • SAR {transport.price}
+            {transport.vehicleType?.paxCount || 0} PAX • INR {transport.price}
           </p>
         </div>
       </div>

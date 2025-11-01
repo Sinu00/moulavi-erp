@@ -170,17 +170,38 @@ export default function CreatePartyDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    const isValid = validateForm();
+    if (!isValid) {
+      // Show a toast if validation fails so user knows why form isn't submitting
+      setTimeout(() => {
+        const errorCount = Object.keys(errors).length;
+        if (errorCount > 0) {
+          toast.error('Please fix the form errors before submitting');
+          // Scroll to first error field
+          const firstErrorField = document.querySelector('.border-red-500');
+          if (firstErrorField) {
+            firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 100); // Wait for state to update
       return;
     }
 
     setLoading(true);
     try {
+      // Filter out empty contacts before submission
+      const validContacts = formData.contacts.filter(
+        contact => contact.contact_name?.trim() && contact.contact_number?.trim()
+      );
+      
       // Ensure customer_type is not empty (validation should prevent this, but just in case)
       const submitData = {
         ...formData,
+        contacts: validContacts,
         customer_type: formData.customer_type || 'direct' // fallback to direct if somehow empty
       };
+      
+      console.log('Submitting party data:', submitData);
       
       const party = await onSubmit(submitData);
       const partyId = editingParty?.id || (party as any)?.party?.id || (party as any)?.id;
@@ -654,11 +675,28 @@ export default function CreatePartyDialog({
                 checked={formData.login_required}
                 onChange={(e) => handleInputChange('login_required', e.target.checked)}
                 className="rounded"
+                disabled={editingParty && !!editingParty.userId}
               />
-              <Label htmlFor="login_required" className="cursor-pointer">
+              <Label 
+                htmlFor="login_required" 
+                className={`cursor-pointer ${editingParty && editingParty.userId ? 'text-gray-400' : ''}`}
+              >
                 Create login account for party
               </Label>
             </div>
+            {editingParty && editingParty.userId ? (
+              <p className="text-xs text-gray-500 ml-6">
+                ✓ Login account already exists for this party
+              </p>
+            ) : editingParty && !editingParty.userId ? (
+              <p className="text-xs text-blue-600 ml-6">
+                💡 Enable this to create a login account. Credentials will be sent via email.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500 ml-6">
+                Enable this to create a login account. Credentials will be sent via email.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

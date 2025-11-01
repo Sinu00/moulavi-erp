@@ -77,7 +77,7 @@ export default function TransportDeleteConfirmationModal({
               {transport.fromLocation?.name || 'Unknown'} → {transport.toLocation?.name || 'Unknown'}
             </p>
             <p className="text-xs text-gray-500">
-              Price: SAR {transport.price}
+              Price: INR {transport.price}
             </p>
           </div>
           <p className="text-xs text-gray-500 mt-2">

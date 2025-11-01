@@ -235,7 +235,7 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                             key={`${t.id || `${t.vehicleType}-${t.paxCount}`}`}
                             value={`${t.vehicleType}-${t.paxCount}`}
                           >
-                            {t.vehicleType} / {t.paxCount} — {Number(t.price).toFixed(2)} SAR
+                            {t.vehicleType} / {t.paxCount} — {Number(t.price).toFixed(2)} INR
                           </SelectItem>
                         ))}
                     </SelectContent>
