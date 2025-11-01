@@ -5,11 +5,11 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "npx tsc && npx prisma generate",
+    "build": "npx prisma generate && npx tsc",
     "start": "node dist/server.js",
     "migrate": "node -r ts-node/register src/database/migrate.ts",
     "create-admin": "node scripts/create-admin.js",
-    "seed-minimum": "node scripts/seed-minimum-master-data.js",
+    "seed-master": "node scripts/seed-all.js",
     "postinstall": "prisma generate",
     "deploy": "npm run build && npm start"
   },
