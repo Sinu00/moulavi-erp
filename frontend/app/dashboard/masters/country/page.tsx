@@ -161,7 +161,7 @@ export default function CountryMasterPage() {
     try {
       for (const countryId of selectedCountries) {
         try {
-          await countryMasterAPI.delete(countryId);
+        await countryMasterAPI.delete(countryId);
         } catch (error: any) {
           const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to delete country';
           toast.error(errorMessage);

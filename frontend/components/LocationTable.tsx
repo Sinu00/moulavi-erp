@@ -79,10 +79,12 @@ export default function LocationTable({
     switch (type) {
       case 'AIRPORT':
         return <Plane className="h-4 w-4" />;
-      case 'DESTINATION':
+      case 'HOTEL':
         return <Building2 className="h-4 w-4" />;
       case 'ZIYARAT':
         return <Navigation className="h-4 w-4" />;
+      case 'OTHERS':
+        return <MapPin className="h-4 w-4" />;
       default:
         return <MapPin className="h-4 w-4" />;
     }
@@ -92,10 +94,12 @@ export default function LocationTable({
     switch (type) {
       case 'AIRPORT':
         return 'bg-blue-100 text-blue-800';
-      case 'DESTINATION':
+      case 'HOTEL':
         return 'bg-green-100 text-green-800';
       case 'ZIYARAT':
         return 'bg-purple-100 text-purple-800';
+      case 'OTHERS':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -105,9 +109,11 @@ export default function LocationTable({
     switch (type) {
       case 'AIRPORT':
         return 'default';
-      case 'DESTINATION':
+      case 'HOTEL':
         return 'secondary';
       case 'ZIYARAT':
+        return 'outline';
+      case 'OTHERS':
         return 'outline';
       default:
         return 'outline';
@@ -243,13 +249,22 @@ export default function LocationTable({
             Airports
           </Button>
           <Button
-            variant={filterLocationType === 'DESTINATION' ? 'default' : 'outline'}
+            variant={filterLocationType === 'HOTEL' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => onFilterChange('DESTINATION')}
+            onClick={() => onFilterChange('HOTEL')}
             className="flex items-center gap-1"
           >
             <Building2 className="h-3 w-3" />
-            Destinations
+            Hotels
+          </Button>
+          <Button
+            variant={filterLocationType === 'OTHERS' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => onFilterChange('OTHERS')}
+            className="flex items-center gap-1"
+          >
+            <MapPin className="h-3 w-3" />
+            Others
           </Button>
           <Button
             variant={filterLocationType === 'ZIYARAT' ? 'default' : 'outline'}

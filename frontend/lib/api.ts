@@ -299,14 +299,14 @@ export const currencyMasterAPI = {
   toggleStatus: (id: string) => api.patch(`/currency-masters/${id}/toggle-status`),
 };
 
-export const hotelMasterAPI = {
-  create: (data: any) => api.post('/hotel-masters', data),
-  getAll: (params?: any) => api.get('/hotel-masters', { params }),
-  getByLocation: (locationId: string, params?: any) => api.get(`/hotel-masters/by-location/${locationId}`, { params }),
-  getById: (id: string) => api.get(`/hotel-masters/${id}`),
-  update: (id: string, data: any) => api.put(`/hotel-masters/${id}`, data),
-  delete: (id: string) => api.delete(`/hotel-masters/${id}`),
-  toggleStatus: (id: string) => api.patch(`/hotel-masters/${id}/toggle-status`),
+export const cityMasterAPI = {
+  create: (data: any) => api.post('/city-masters', data),
+  getAll: (params?: any) => api.get('/city-masters', { params }),
+  getActive: (params?: { countryId?: string }) => api.get('/city-masters/active', { params }),
+  getById: (id: string) => api.get(`/city-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/city-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/city-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/city-masters/${id}/toggle-status`),
 };
 
 
@@ -348,6 +348,15 @@ export const airportRouteMasterAPI = {
   update: (id: string, data: any) => api.put(`/airport-route-masters/${id}`, data),
   delete: (id: string) => api.delete(`/airport-route-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/airport-route-masters/${id}/toggle-status`),
+};
+
+export const fullTripMasterAPI = {
+  create: (data: any) => api.post('/full-trip-masters', data),
+  getAll: (params?: any) => api.get('/full-trip-masters', { params }),
+  getById: (id: string) => api.get(`/full-trip-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/full-trip-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/full-trip-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/full-trip-masters/${id}/toggle-status`),
 };
 
 // Masters

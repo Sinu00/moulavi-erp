@@ -3,11 +3,20 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
-import { TransportBooking, Location, Hotel as HotelType } from '@/lib/umrah/types';
+import { TransportBooking, Location, Hotel as HotelType, LocationMaster } from '@/lib/umrah/types';
+
+interface VehicleType {
+  id: string;
+  vehicleName: string;
+  paxCount: number;
+  isActive: boolean;
+}
 
 interface TransportSegmentTableProps {
   transportSegments: TransportBooking[];
   locations: Location[];
+  locationMasters?: LocationMaster[];
+  vehicleTypes?: VehicleType[];
   getAllHotelsForLocation: (locationId: string) => HotelType[];
   getOptionsForRow: (index: number) => any[];
   onUpdateSegment: (index: number, field: keyof TransportBooking, value: any) => void;
@@ -17,9 +26,17 @@ interface TransportSegmentTableProps {
   emptyMessage?: string;
 }
 
+// Helper function to truncate text
+const truncateText = (text: string, maxLength: number = 15): string => {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
+};
+
 export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
   transportSegments,
   locations,
+  locationMasters = [],
+  vehicleTypes = [],
   getAllHotelsForLocation,
   getOptionsForRow,
   onUpdateSegment,
@@ -37,8 +54,9 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
         <thead>
           <tr className="bg-gray-50">
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
@@ -54,13 +72,13 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
               From
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Location/Hotel Name
+              Location Master
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               To
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Location/Hotel Name
+              Location Master
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               Vehicle Type
@@ -72,12 +90,6 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
         </thead>
         <tbody>
           {transportSegments.map((seg, index) => {
-            const fromHotels = seg.fromLocationId
-              ? getAllHotelsForLocation(seg.fromLocationId)
-              : [];
-            const toHotels = seg.toLocationId
-              ? getAllHotelsForLocation(seg.toLocationId)
-              : [];
             const rowOptions = getOptionsForRow(index);
 
             return (
@@ -121,11 +133,20 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                       <SelectValue placeholder="Select from" />
                     </SelectTrigger>
                     <SelectContent>
+                      {/* Show city locations */}
                       {locations
                         .filter((loc) => loc.id && loc.id.trim() !== '')
                         .map((loc) => (
                           <SelectItem key={loc.id} value={loc.id}>
                             {loc.destinationName}
+                          </SelectItem>
+                        ))}
+                      {/* Also show airports from locationMasters */}
+                      {locationMasters
+                        .filter((loc: LocationMaster) => loc.locationType === 'AIRPORT' && loc.id && loc.id.trim() !== '')
+                        .map((loc: LocationMaster) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name} {loc.city ? `(${loc.city})` : ''}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -139,16 +160,21 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                     }
                     disabled={disabled}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select hotel/location" />
+                    <SelectTrigger className="w-full max-w-[200px] [&>span]:truncate">
+                      <SelectValue placeholder="Select location master" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Airport/None</SelectItem>
-                      {fromHotels
-                        .filter((hotel: any) => hotel.id && hotel.id.trim() !== '')
-                        .map((hotel: any) => (
-                          <SelectItem key={hotel.id} value={hotel.id}>
-                            {hotel.hotelName}
+                      <SelectItem value="__none__">None</SelectItem>
+                      {locationMasters
+                        .filter((loc: LocationMaster) => loc.id && loc.id.trim() !== '')
+                        .map((loc: LocationMaster) => (
+                          <SelectItem key={loc.id} value={loc.id} textValue={loc.name}>
+                            <div className="flex flex-col w-full">
+                              <span className="font-medium">{loc.name}</span>
+                              <span className="text-xs text-gray-500 mt-0.5">
+                                {loc.city ? `${loc.city} • ` : ''}{loc.locationType}
+                              </span>
+                            </div>
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -168,11 +194,20 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                       <SelectValue placeholder="Select to" />
                     </SelectTrigger>
                     <SelectContent>
+                      {/* Show city locations */}
                       {locations
                         .filter((loc) => loc.id && loc.id.trim() !== '')
                         .map((loc) => (
                           <SelectItem key={loc.id} value={loc.id}>
                             {loc.destinationName}
+                          </SelectItem>
+                        ))}
+                      {/* Also show airports from locationMasters */}
+                      {locationMasters
+                        .filter((loc: LocationMaster) => loc.locationType === 'AIRPORT' && loc.id && loc.id.trim() !== '')
+                        .map((loc: LocationMaster) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            {loc.name} {loc.city ? `(${loc.city})` : ''}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -186,16 +221,21 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                     }
                     disabled={disabled}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select hotel/location" />
+                    <SelectTrigger className="w-full max-w-[200px] [&>span]:truncate">
+                      <SelectValue placeholder="Select location master" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">Airport/None</SelectItem>
-                      {toHotels
-                        .filter((hotel: any) => hotel.id && hotel.id.trim() !== '')
-                        .map((hotel: any) => (
-                          <SelectItem key={hotel.id} value={hotel.id}>
-                            {hotel.hotelName}
+                      <SelectItem value="__none__">None</SelectItem>
+                      {locationMasters
+                        .filter((loc: LocationMaster) => loc.id && loc.id.trim() !== '')
+                        .map((loc: LocationMaster) => (
+                          <SelectItem key={loc.id} value={loc.id} textValue={loc.name}>
+                            <div className="flex flex-col w-full">
+                              <span className="font-medium">{loc.name}</span>
+                              <span className="text-xs text-gray-500 mt-0.5">
+                                {loc.city ? `${loc.city} • ` : ''}{loc.locationType}
+                              </span>
+                            </div>
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -203,39 +243,29 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                 </td>
                 <td className="border border-gray-200 p-3">
                   <Select
-                    value={seg.vehicleType ? `${seg.vehicleType}-${seg.paxCount}` : undefined}
+                    value={seg.vehicleType || undefined}
                     onValueChange={(value) => {
-                      const chosen = rowOptions.find(
-                        (t: any) => `${t.vehicleType}-${t.paxCount}` === value
-                      );
-                      if (chosen) {
-                        onUpdateSegment(index, 'vehicleType', chosen.vehicleType);
-                        onUpdateSegment(index, 'paxCount', chosen.paxCount);
-                        onUpdateSegment(index, 'price', Number(chosen.price));
+                      const selectedVehicle = vehicleTypes.find((vt) => vt.vehicleName === value);
+                      if (selectedVehicle) {
+                        onUpdateSegment(index, 'vehicleType', selectedVehicle.vehicleName);
+                        onUpdateSegment(index, 'paxCount', selectedVehicle.paxCount);
+                        // Price is not set from vehicle type, keep existing price or 0
                       } else {
                         onUpdateSegment(index, 'vehicleType', '');
+                        onUpdateSegment(index, 'paxCount', 0);
                       }
                     }}
                     disabled={disabled}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue
-                        placeholder={
-                          rowOptions.length
-                            ? 'Select vehicle'
-                            : 'Select from/to first'
-                        }
-                      />
+                      <SelectValue placeholder="Select vehicle type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {rowOptions
-                        .filter((t: any) => t.vehicleType && t.paxCount)
-                        .map((t: any) => (
-                          <SelectItem
-                            key={`${t.id || `${t.vehicleType}-${t.paxCount}`}`}
-                            value={`${t.vehicleType}-${t.paxCount}`}
-                          >
-                            {t.vehicleType} / {t.paxCount} — {Number(t.price).toFixed(2)} INR
+                      {vehicleTypes
+                        .filter((vt) => vt.isActive)
+                        .map((vt) => (
+                          <SelectItem key={vt.id} value={vt.vehicleName}>
+                            {vt.vehicleName} ({vt.paxCount} PAX)
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -258,7 +288,8 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 };
 

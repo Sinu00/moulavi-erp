@@ -15,7 +15,7 @@ import { useMasterData } from '@/hooks/useUmrahBooking';
 import { StepProgress, LoadingSpinner } from '@/components/umrah-booking/shared';
 import { GroupDetailsStep } from '@/components/umrah-booking/steps/GroupDetailsStep';
 import { TravelDetailsStep } from '@/components/umrah-booking/steps/TravelDetailsStep';
-import { GroupAccommodationStep } from '@/components/umrah-booking/steps/GroupAccommodationStep';
+import { MovementDetailsStep } from '@/components/umrah-booking/steps/MovementDetailsStep';
 import { GroupDocumentsStep } from '@/components/umrah-booking/steps/GroupDocumentsStep';
 import { validateStep1, validateStep2, validateStep3, validateStep4 } from '@/lib/umrah/validation';
 
@@ -61,14 +61,14 @@ export default function GroupUmrahVisaPage() {
     },
     {
       id: 2,
-      title: 'Travel Details',
-      description: 'Flight information',
+      title: 'Travel & Hotel Details',
+      description: 'Flight and hotel information',
       icon: 'Plane',
     },
     {
       id: 3,
-      title: 'Hotel Booking',
-      description: 'Hotel accommodation details',
+      title: 'Movement Details',
+      description: 'Transportation and movement',
       icon: 'Home',
     },
     {
@@ -151,26 +151,52 @@ export default function GroupUmrahVisaPage() {
             onChange={updateStep2Data}
             airports={masterData.airports}
             disabled={isLoading}
-          />
-        );
-
-      case 3:
-        return (
-          <GroupAccommodationStep
-            data={bookingState.step3Data}
-            onChange={updateStep3Data}
+            isGroupBooking={true}
             locations={masterData.locations}
             hotels={masterData.hotels}
             arrivalDate={bookingState.step2Data.arrivalDate}
             departureDate={bookingState.step2Data.departureDate}
-            arrivalTime={bookingState.step2Data.arrivalTime}
-            departureTime={bookingState.step2Data.departureTime}
-            arrivalAirportId={bookingState.step2Data.arrivalAirportId}
-            departureAirportId={bookingState.step2Data.departureAirportId}
             onLoadHotels={loadHotels}
             getHotelsForLocation={getHotelsForLocation}
             onAddHotelBooking={addHotelBooking}
             onRemoveHotelBooking={removeHotelBooking}
+          />
+        );
+
+      case 3:
+        // Find arrival airport in locationMasters to get cityId
+        const arrivalAirport = masterData.locationMasters?.find(
+          (lm) => lm.id === bookingState.step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
+        );
+        
+        // Debug logging
+        if (bookingState.step2Data.arrivalAirportId) {
+          console.log('[GroupUmrahVisaPage] Step 3 - Debug Info:', {
+            arrivalAirportId: bookingState.step2Data.arrivalAirportId,
+            locationMastersCount: masterData.locationMasters?.length || 0,
+            found: !!arrivalAirport,
+            arrivalAirport: arrivalAirport,
+            cityId: arrivalAirport?.cityId,
+            cityMaster: arrivalAirport?.cityMaster,
+            hotelBookingsCount: (bookingState.step2Data.hotelBookings || []).length,
+          });
+        }
+        
+        return (
+          <MovementDetailsStep
+            data={bookingState.step3Data}
+            onChange={updateStep3Data}
+            locations={masterData.locations}
+            locationMasters={masterData.locationMasters}
+            hotelBookings={bookingState.step2Data.hotelBookings || []}
+            arrivalAirportId={bookingState.step2Data.arrivalAirportId}
+            departureAirportId={bookingState.step2Data.departureAirportId}
+            arrivalDate={bookingState.step2Data.arrivalDate}
+            departureDate={bookingState.step2Data.departureDate}
+            arrivalTime={bookingState.step2Data.arrivalTime}
+            departureTime={bookingState.step2Data.departureTime}
+            arrivalAirport={arrivalAirport}
+            getAllHotelsForLocation={getHotelsForLocation}
             disabled={isLoading}
           />
         );

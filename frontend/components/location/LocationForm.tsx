@@ -11,6 +11,7 @@ interface LocationFormProps {
   formData: CreateLocationMasterRequest;
   editingLocation: LocationMaster | null;
   countries: any[];
+  cities: any[];
   onFormDataChange: (data: CreateLocationMasterRequest) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
@@ -20,13 +21,22 @@ export default function LocationForm({
   formData, 
   editingLocation, 
   countries,
+  cities,
   onFormDataChange, 
   onSubmit, 
   onCancel 
 }: LocationFormProps) {
-  console.log('LocationForm countries:', countries);
+  // Remove excessive logging - only log on mount or when key props change
+  // console.log('[LocationForm] Render', {
+  //   formData: { ...formData },
+  //   editingLocationId: editingLocation?.id,
+  //   countriesCount: countries.length,
+  //   citiesCount: cities.length
+  // });
   
   const handleInputChange = (field: keyof CreateLocationMasterRequest, value: string | boolean) => {
+    // Only log actual changes, not every render
+    // console.log('[LocationForm] handleInputChange', { field, value });
     onFormDataChange({ ...formData, [field]: value });
   };
 
@@ -68,9 +78,10 @@ export default function LocationForm({
               <SelectValue placeholder="Select location type" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="HOTEL">Hotel</SelectItem>
               <SelectItem value="AIRPORT">Airport</SelectItem>
-              <SelectItem value="DESTINATION">Destination</SelectItem>
               <SelectItem value="ZIYARAT">Ziyarat</SelectItem>
+              <SelectItem value="OTHERS">Others</SelectItem>
             </SelectContent>
           </Select>
           {editingLocation && (
@@ -82,7 +93,16 @@ export default function LocationForm({
           <Label htmlFor="country">Country *</Label>
           <Select 
             value={formData.countryId} 
-            onValueChange={(value) => handleInputChange('countryId', value)}
+            onValueChange={(value) => {
+              console.log('[LocationForm] Country changed', { value, previousCountryId: formData.countryId });
+              // Clear city when country changes
+              onFormDataChange({ 
+                ...formData, 
+                countryId: value,
+                cityId: '',
+                city: ''
+              });
+            }}
             required
           >
             <SelectTrigger>
@@ -107,14 +127,45 @@ export default function LocationForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="city">City *</Label>
-          <Input
-            id="city"
-            placeholder="e.g., Jeddah, Makkah, Madinah"
-            value={formData.city}
-            onChange={(e) => handleInputChange('city', e.target.value)}
+          <Label htmlFor="cityId">City *</Label>
+          <Select 
+            value={formData.cityId} 
+            onValueChange={(value) => {
+              console.log('[LocationForm] City changed', { value });
+              const selectedCity = cities.find(c => c.id === value);
+              onFormDataChange({ 
+                ...formData, 
+                cityId: value,
+                city: selectedCity?.name || formData.city
+              });
+            }}
             required
-          />
+            disabled={!formData.countryId}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={formData.countryId ? "Select city" : "Select country first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {!formData.countryId ? (
+                <SelectItem value="select-country-first" disabled>
+                  Please select a country first
+                </SelectItem>
+              ) : cities && cities.length > 0 ? (
+                cities
+                  .filter(c => c.isActive)
+                  .map((city) => (
+                    <SelectItem key={city.id} value={city.id}>
+                      {city.name}
+                    </SelectItem>
+                  ))
+              ) : (
+                <SelectItem value="no-cities" disabled>
+                  No cities available for this country. Please add cities first.
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-500">Select the city this location belongs to</p>
         </div>
 
         <div className="flex items-center space-x-2">

@@ -9,6 +9,8 @@ interface UseAutoTransportSegmentsParams {
   departureDate?: string;
   arrivalTime?: string;
   departureTime?: string;
+  arrivalAirportId?: string;
+  departureAirportId?: string;
   onChange: (segments: TransportBooking[]) => void;
 }
 
@@ -20,6 +22,8 @@ export const useAutoTransportSegments = ({
   departureDate,
   arrivalTime,
   departureTime,
+  arrivalAirportId,
+  departureAirportId,
   onChange,
 }: UseAutoTransportSegmentsParams) => {
   // Find ziyarah hotels by name
@@ -49,59 +53,51 @@ export const useAutoTransportSegments = ({
 
     // 1) Arrival airport → first hotel
     const firstHotel = bookings[0];
-    if (arrivalDate && firstHotel) {
-      const firstHotelLoc = locations.find((l) => l.id === firstHotel.locationId);
-      if (firstHotelLoc) {
-        segments.push({
-          fromLocationId: firstHotelLoc.id,
-          toLocationId: firstHotel.locationId,
-          fromHotelId: '',
-          toHotelId: firstHotel.hotelId,
-          vehicleType: '',
-          paxCount: 0,
-          price: 0,
-          travelDate: arrivalDate,
-          travelTime: arrivalTime || '',
-        });
-      }
+    if (arrivalDate && firstHotel && arrivalAirportId) {
+      segments.push({
+        fromLocationId: arrivalAirportId, // Use arrival airport ID
+        toLocationId: firstHotel.locationId,
+        fromHotelId: '', // Airport, no hotel
+        toHotelId: firstHotel.hotelId,
+        vehicleType: '',
+        paxCount: 0,
+        price: 0,
+        travelDate: arrivalDate,
+        travelTime: arrivalTime || '',
+      });
     }
 
-    // 2) Inter-city moves between hotels
+    // 2) Inter-city moves between hotels (Hotel 1 → Hotel 2, etc.)
     for (let i = 1; i < bookings.length; i++) {
       const prev = bookings[i - 1];
       const curr = bookings[i];
-      if (prev.locationId !== curr.locationId) {
-        segments.push({
-          fromLocationId: prev.locationId,
-          toLocationId: curr.locationId,
-          fromHotelId: prev.hotelId,
-          toHotelId: curr.hotelId,
-          vehicleType: '',
-          paxCount: 0,
-          price: 0,
-          travelDate: curr.checkInDate || '',
-          travelTime: '',
-        });
-      }
+      segments.push({
+        fromLocationId: prev.locationId,
+        toLocationId: curr.locationId,
+        fromHotelId: prev.hotelId,
+        toHotelId: curr.hotelId,
+        vehicleType: '',
+        paxCount: 0,
+        price: 0,
+        travelDate: curr.checkInDate || '',
+        travelTime: '',
+      });
     }
 
     // 3) Last hotel → departure airport
     const lastHotel = bookings[bookings.length - 1];
-    if (departureDate && lastHotel) {
-      const lastHotelLoc = locations.find((l) => l.id === lastHotel.locationId);
-      if (lastHotelLoc) {
-        segments.push({
-          fromLocationId: lastHotel.locationId,
-          toLocationId: lastHotelLoc.id,
-          fromHotelId: lastHotel.hotelId,
-          toHotelId: '',
-          vehicleType: '',
-          paxCount: 0,
-          price: 0,
-          travelDate: departureDate,
-          travelTime: departureTime || '',
-        });
-      }
+    if (departureDate && lastHotel && departureAirportId) {
+      segments.push({
+        fromLocationId: lastHotel.locationId,
+        toLocationId: departureAirportId, // Use departure airport ID
+        fromHotelId: lastHotel.hotelId,
+        toHotelId: '', // Airport, no hotel
+        vehicleType: '',
+        paxCount: 0,
+        price: 0,
+        travelDate: departureDate,
+        travelTime: departureTime || '',
+      });
     }
 
     // Note: Ziyarah segments need getAllHotelsForLocation function which is context-specific
@@ -116,6 +112,8 @@ export const useAutoTransportSegments = ({
     departureDate,
     arrivalTime,
     departureTime,
+    arrivalAirportId,
+    departureAirportId,
   ]);
 };
 
@@ -171,11 +169,15 @@ export const generateZiyarahSegments = (
     if (base.getUTCDay() === 5) base.setDate(base.getDate() + 1);
     const dateStr = base.toISOString().split('T')[0];
 
+    // Both from and to are in the same city, but different specific locations
+    // fromLocationId and toLocationId = city location ID (same)
+    // fromHotelId = hotel LocationMaster ID
+    // toHotelId = ziyarah LocationMaster ID
     segments.push({
-      fromLocationId: cityLoc.id,
-      toLocationId: cityLoc.id,
-      fromHotelId: cityHotelBooking.hotelId,
-      toHotelId: ziyarahHotel.id,
+      fromLocationId: cityLoc.id, // City location ID (e.g., Makkah city)
+      toLocationId: cityLoc.id, // City location ID (same city)
+      fromHotelId: cityHotelBooking.hotelId, // Hotel LocationMaster ID
+      toHotelId: ziyarahHotel.id, // Ziyarah LocationMaster ID
       vehicleType: '',
       paxCount: 0,
       price: 0,
@@ -187,9 +189,23 @@ export const generateZiyarahSegments = (
   const makZiy = findZiyarahHotel('makkah');
   const madZiy = findZiyarahHotel('madinah');
 
-  if (makZiy) addZiyarahSegment('makkah', makZiy);
-  if (madZiy) addZiyarahSegment('madinah', madZiy);
+  console.log('[generateZiyarahSegments] Found ziyarah hotels:', {
+    makkah: makZiy ? makZiy.name || makZiy.hotelName : null,
+    madinah: madZiy ? madZiy.name || madZiy.hotelName : null,
+    makkahId: makZiy?.id,
+    madinahId: madZiy?.id,
+  });
 
+  if (makZiy) {
+    console.log('[generateZiyarahSegments] Adding Makkah ziyarah segment');
+    addZiyarahSegment('makkah', makZiy);
+  }
+  if (madZiy) {
+    console.log('[generateZiyarahSegments] Adding Madinah ziyarah segment');
+    addZiyarahSegment('madinah', madZiy);
+  }
+
+  console.log('[generateZiyarahSegments] Returning', segments.length, 'ziyarah segments');
   return segments;
 };
 

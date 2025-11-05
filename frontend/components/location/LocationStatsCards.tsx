@@ -11,8 +11,9 @@ interface LocationStatsCardsProps {
 export default function LocationStatsCards({ locations }: LocationStatsCardsProps) {
   const totalLocations = locations.length;
   const airports = locations.filter(l => l.locationType === 'AIRPORT').length;
-  const destinations = locations.filter(l => l.locationType === 'DESTINATION').length;
+  const hotels = locations.filter(l => l.locationType === 'HOTEL').length;
   const ziyarat = locations.filter(l => l.locationType === 'ZIYARAT').length;
+  const others = locations.filter(l => l.locationType === 'OTHERS').length;
   const activeLocations = locations.filter(l => l.isActive).length;
 
   const stats = [
@@ -31,8 +32,8 @@ export default function LocationStatsCards({ locations }: LocationStatsCardsProp
       bgColor: 'bg-purple-50'
     },
     {
-      title: 'Destinations',
-      value: destinations,
+      title: 'Hotels',
+      value: hotels,
       icon: Building2,
       color: 'bg-green-100 text-green-600',
       bgColor: 'bg-green-50'
@@ -43,11 +44,18 @@ export default function LocationStatsCards({ locations }: LocationStatsCardsProp
       icon: Navigation,
       color: 'bg-orange-100 text-orange-600',
       bgColor: 'bg-orange-50'
+    },
+    {
+      title: 'Others',
+      value: others,
+      icon: MapPin,
+      color: 'bg-gray-100 text-gray-600',
+      bgColor: 'bg-gray-50'
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

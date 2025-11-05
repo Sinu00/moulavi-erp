@@ -3,36 +3,32 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Trash2, AlertTriangle } from 'lucide-react';
+import { FullTripMaster } from '@/types';
 
-interface HotelMaster {
-  id: string;
-  hotelCode: string;
-  hotelName: string;
-  locationId: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  location?: {
-    id: string;
-    destinationName: string;
-    city: string;
-  };
-}
-
-interface HotelDeleteConfirmationModalProps {
+interface FullTripDeleteConfirmationModalProps {
   isOpen: boolean;
-  hotel: HotelMaster | null;
+  trip: FullTripMaster | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export default function HotelDeleteConfirmationModal({
+export default function FullTripDeleteConfirmationModal({
   isOpen,
-  hotel,
+  trip,
   onConfirm,
   onCancel
-}: HotelDeleteConfirmationModalProps) {
-  if (!hotel) return null;
+}: FullTripDeleteConfirmationModalProps) {
+  if (!trip) return null;
+
+  // Build route string
+  const getRouteString = () => {
+    const fromCity = trip.fromCity?.name || 'Unknown';
+    const toCities = (trip.toCities || [])
+      .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+      .map(tc => tc.city?.name || 'Unknown');
+    
+    return [fromCity, ...toCities].join(' → ');
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onCancel}>
@@ -43,7 +39,7 @@ export default function HotelDeleteConfirmationModal({
               <AlertTriangle className="h-5 w-5 text-red-600" />
             </div>
             <div>
-              <DialogTitle>Delete Hotel</DialogTitle>
+              <DialogTitle>Delete Full Trip</DialogTitle>
               <DialogDescription>
                 This action cannot be undone.
               </DialogDescription>
@@ -53,10 +49,21 @@ export default function HotelDeleteConfirmationModal({
         
         <div className="py-4">
           <p className="text-sm text-gray-600">
-            Are you sure you want to delete <strong>{hotel.hotelName}</strong> ({hotel.hotelCode})?
+            Are you sure you want to delete this full trip?
           </p>
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm font-medium">
+              {trip.vehicleType?.vehicleName || 'Unknown Vehicle'} ({trip.vehicleType?.paxCount || 0} PAX)
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Route: {getRouteString()}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Price: INR {trip.price.toLocaleString()}
+            </p>
+          </div>
           <p className="text-xs text-gray-500 mt-2">
-            This will permanently remove the hotel and may affect related bookings.
+            This will permanently remove the full trip and may affect related bookings.
           </p>
         </div>
 
@@ -73,3 +80,4 @@ export default function HotelDeleteConfirmationModal({
     </Dialog>
   );
 }
+

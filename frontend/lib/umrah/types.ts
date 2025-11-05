@@ -16,14 +16,21 @@ export interface Step2Data {
   departureAirportId: string;
   departureFlightNumber: string;
   transportBookings?: TransportBooking[];
+  hotelBookings?: HotelBooking[]; // For group bookings, hotels are in Step 2
 }
 
 export interface Step3Data {
   accommodationType: 'hotel' | 'iqama';
   iqamaDetails?: IqamaDetails;
-  hotelBookings?: HotelBooking[];
+  hotelBookings?: HotelBooking[]; // For backward compatibility and submission
   transportSegments?: TransportBooking[];
   ziyarah?: ZiyarahBooking[];
+  ziyaraths?: Array<{
+    id: string; // Unique ID for this entry
+    ziyarathId: string; // LocationMaster ID of the ziyarath
+    date: string; // yyyy-MM-dd
+    time: string; // HH:mm
+  }>;
 }
 
 export interface Step4Data {
@@ -81,7 +88,14 @@ export interface Location {
 
 export interface Hotel {
   id: string;
-  hotelName: string;
+  name: string;
+  hotelName?: string; // For backward compatibility
+  code?: string;
+  cityId?: string;
+  city?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface TransportOption {
@@ -111,10 +125,28 @@ export interface ZiyarahBooking {
   time: string;
 }
 
+export interface LocationMaster {
+  id: string;
+  code: string;
+  name: string;
+  locationType: 'AIRPORT' | 'DESTINATION' | 'ZIYARAT' | 'HOTEL' | 'OTHERS';
+  city: string;
+  country?: {
+    id: string;
+    countryCode: string;
+    countryName: string;
+  };
+  cityMaster?: {
+    id: string;
+    name: string;
+  };
+}
+
 export interface MasterData {
   airports: Airport[];
   locations: Location[];
   hotels: Hotel[];
   transportOptions: TransportOption[];
   hotelsByLocation: { [locationId: string]: Hotel[] };
+  locationMasters: LocationMaster[];
 }

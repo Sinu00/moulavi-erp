@@ -25,6 +25,7 @@ interface GroupAccommodationStepProps {
   onAddHotelBooking: () => void;
   onRemoveHotelBooking: (index: number) => void;
   disabled?: boolean;
+  locationMasters?: any[];
 }
 
 export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
@@ -36,11 +37,14 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
   departureDate,
   arrivalTime,
   departureTime,
+  arrivalAirportId,
+  departureAirportId,
   onLoadHotels,
   getHotelsForLocation,
   onAddHotelBooking,
   onRemoveHotelBooking,
   disabled = false,
+  locationMasters = [],
 }) => {
   // Check if hotels are valid/complete
   const areHotelsValid = React.useMemo(() => {
@@ -83,6 +87,8 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
     departureDate,
     arrivalTime,
     departureTime,
+    arrivalAirportId,
+    departureAirportId,
     onChange: (segments) => {
       // Merge with ziyarah segments
       const ziyarahSegs = generateZiyarahSegments(
@@ -242,6 +248,7 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
           <TransportSegmentTable
             transportSegments={data.transportSegments || []}
             locations={locations}
+            locationMasters={locationMasters}
             getAllHotelsForLocation={getAllHotelsForLocation}
             getOptionsForRow={getOptionsForRow}
             onUpdateSegment={updateMovementSegment}

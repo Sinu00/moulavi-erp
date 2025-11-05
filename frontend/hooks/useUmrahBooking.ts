@@ -221,6 +221,7 @@ export const useMasterData = () => {
     hotels: [],
     transportOptions: [],
     hotelsByLocation: {},
+    locationMasters: [],
   });
 
   const loadAirports = useCallback(async () => {
@@ -252,31 +253,33 @@ export const useMasterData = () => {
 
   const loadLocations = useCallback(async () => {
     try {
-      // Load from LocationMaster endpoint with locationType='DESTINATION'
-      const locationResponse = await fetch(`${API_URL}/umrah-visa/masters/locations?locationType=DESTINATION`, {
+      // Load cities instead of destinations
+      const cityResponse = await fetch(`${API_URL}${API_ENDPOINTS.CITIES}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
       });
       
-      if (locationResponse.ok) {
-        const locationData = await locationResponse.json();
-        // Convert LocationMaster to Location format for compatibility
-        const convertedLocations = (locationData.locations || []).map((loc: any) => ({
-          id: loc.id,
-          destinationCode: loc.code,
-          destinationName: loc.name,
-          city: loc.city,
-          country: loc.country?.countryName || 'Saudi Arabia',
-          isActive: loc.isActive,
+      if (cityResponse.ok) {
+        const cityData = await cityResponse.json();
+        // Convert CityMaster to Location format for compatibility
+        const cities = cityData.cityMasters || cityData.data?.cityMasters || [];
+        const convertedLocations = cities.map((city: any) => ({
+          id: city.id,
+          destinationCode: city.name.substring(0, 3).toUpperCase(),
+          destinationName: city.name,
+          city: city.name,
+          cityId: city.id,
+          country: city.country?.countryName || 'Saudi Arabia',
+          isActive: city.isActive,
         }));
         setMasterData(prev => ({ ...prev, locations: convertedLocations }));
       } else {
-        console.error('Failed to load locations from LocationMaster');
+        console.error('Failed to load cities');
         setMasterData(prev => ({ ...prev, locations: [] }));
       }
     } catch (error) {
-      console.error('Error loading locations:', error);
+      console.error('Error loading cities:', error);
       setMasterData(prev => ({ ...prev, locations: [] }));
     }
   }, []);
@@ -297,40 +300,71 @@ export const useMasterData = () => {
     }
   }, []);
 
-  const loadHotels = useCallback(async (locationId: string) => {
+  const loadHotels = useCallback(async (cityId: string) => {
     try {
-      if (masterData.hotelsByLocation[locationId]) {
-        setMasterData(prev => ({ ...prev, hotels: masterData.hotelsByLocation[locationId] }));
+      // cityId is now the city's ID (was locationId for destinations)
+      if (masterData.hotelsByLocation[cityId]) {
+        setMasterData(prev => ({ ...prev, hotels: masterData.hotelsByLocation[cityId] }));
         return;
       }
 
-      const response = await fetch(`${API_URL}${API_ENDPOINTS.HOTELS}/${locationId}`, {
+      // Fetch hotels by cityId
+      const response = await fetch(`${API_URL}${API_ENDPOINTS.HOTELS}/${cityId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
       });
       const data = await response.json();
       
+      // Transform LocationMaster hotels to Hotel format
+      const hotels = (Array.isArray(data) ? data : []).map((hotel: any) => ({
+        id: hotel.id,
+        name: hotel.name,
+        hotelName: hotel.name, // For backward compatibility
+        code: hotel.code,
+        cityId: hotel.cityId,
+        city: hotel.city,
+      }));
+      
       setMasterData(prev => ({
         ...prev,
-        hotelsByLocation: { ...prev.hotelsByLocation, [locationId]: data },
-        hotels: data
+        hotelsByLocation: { ...prev.hotelsByLocation, [cityId]: hotels },
+        hotels: hotels
       }));
     } catch (error) {
       console.error('Error loading hotels:', error);
     }
   }, [masterData.hotelsByLocation]);
 
-  const getHotelsForLocation = useCallback((locationId: string) => {
-    return masterData.hotelsByLocation[locationId] || [];
+  const getHotelsForLocation = useCallback((cityId: string) => {
+    return masterData.hotelsByLocation[cityId] || [];
   }, [masterData.hotelsByLocation]);
+
+  const loadAllLocationMasters = useCallback(async () => {
+    try {
+      // Load all LocationMaster entries (all types: AIRPORT, DESTINATION, ZIYARAT, HOTEL, OTHERS)
+      const response = await fetch(`${API_URL}/location-masters/active`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+      });
+      const data = await response.json();
+      
+      const locationMasters = data.locationMasters || [];
+      setMasterData(prev => ({ ...prev, locationMasters }));
+    } catch (error) {
+      console.error('Error loading location masters:', error);
+      setMasterData(prev => ({ ...prev, locationMasters: [] }));
+    }
+  }, []);
 
   const loadInitialData = useCallback(async () => {
     await Promise.all([
       loadAirports(),
       loadLocations(),
+      loadAllLocationMasters(),
     ]);
-  }, [loadAirports, loadLocations]);
+  }, [loadAirports, loadLocations, loadAllLocationMasters]);
 
   return {
     masterData,
@@ -340,5 +374,6 @@ export const useMasterData = () => {
     loadTransportOptions,
     loadHotels,
     getHotelsForLocation,
+    loadAllLocationMasters,
   };
 };

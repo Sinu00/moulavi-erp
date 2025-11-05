@@ -434,6 +434,40 @@ export interface UpdateTransportMasterRequest {
   isActive?: boolean;
 }
 
+export interface FullTripMaster {
+  id: string;
+  fromCityId: string;
+  vehicleTypeId: string;
+  price: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  fromCity?: CityMaster;
+  vehicleType?: VehicleTypeMaster;
+  toCities?: Array<{
+    id: string;
+    cityId: string;
+    sequenceOrder: number;
+    city: CityMaster;
+  }>;
+}
+
+export interface CreateFullTripMasterRequest {
+  fromCityId: string;
+  toCityIds: string[];
+  vehicleTypeId: string;
+  price: number;
+  isActive?: boolean;
+}
+
+export interface UpdateFullTripMasterRequest {
+  fromCityId?: string;
+  toCityIds?: string[];
+  vehicleTypeId?: string;
+  price?: number;
+  isActive?: boolean;
+}
+
 export interface CountryMaster {
   id: string;
   countryCode: string;
@@ -480,16 +514,11 @@ export interface UpdateCurrencyMasterRequest {
   isActive?: boolean;
 }
 
-// Location Master Types
-export type LocationType = 'AIRPORT' | 'DESTINATION' | 'ZIYARAT';
-
-export interface LocationMaster {
+// City Master Types
+export interface CityMaster {
   id: string;
-  code: string;
   name: string;
-  locationType: LocationType;
   countryId: string;
-  city: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -500,11 +529,49 @@ export interface LocationMaster {
   };
 }
 
+export interface CreateCityMasterRequest {
+  name: string;
+  countryId: string;
+  isActive?: boolean;
+}
+
+export interface UpdateCityMasterRequest {
+  name?: string;
+  countryId?: string;
+  isActive?: boolean;
+}
+
+// Location Master Types
+export type LocationType = 'HOTEL' | 'AIRPORT' | 'ZIYARAT' | 'OTHERS';
+
+export interface LocationMaster {
+  id: string;
+  code: string;
+  name: string;
+  locationType: LocationType;
+  countryId: string;
+  cityId: string;
+  city: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  country?: {
+    id: string;
+    countryCode: string;
+    countryName: string;
+  };
+  cityMaster?: {
+    id: string;
+    name: string;
+  };
+}
+
 export interface CreateLocationMasterRequest {
   code: string;
   name: string;
   locationType: LocationType;
   countryId: string;
+  cityId: string;
   city: string;
   isActive?: boolean;
 }
@@ -514,36 +581,8 @@ export interface UpdateLocationMasterRequest {
   name?: string;
   locationType?: LocationType;
   countryId?: string;
+  cityId?: string;
   city?: string;
-  isActive?: boolean;
-}
-
-// Hotel Master Types
-export interface HotelMaster {
-  id: string;
-  hotelCode: string;
-  hotelName: string;
-  locationId: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  location?: {
-    id: string;
-    destinationName: string;
-    city: string;
-  };
-}
-
-export interface CreateHotelMasterRequest {
-  hotelCode: string;
-  hotelName: string;
-  locationId: string;
-}
-
-export interface UpdateHotelMasterRequest {
-  hotelCode?: string;
-  hotelName?: string;
-  locationId?: string;
   isActive?: boolean;
 }
 

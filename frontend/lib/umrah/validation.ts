@@ -111,22 +111,54 @@ export const validateStep2 = (data: Step2Data, airports: any[]): string | null =
     return durationResult.error;
   }
 
-  // Transport validation moved to Step 3 (accommodation step)
-  // No transport validation needed in Step 2
+  // Hotel bookings validation for group bookings (hotels moved to Step 2)
+  if (data.hotelBookings && data.hotelBookings.length > 0) {
+    for (const booking of data.hotelBookings) {
+      if (!booking.locationId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
+        return 'Please fill in all hotel booking details';
+      }
+      
+      const checkIn = new Date(booking.checkInDate);
+      const checkOut = new Date(booking.checkOutDate);
+      
+      if (checkOut <= checkIn) {
+        return 'Check-out date must be after check-in date';
+      }
+    }
+
+    const coverage = calculateHotelCoverage(data.arrivalDate, data.departureDate, data.hotelBookings);
+    if (coverage.remainingDays > 0) {
+      return `You have ${coverage.remainingDays} day${coverage.remainingDays > 1 ? 's' : ''} without accommodation coverage`;
+    }
+  }
 
   return null;
 };
 
 export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDate: string): string | null => {
+  // For group bookings: Step 3 is movement details only
+  // Validate transport segments (manual movement)
+  if (!data.transportSegments || data.transportSegments.length === 0) {
+    return 'Please add movement segments';
+  }
+
+  // Validate transport segments
+  for (const segment of data.transportSegments) {
+    if (!segment.fromLocationId || !segment.toLocationId) {
+      return 'Please fill in from and to locations for all movement segments';
+    }
+    if (!segment.travelDate) {
+      return 'Travel date is required for all movement segments';
+    }
+  }
+
+  // Legacy validation for individual bookings (iqama/hotel in step 3)
   if (data.accommodationType === 'iqama') {
     if (!data.iqamaDetails?.iqamaNumber || !data.iqamaDetails?.iqamaName) {
       return 'Please fill in all required iqama details';
     }
-  } else {
-    if (!data.hotelBookings || data.hotelBookings.length === 0) {
-      return 'Please add at least one hotel booking';
-    }
-    
+  } else if (data.hotelBookings && data.hotelBookings.length > 0) {
+    // Individual booking with hotels in step 3 (backward compatibility)
     for (const booking of data.hotelBookings) {
       if (!booking.locationId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
         return 'Please fill in all hotel booking details';
@@ -160,6 +192,7 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
       }
     }
   }
+
   return null;
 };
 

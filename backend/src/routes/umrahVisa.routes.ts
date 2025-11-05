@@ -1541,17 +1541,17 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         const routeNumber = (baseRouteNumber + idx + 1).toString().padStart(5, '0');
         
         return {
-          sr: idx + 1,
+        sr: idx + 1,
           route: routeNumber, // Sequential route number continuing from previous bookings
           date: tb.travelDate ? formatDate(tb.travelDate) : '', // DD-MM-YYYY format
           time: tb.travelTime ? formatTime(tb.travelTime) : '', // HH:MM format
           from: tb.fromLocation?.name || '', // City name from LocationMaster
           fromLocation: tb.fromSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
-          fromLocationId: tb.fromLocationId,
+        fromLocationId: tb.fromLocationId,
           fromSpecificLocationId: tb.fromSpecificLocationId,
           to: tb.toLocation?.name || '', // City name from LocationMaster
           toLocation: tb.toSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
-          toLocationId: tb.toLocationId,
+        toLocationId: tb.toLocationId,
           toSpecificLocationId: tb.toSpecificLocationId,
           vehicleType: tb.vehicleType || '',
           paxCount: tb.paxCount || 0,

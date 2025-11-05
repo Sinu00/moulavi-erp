@@ -26,10 +26,11 @@ export const useGroupUmrahBooking = () => {
       departureAirportId: '',
       departureFlightNumber: '',
       transportBookings: [],
+      hotelBookings: [], // Moved from step3Data for group bookings
     },
     step3Data: {
       accommodationType: 'hotel', // Always hotel for group bookings
-      hotelBookings: [],
+      hotelBookings: [], // Will be populated from step2Data on submit
       transportSegments: [],
       ziyarah: [],
     },
@@ -247,11 +248,18 @@ export const useGroupUmrahBooking = () => {
 
     setIsLoading(true);
     try {
+      // Copy hotel bookings from step2Data to step3Data for backend compatibility
+      // The backend will convert ziyaraths to transport segments
+      const step3DataWithHotels = {
+        ...bookingState.step3Data,
+        hotelBookings: bookingState.step2Data.hotelBookings || [],
+      };
+
       const payload = {
         partyId,
         step1: bookingState.step1Data,
         step2: bookingState.step2Data,
-        step3: bookingState.step3Data,
+        step3: step3DataWithHotels,
         step4: {
           passengerCount: bookingState.step4Data.passengers.length,
           passengers: bookingState.step4Data.passengers.map(p => ({
@@ -349,8 +357,9 @@ export const useGroupUmrahBooking = () => {
   }, [bookingState.step4Data.passengers.length]);
 
   const addHotelBooking = useCallback(() => {
+    // Add hotel booking to step2Data for group bookings
     setBookingState(prev => {
-      const existingBookings = prev.step3Data.hotelBookings || [];
+      const existingBookings = prev.step2Data.hotelBookings || [];
       let checkInDate = '';
       
       if (existingBookings.length === 0) {
@@ -362,8 +371,8 @@ export const useGroupUmrahBooking = () => {
       
       return {
         ...prev,
-        step3Data: {
-          ...prev.step3Data,
+        step2Data: {
+          ...prev.step2Data,
           hotelBookings: [
             ...existingBookings,
             {
@@ -380,7 +389,7 @@ export const useGroupUmrahBooking = () => {
 
   const removeHotelBooking = useCallback((index: number) => {
     setBookingState(prev => {
-      const updatedBookings = prev.step3Data.hotelBookings?.filter((_, i) => i !== index) || [];
+      const updatedBookings = prev.step2Data.hotelBookings?.filter((_, i) => i !== index) || [];
       
       // Update check-in date of subsequent hotels
       if (updatedBookings[index] && index > 0) {
@@ -394,8 +403,8 @@ export const useGroupUmrahBooking = () => {
       
       return {
         ...prev,
-        step3Data: {
-          ...prev.step3Data,
+        step2Data: {
+          ...prev.step2Data,
           hotelBookings: updatedBookings,
         },
       };

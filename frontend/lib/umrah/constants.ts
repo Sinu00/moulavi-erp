@@ -77,9 +77,10 @@ export const STEPS = [
 
 export const API_ENDPOINTS = {
   AIRPORTS: '/location-masters/active?locationType=AIRPORT',
-  DESTINATIONS: '/location-masters/active?locationType=DESTINATION',
+  CITIES: '/city-masters/active',
   TRANSPORT_OPTIONS: '/umrah-visa/transport-options',
   HOTELS: '/umrah-visa/hotels',
+  HOTELS_BY_CITY: '/umrah-visa/masters/hotels',
   STEP1: '/umrah-visa/step1',
   STEP2: '/umrah-visa/step2',
   STEP3: '/umrah-visa/step3',

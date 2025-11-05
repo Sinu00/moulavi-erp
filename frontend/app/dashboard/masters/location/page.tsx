@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,13 +13,21 @@ import LocationStatsCards from '@/components/location/LocationStatsCards';
 import LocationTable from '@/components/LocationTable';
 import LocationForm from '@/components/location/LocationForm';
 import DeleteConfirmationDialog from '@/components/DeleteConfirmationDialog';
-import { countryMasterAPI } from '@/lib/api';
+import { countryMasterAPI, cityMasterAPI } from '@/lib/api';
 import { Plus, Menu, Trash2, Download, MapPin } from 'lucide-react';
 import { LocationMaster, LocationType, CreateLocationMasterRequest } from '@/types';
 
 export default function LocationMasterPage() {
   const router = useRouter();
-  const user = getUser();
+  const [user] = useState(() => getUser()); // Memoize user to prevent unnecessary re-renders
+  // Memoize hasRole check using the memoized user to prevent re-evaluation
+  // hasRole internally calls getUser() which creates new object references, so we pass user directly
+  const userHasAccess = useMemo(() => {
+    if (!user) return false;
+    const roles = ['admin', 'staff'];
+    return Array.isArray(roles) ? roles.includes(user.role) : user.role === roles;
+  }, [user]);
+  
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -36,13 +44,19 @@ export default function LocationMasterPage() {
   const [formData, setFormData] = useState<CreateLocationMasterRequest>({
     code: '',
     name: '',
-    locationType: 'DESTINATION',
+    locationType: 'HOTEL',
     countryId: '',
+    cityId: '',
     city: '',
     isActive: true
   });
   const [mounted, setMounted] = useState(false);
   const [countries, setCountries] = useState<any[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
+  const [countriesLoaded, setCountriesLoaded] = useState(false);
+  
+  // Extract countryId separately to prevent useEffect from running on every formData change
+  const selectedCountryId = formData.countryId;
 
   const {
     locations,
@@ -59,59 +73,158 @@ export default function LocationMasterPage() {
   } = useLocationMaster();
 
   useEffect(() => {
+    // Only load countries once when component mounts
+    if (countriesLoaded || !userHasAccess) {
+      console.log('[LocationMaster] useEffect: loadCountries skipped', { 
+        countriesLoaded, 
+        userHasAccess 
+      });
+      return;
+    }
+
+    console.log('[LocationMaster] useEffect: loadCountries triggered', { user: !!user });
+    let cancelled = false;
+    
     const loadCountries = async () => {
       try {
         const response = await countryMasterAPI.getActive();
-        console.log('Country getActive Response:', response);
-        console.log('Response data:', response.data);
+        console.log('[LocationMaster] Country getActive Response:', response);
+        
+        if (cancelled) {
+          console.log('[LocationMaster] loadCountries cancelled, skipping setState');
+          return;
+        }
+        
+        console.log('[LocationMaster] Response data:', response.data);
         // Backend returns: { success: true, data: { countryMasters: [...] } }
         // Axios wraps it in response.data, so we need response.data.data.countryMasters
         const countries = response.data?.data?.countryMasters || response.data?.countryMasters || [];
-        console.log('Extracted countries:', countries);
+        console.log('[LocationMaster] Extracted countries:', countries);
         const countryArray = Array.isArray(countries) ? countries : [];
-        console.log('Setting countries array (length:', countryArray.length, '):', countryArray);
+        console.log('[LocationMaster] Setting countries array (length:', countryArray.length, '):', countryArray);
         if (countryArray.length === 0) {
-          console.warn('No countries found - array is empty');
+          console.warn('[LocationMaster] No countries found - array is empty');
         }
         setCountries(countryArray);
+        setCountriesLoaded(true);
       } catch (error: any) {
-        console.error('Error loading countries:', error);
-        console.error('Error response:', error.response);
+        if (cancelled) return;
+        console.error('[LocationMaster] Error loading countries:', error);
+        console.error('[LocationMaster] Error response:', error.response);
         toast.error('Failed to load countries. Please check if countries are seeded.');
         setCountries([]);
+        setCountriesLoaded(true); // Mark as loaded even on error to prevent retry loop
       }
     };
-    if (user && hasRole(['admin', 'staff'])) {
-      loadCountries();
-    }
-  }, [user]);
+    
+    loadCountries();
+    
+    return () => {
+      console.log('[LocationMaster] loadCountries cleanup');
+      cancelled = true;
+    };
+  }, [user, countriesLoaded]);
+
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!user || !hasRole(['admin', 'staff'])) {
+    if (!userHasAccess) {
       router.push('/');
       return;
     }
-  }, [user, router]);
+  }, [userHasAccess, router]);
+
+  // Load cities when country changes in form (only when form is open)
+  // Use selectedCountryId instead of formData.countryId to prevent re-runs on every formData change
+  useEffect(() => {
+    console.log('[LocationMaster] useEffect: loadCities triggered', {
+      showCreateForm,
+      countryId: selectedCountryId,
+      editingLocationId: editingLocation?.id,
+      user: !!user
+    });
+    
+    if (!showCreateForm || !selectedCountryId) {
+      if (!showCreateForm) {
+        console.log('[LocationMaster] Clearing cities - form not open');
+        setCities([]);
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCities = async () => {
+      console.log('[LocationMaster] Loading cities for countryId:', selectedCountryId);
+      try {
+        const response = await cityMasterAPI.getActive({ countryId: selectedCountryId });
+        const cityData = response.data?.cityMasters || [];
+        console.log('[LocationMaster] Cities loaded:', cityData.length);
+        
+        if (cancelled) {
+          console.log('[LocationMaster] loadCities cancelled, skipping setState');
+          return;
+        }
+        
+        setCities(Array.isArray(cityData) ? cityData : []);
+        
+        // If editing and cityId exists, ensure it's still valid
+        if (editingLocation && editingLocation.cityId && !cityData.find((c: any) => c.id === editingLocation.cityId)) {
+          console.log('[LocationMaster] City not found in active, loading all cities');
+          const responseAll = await cityMasterAPI.getAll({ countryId: selectedCountryId });
+          const allCityData = responseAll.data?.cityMasters || [];
+          
+          if (!cancelled) {
+            setCities(Array.isArray(allCityData) ? allCityData : []);
+          }
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('[LocationMaster] Error loading cities:', error);
+        setCities([]);
+      }
+    };
+
+    if (userHasAccess) {
+      loadCities();
+    }
+    
+    return () => {
+      console.log('[LocationMaster] loadCities cleanup');
+      cancelled = true;
+    };
+  }, [selectedCountryId, showCreateForm, editingLocation?.id, userHasAccess]); // Use memoized userHasAccess // Only depend on the primitive value, not the whole formData object
 
   // Sync filter state with hook
+  // NOTE: setHookFilterLocationType should be stable, but only sync when filterLocationType actually changes
   useEffect(() => {
+    console.log('[LocationMaster] useEffect: syncFilter triggered', { filterLocationType });
     setHookFilterLocationType(filterLocationType);
-  }, [filterLocationType, setHookFilterLocationType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterLocationType]); // Only depend on filterLocationType, not the setter function
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[LocationMaster] handleSubmit called', {
+      editingLocation: editingLocation?.id,
+      formData: { ...formData }
+    });
     
-    if (!formData.code || !formData.name || !formData.countryId || !formData.city) {
+    if (!formData.code || !formData.name || !formData.countryId || !formData.cityId || !formData.city) {
+      console.log('[LocationMaster] Validation failed');
+      toast.error('Please fill in all required fields including city');
       return;
     }
     
+    console.log('[LocationMaster] Calling API...', editingLocation ? 'update' : 'create');
     const success = editingLocation 
       ? await updateLocation(editingLocation.id, formData)
       : await createLocation(formData);
+    
+    console.log('[LocationMaster] API response success:', success);
     
     if (success) {
       if (editingLocation) {
@@ -123,24 +236,28 @@ export default function LocationMasterPage() {
   };
 
   const handleLocationCreated = () => {
+    console.log('[LocationMaster] handleLocationCreated called');
     setShowCreateForm(false);
     setEditingLocation(null);
     toast.success('Location created successfully!');
   };
 
   const handleLocationUpdated = () => {
+    console.log('[LocationMaster] handleLocationUpdated called');
     setEditingLocation(null);
     setShowCreateForm(false);
     toast.success('Location updated successfully!');
   };
 
-  const handleEdit = (location: LocationMaster) => {
+  const handleEdit = async (location: LocationMaster) => {
+    console.log('[LocationMaster] handleEdit called', { locationId: location.id });
     setEditingLocation(location);
     setFormData({
       code: location.code,
       name: location.name,
       locationType: location.locationType,
       countryId: location.countryId,
+      cityId: location.cityId || '',
       city: location.city,
       isActive: location.isActive
     });
@@ -210,16 +327,11 @@ export default function LocationMasterPage() {
   };
 
   const resetForm = () => {
-    setFormData({
-      code: '',
-      name: '',
-      locationType: 'DESTINATION',
-      countryId: '',
-      city: '',
-      isActive: true
-    });
+    console.log('[LocationMaster] resetForm called');
     setEditingLocation(null);
     setShowCreateForm(false);
+    setCities([]);
+    // Don't reset formData here - it will be reset when opening a new form
   };
 
   if (!mounted) {
@@ -265,14 +377,29 @@ export default function LocationMasterPage() {
               <div>
                 <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Location Master</h1>
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">
-                  Manage airports, destinations, and ziyarat locations
+                  Manage hotels, airports, ziyarat, and other locations
                 </p>
               </div>
             </div>
             
-            {hasRole(['admin']) && (
+            {user && hasRole(['admin']) && (
               <Button 
-                onClick={() => setShowCreateForm(true)}
+                onClick={() => {
+                  console.log('[LocationMaster] Add Location button clicked');
+                  setEditingLocation(null);
+                  setFormData({
+                    code: '',
+                    name: '',
+                    locationType: 'HOTEL',
+                    countryId: '',
+                    cityId: '',
+                    city: '',
+                    isActive: true
+                  });
+                  setCities([]);
+                  setShowCreateForm(true);
+                  console.log('[LocationMaster] State updated - showCreateForm should be true');
+                }}
                 className="flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" />
@@ -293,7 +420,7 @@ export default function LocationMasterPage() {
                 <div>
                   <CardTitle className="text-xl font-semibold">Location Management</CardTitle>
                   <p className="text-sm text-gray-500 mt-1">
-                    Manage airports, destinations, and ziyarat locations
+                    Manage hotels, airports, ziyarat, and other locations
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -340,25 +467,32 @@ export default function LocationMasterPage() {
       </div>
 
       {/* Create/Edit Form */}
-      <Sheet open={showCreateForm} onOpenChange={(open) => {
-        setShowCreateForm(open);
-        if (!open) {
-          resetForm();
-        }
-      }}>
+      <Sheet 
+        open={showCreateForm} 
+        onOpenChange={(open) => {
+          console.log('[LocationMaster] Sheet onOpenChange called', { open, showCreateForm });
+          if (!open) {
+            resetForm();
+          } else {
+            console.log('[LocationMaster] Sheet opening, setting showCreateForm to true');
+            setShowCreateForm(true);
+          }
+        }}
+      >
         <SheetContent side="right" className="w-96">
           <SheetHeader>
             <SheetTitle>
               {editingLocation ? 'Edit Location' : 'Add New Location'}
             </SheetTitle>
             <SheetDescription>
-              {editingLocation ? 'Update location information' : 'Create a new airport, destination, or ziyarat location'}
+              {editingLocation ? 'Update location information' : 'Create a new hotel, airport, ziyarat, or other location'}
             </SheetDescription>
           </SheetHeader>
           <LocationForm
             formData={formData}
             editingLocation={editingLocation}
             countries={countries}
+            cities={cities}
             onFormDataChange={setFormData}
             onSubmit={handleSubmit}
             onCancel={resetForm}
