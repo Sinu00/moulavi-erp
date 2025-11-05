@@ -85,6 +85,12 @@ export const validateStep1 = (data: Step1Data): string | null => {
     if (!data.groupName?.trim()) {
       return 'Group name is required for group booking mode';
     }
+    if (!data.passengerCount || data.passengerCount < 1) {
+      return 'Number of passengers (pax) is required and must be at least 1';
+    }
+    if (!data.umrahVisaProviderId) {
+      return 'Umrah visa providing company is required';
+    }
   }
   return null;
 };

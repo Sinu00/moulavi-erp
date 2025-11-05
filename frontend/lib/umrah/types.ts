@@ -4,6 +4,8 @@ export interface Step1Data {
   bookingMode: 'group_number' | 'travel_details';
   groupNumber?: string;
   groupName?: string;
+  passengerCount?: number;
+  umrahVisaProviderId?: string;
 }
 
 export interface Step2Data {
@@ -54,6 +56,7 @@ export interface HotelBooking {
   hotelId: string;
   checkInDate: string;
   checkOutDate: string;
+  brn?: string[];
 }
 
 export interface IqamaDetails {

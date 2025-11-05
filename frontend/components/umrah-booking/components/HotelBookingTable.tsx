@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ interface HotelBookingTableProps {
   locations: Location[];
   hotels: HotelType[];
   getHotelsForLocation: (locationId: string) => HotelType[];
-  onUpdateBooking: (index: number, field: keyof HotelBooking, value: string) => void;
+  onUpdateBooking: (index: number, field: keyof HotelBooking, value: string | string[]) => void;
   onRemoveBooking?: (index: number) => void;
   onAddBooking?: () => void;
   disabled?: boolean;
@@ -30,6 +30,22 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
   showAddButton = false,
   emptyStateMessage,
 }) => {
+  // Store raw input values for BRN fields to preserve commas while typing
+  const [brnInputs, setBrnInputs] = useState<{ [key: number]: string }>({});
+
+  // Initialize BRN inputs from booking data
+  React.useEffect(() => {
+    const inputs: { [key: number]: string } = {};
+    hotelBookings.forEach((booking, index) => {
+      if (booking.brn && booking.brn.length > 0) {
+        inputs[index] = booking.brn.join(', ');
+      } else if (!brnInputs[index]) {
+        inputs[index] = '';
+      }
+    });
+    setBrnInputs(prev => ({ ...prev, ...inputs }));
+  }, [hotelBookings.length]);
+
   if (hotelBookings.length === 0) {
     return (
       <div className="text-center py-8">
@@ -69,6 +85,9 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               Check-out
+            </th>
+            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
+              BRN
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               Duration
@@ -153,6 +172,54 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                     className="w-full"
                     disabled={disabled}
                   />
+                </td>
+                <td className="border border-gray-200 p-3">
+                  <div className="space-y-1">
+                    <Input
+                      type="text"
+                      placeholder="Enter BRN (comma-separated for multiple)"
+                      value={brnInputs[index] ?? (booking.brn?.join(', ') || '')}
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        // Store the raw input value (preserves commas while typing)
+                        setBrnInputs(prev => ({ ...prev, [index]: inputValue }));
+                        
+                        // Process and update the booking with parsed BRNs
+                        const brnArray = inputValue
+                          .split(',')
+                          .map(brn => brn.trim())
+                          .filter(brn => brn.length > 0);
+                        onUpdateBooking(index, 'brn', brnArray.length > 0 ? brnArray : []);
+                      }}
+                      onBlur={(e) => {
+                        // On blur, clean up and sync the display
+                        const inputValue = e.target.value.trim();
+                        const brnArray = inputValue
+                          .split(',')
+                          .map(brn => brn.trim())
+                          .filter(brn => brn.length > 0);
+                        
+                        // Update the stored input to cleaned version
+                        if (brnArray.length > 0) {
+                          setBrnInputs(prev => ({ ...prev, [index]: brnArray.join(', ') }));
+                        } else {
+                          setBrnInputs(prev => ({ ...prev, [index]: '' }));
+                        }
+                        onUpdateBooking(index, 'brn', brnArray.length > 0 ? brnArray : []);
+                      }}
+                      className="w-full min-w-[200px]"
+                      disabled={disabled}
+                    />
+                    <div className="text-xs text-gray-500">
+                      {booking.brn && booking.brn.length > 0 ? (
+                        <span className="text-blue-600 font-medium">
+                          {booking.brn.length} BRN{booking.brn.length > 1 ? 's' : ''} entered
+                        </span>
+                      ) : (
+                        <span>Separate multiple BRNs with commas (e.g., BRN001, BRN002)</span>
+                      )}
+                    </div>
+                  </div>
                 </td>
                 <td className="border border-gray-200 p-3">
                   <div className="text-sm text-gray-600">

@@ -84,17 +84,17 @@ export const TravelDetailsStep: React.FC<TravelDetailsStepProps> = ({
 
   // Update hotel booking handler (for group bookings)
   const updateHotelBooking = React.useCallback(
-    (index: number, field: keyof typeof hotelBookings[0], value: string) => {
+    (index: number, field: keyof typeof hotelBookings[0], value: string | string[]) => {
       const updatedBookings = [...hotelBookings];
       updatedBookings[index] = { ...updatedBookings[index], [field]: value };
 
       if (field === 'locationId' && onLoadHotels) {
         updatedBookings[index].hotelId = '';
-        onLoadHotels(value);
+        onLoadHotels(value as string);
       }
 
       if (field === 'checkOutDate' && updatedBookings[index + 1]) {
-        updatedBookings[index + 1].checkInDate = value;
+        updatedBookings[index + 1].checkInDate = value as string;
       }
 
       onChange({ hotelBookings: updatedBookings } as any);

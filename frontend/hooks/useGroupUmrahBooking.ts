@@ -15,6 +15,8 @@ export const useGroupUmrahBooking = () => {
       bookingMode: 'group_number',
       groupNumber: '',
       groupName: '',
+      passengerCount: undefined,
+      umrahVisaProviderId: undefined,
     },
     step2Data: {
       arrivalDate: '',

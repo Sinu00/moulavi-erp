@@ -183,6 +183,8 @@ const step1Schema = z.object({
 const groupStep1Schema = z.object({
   groupNumber: z.string().min(1, 'Group number is required'),
   groupName: z.string().min(1, 'Group name is required'),
+  passengerCount: z.number().min(1, 'Passenger count must be at least 1').max(50, 'Passenger count cannot exceed 50'),
+  umrahVisaProviderId: z.string().uuid('Valid umrah visa provider ID is required').optional(),
 });
 
 const step2Schema = z.object({
@@ -221,6 +223,13 @@ const step2Schema = z.object({
       return today;
     }).optional(),
   })).optional(),
+  hotelBookings: z.array(z.object({
+    locationId: z.string().uuid(),
+    hotelId: z.string().uuid(),
+    checkInDate: z.string().transform((str) => new Date(str)),
+    checkOutDate: z.string().transform((str) => new Date(str)),
+    brn: z.array(z.string()).optional(),
+  })).optional(),
 });
 
 const step3Schema = z.object({
@@ -237,6 +246,7 @@ const step3Schema = z.object({
     hotelId: z.string().uuid(),
     checkInDate: z.string().transform((str) => new Date(str)),
     checkOutDate: z.string().transform((str) => new Date(str)),
+    brn: z.array(z.string()).optional(),
   })).optional(),
 }).refine((data) => {
   if (data.accommodationType === 'iqama' && data.passengerCount && data.passengerCount > 5) {
@@ -1995,7 +2005,7 @@ const completeGroupBookingSchema = z.object({
   step2: step2Schema,
   step3: groupStep3Schema,
   step4: z.object({
-    passengerCount: z.number().min(1).max(50),
+    passengerCount: z.number().min(1).max(50).optional(), // Made optional since it's now in step1
     passengers: z.array(z.object({
       fullName: z.string().min(1).max(255),
       isLeadPassenger: z.boolean().default(false),
@@ -2020,12 +2030,13 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
-    // Validate passenger count
-    if (step4Data.passengerCount < 1 || step4Data.passengerCount > 50) {
+    // Validate passenger count (use from step1Data if available, otherwise from step4Data)
+    const passengerCount = step1Data.passengerCount || step4Data.passengerCount;
+    if (!passengerCount || passengerCount < 1 || passengerCount > 50) {
       return res.status(400).json({ error: 'Passenger count must be between 1 and 50' });
     }
 
-    if (step4Data.passengers.length !== step4Data.passengerCount) {
+    if (step4Data.passengers.length !== passengerCount) {
       return res.status(400).json({ error: 'Number of passengers must match passenger count' });
     }
 
@@ -2072,13 +2083,14 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
           hasGroupNumber: true,
-          passengerCount: step4Data.passengerCount,
+          passengerCount: step1Data.passengerCount,
+          umrahVisaProviderId: step1Data.umrahVisaProviderId || null,
           status: 'voucher',
           visaType: 'group_visa',
-        accommodationType: 'hotel',
+          accommodationType: 'hotel',
           hasTransportation,
-      },
-    });
+        },
+      });
 
       // 3. Create UmrahTravelDetails
       const travelDetails = await tx.umrahTravelDetails.create({
@@ -2103,21 +2115,25 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
         },
       });
 
-      // 5. Create UmrahHotelBooking
-      if (step3Data.hotelBookings && step3Data.hotelBookings.length > 0) {
+      // 5. Create UmrahHotelBooking (from step2Data for group bookings, or step3Data for backward compatibility)
+      const hotelBookingsData = step2Data.hotelBookings || step3Data.hotelBookings || [];
+      if (hotelBookingsData.length > 0) {
         await Promise.all(
-          step3Data.hotelBookings.map(hotel =>
+          hotelBookingsData.map((hotel: any) =>
             tx.umrahHotelBooking.create({
-          data: {
-            accommodationId: accommodationDetails.id,
-            locationId: hotel.locationId,
-            hotelId: hotel.hotelId,
+              data: {
+                accommodationId: accommodationDetails.id,
+                locationId: hotel.locationId,
+                hotelId: hotel.hotelId,
                 checkInDate: hotel.checkInDate,
                 checkOutDate: hotel.checkOutDate,
-          },
-        })
-      )
-    );
+                brn: hotel.brn && Array.isArray(hotel.brn) && hotel.brn.length > 0 
+                  ? hotel.brn 
+                  : null,
+              },
+            })
+          )
+        );
       }
 
       // 6. Create UmrahTransportBooking (from step3 transportSegments or step2 transportBookings)
@@ -2129,7 +2145,7 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
       // Convert ziyaraths to transport segments
       if (step3Data.ziyaraths && step3Data.ziyaraths.length > 0) {
         // Get all hotel bookings and location masters to find hotel for each ziyarath city
-        const hotelBookingsData = step3Data.hotelBookings || [];
+        const hotelBookingsData = step2Data.hotelBookings || step3Data.hotelBookings || [];
         
         // Fetch all location masters for ziyaraths and hotels
         const ziyarathLocationIds = step3Data.ziyaraths.map(z => z.ziyarathId);
@@ -2220,7 +2236,7 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
                 fromSpecificLocationId: (transport as any).fromHotelId || null,
                 toSpecificLocationId: (transport as any).toHotelId || null,
                 vehicleType: transport.vehicleType || '',
-                paxCount: transport.paxCount || step4Data.passengerCount,
+                paxCount: transport.paxCount || passengerCount || 1,
                 price: transport.price || 0,
                 travelDate: transport.travelDate,
                 travelTime: transport.travelTime,

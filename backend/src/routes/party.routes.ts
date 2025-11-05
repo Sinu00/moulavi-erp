@@ -201,13 +201,13 @@ router.post(
 router.get(
   '/',
   authenticate,
-  authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { 
       customer_type, 
       is_supplier, 
       is_customer,
       search,
+      supplier_service_type,
       page = '1',
       limit = '10'
     } = req.query;
@@ -218,6 +218,18 @@ router.get(
     
     // Build where clause
     const where: any = {};
+    
+    // If user is a party, they can only view their own party or filtered suppliers
+    // Admin/staff can view all parties
+    if (req.user!.role === 'party') {
+      // Party users can only fetch suppliers (for dropdowns like umrah visa providers)
+      // They cannot see all parties
+      if (!supplier_service_type) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      // Only allow fetching suppliers, not all parties
+      where.isSupplier = true;
+    }
     
     if (customer_type) {
       where.customerType = customer_type;
@@ -231,6 +243,11 @@ router.get(
       where.isCustomer = is_customer === 'true';
     }
     
+    // If filtering by supplier service type, ensure isSupplier is true
+    if (supplier_service_type) {
+      where.isSupplier = true;
+    }
+    
     if (search) {
       where.OR = [
         { partyName: { contains: search, mode: 'insensitive' } },
@@ -239,22 +256,31 @@ router.get(
     }
     
     // Get parties with pagination
-    const [parties, total] = await Promise.all([
-      prisma.party.findMany({
-        where,
-        skip,
-        take: limitNum,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          accountCurrency: true,
-          contacts: true,
-          documents: {
-            where: { isDeleted: false }
-          }
+    let parties = await prisma.party.findMany({
+      where,
+      skip: 0, // Fetch all matching suppliers first
+      take: 10000, // Large limit to get all suppliers
+      orderBy: { createdAt: 'desc' },
+      include: {
+        accountCurrency: true,
+        contacts: true,
+        documents: {
+          where: { isDeleted: false }
         }
-      }),
-      prisma.party.count({ where })
-    ]);
+      }
+    });
+    
+    // Filter by supplier service type if specified (filter after fetching due to JSON array)
+    if (supplier_service_type) {
+      parties = parties.filter((party: any) => {
+        const serviceTypes = party.supplierServiceTypes;
+        return Array.isArray(serviceTypes) && serviceTypes.includes(supplier_service_type);
+      });
+    }
+    
+    // Apply pagination after filtering
+    const total = parties.length;
+    parties = parties.slice(skip, skip + limitNum);
     
     res.json({
       parties,
