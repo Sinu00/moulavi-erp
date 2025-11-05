@@ -29,8 +29,23 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for ZIP files
   fileFilter: (req, file, cb) => {
+    // Allow ZIP files for group bookings
+    if (file.fieldname === 'panCardZipFile') {
+      const allowedTypes = /zip|application\/zip|application\/x-zip-compressed/;
+      const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+      const mimetype = allowedTypes.test(file.mimetype);
+      
+      if (mimetype || extname || file.originalname.toLowerCase().endsWith('.zip')) {
+        return cb(null, true);
+      } else {
+        cb(new Error('Only ZIP files are allowed for PAN card upload'));
+      }
+      return;
+    }
+    
+    // For other files, use existing validation
     const allowedTypes = /jpeg|jpg|png|pdf/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -1946,21 +1961,15 @@ router.post('/group/step2', authenticate, async (req, res) => {
   }
     });
 
-// Group booking step 3 schema
+// Group booking step 3 schema - only transport segments and ziyaraths (hotels validated in step2)
 const groupStep3Schema = z.object({
-  hotelBookings: z.array(z.object({
-    locationId: z.string().uuid(),
-    hotelId: z.string().uuid(),
-    checkInDate: z.string().transform((str) => new Date(str)),
-    checkOutDate: z.string().transform((str) => new Date(str)),
-  })).min(1, 'At least one hotel booking is required'),
   transportSegments: z.array(z.object({
     fromLocationId: z.string().uuid(),
     toLocationId: z.string().uuid(),
     fromHotelId: z.string().uuid().optional(), // LocationMaster ID for specific "from" location
     toHotelId: z.string().uuid().optional(),   // LocationMaster ID for specific "to" location
-    vehicleType: z.string(),
-    paxCount: z.number().min(1),
+    vehicleType: z.string().optional(), // Made optional since it's not displayed in UI
+    paxCount: z.number().min(0), // Changed to allow 0 (will be updated later)
     price: z.number().min(0),
     travelDate: z.string().transform((str) => new Date(str)).optional(),
     travelTime: z.string().transform((str) => {
@@ -2007,23 +2016,121 @@ const completeGroupBookingSchema = z.object({
   step4: z.object({
     passengerCount: z.number().min(1).max(50).optional(), // Made optional since it's now in step1
     passengers: z.array(z.object({
-      fullName: z.string().min(1).max(255),
+      fullName: z.string().min(1).max(255).optional(), // Made optional - not required for group bookings with ZIP
       isLeadPassenger: z.boolean().default(false),
       panCardPhoto: z.any().optional(),
-    })),
+    })).optional(), // Made optional - only ZIP file is required
   }),
 });
 
 // POST /api/umrah-visa/group/create-booking - Create complete group booking (all steps in one transaction)
-router.post('/group/create-booking', authenticate, async (req, res) => {
+router.post('/group/create-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
   try {
-    const validatedData = completeGroupBookingSchema.parse(req.body);
     const user = (req as any).user;
+    
+    // Parse JSON strings from FormData
+    let step1Data, step2Data, step3Data, step4Data, partyId;
+    
+    if (req.body.step1) {
+      // FormData mode - parse JSON strings
+      partyId = req.body.partyId;
+      step1Data = JSON.parse(req.body.step1);
+      step2Data = JSON.parse(req.body.step2);
+      step3Data = JSON.parse(req.body.step3);
+      step4Data = JSON.parse(req.body.step4);
+      
+      // Convert date strings to Date objects for step2Data
+      if (step2Data.arrivalDate) {
+        step2Data.arrivalDate = new Date(step2Data.arrivalDate);
+      }
+      if (step2Data.departureDate) {
+        step2Data.departureDate = new Date(step2Data.departureDate);
+      }
+      // Convert time strings (HH:mm) to Date objects
+      if (step2Data.arrivalTime) {
+        if (typeof step2Data.arrivalTime === 'string' && step2Data.arrivalTime.includes(':')) {
+          // Time is in HH:mm format, combine with today's date
+          const today = new Date();
+          const [hours, minutes] = step2Data.arrivalTime.split(':');
+          today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+          step2Data.arrivalTime = today;
+        } else {
+          step2Data.arrivalTime = new Date(step2Data.arrivalTime);
+        }
+      }
+      if (step2Data.departureTime) {
+        if (typeof step2Data.departureTime === 'string' && step2Data.departureTime.includes(':')) {
+          // Time is in HH:mm format, combine with today's date
+          const today = new Date();
+          const [hours, minutes] = step2Data.departureTime.split(':');
+          today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+          step2Data.departureTime = today;
+        } else {
+          step2Data.departureTime = new Date(step2Data.departureTime);
+        }
+      }
+      
+      // Convert date strings to Date objects for step3Data hotel bookings
+      if (step3Data.hotelBookings && Array.isArray(step3Data.hotelBookings)) {
+        step3Data.hotelBookings = step3Data.hotelBookings.map((hotel: any) => ({
+          ...hotel,
+          checkInDate: hotel.checkInDate ? new Date(hotel.checkInDate) : hotel.checkInDate,
+          checkOutDate: hotel.checkOutDate ? new Date(hotel.checkOutDate) : hotel.checkOutDate,
+        }));
+      }
+      
+      // Convert date strings to Date objects for step2Data hotel bookings
+      if (step2Data.hotelBookings && Array.isArray(step2Data.hotelBookings)) {
+        step2Data.hotelBookings = step2Data.hotelBookings.map((hotel: any) => ({
+          ...hotel,
+          checkInDate: hotel.checkInDate ? new Date(hotel.checkInDate) : hotel.checkInDate,
+          checkOutDate: hotel.checkOutDate ? new Date(hotel.checkOutDate) : hotel.checkOutDate,
+        }));
+      }
+      
+      // Convert date strings to Date objects for step3Data transport segments
+      if (step3Data.transportSegments && Array.isArray(step3Data.transportSegments)) {
+        step3Data.transportSegments = step3Data.transportSegments.map((segment: any) => {
+          const converted: any = { ...segment };
+          if (segment.travelDate) {
+            converted.travelDate = new Date(segment.travelDate);
+          }
+          if (segment.travelTime) {
+            if (typeof segment.travelTime === 'string' && segment.travelTime.includes(':')) {
+              // Time is in HH:mm format, combine with today's date
+              const today = new Date();
+              const [hours, minutes] = segment.travelTime.split(':');
+              today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+              converted.travelTime = today;
+            } else {
+              converted.travelTime = new Date(segment.travelTime);
+            }
+          }
+          return converted;
+        });
+      }
+      
+      // Convert date strings to Date objects for step3Data ziyaraths
+      if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths)) {
+        step3Data.ziyaraths = step3Data.ziyaraths.map((ziyarath: any) => ({
+          ...ziyarath,
+          date: ziyarath.date ? new Date(ziyarath.date) : ziyarath.date,
+        }));
+      }
+    } else {
+      // JSON mode (backward compatibility)
+      const validatedData = completeGroupBookingSchema.parse(req.body);
+      partyId = validatedData.partyId;
+      step1Data = validatedData.step1;
+      step2Data = validatedData.step2;
+      step3Data = validatedData.step3;
+      step4Data = validatedData.step4;
+    }
 
-    const step1Data = validatedData.step1;
-    const step2Data = validatedData.step2;
-    const step3Data = validatedData.step3;
-    const step4Data = validatedData.step4;
+    // Validate required fields
+    if (!partyId) {
+      return res.status(400).json({ error: 'Party ID is required' });
+    }
 
     // Validate date range
     if (!validateDateRange(step2Data.arrivalDate, step2Data.departureDate)) {
@@ -2036,30 +2143,27 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Passenger count must be between 1 and 50' });
     }
 
-    if (step4Data.passengers.length !== passengerCount) {
-      return res.status(400).json({ error: 'Number of passengers must match passenger count' });
-    }
-
-    // Validate lead passenger
-    const leadPassengers = step4Data.passengers.filter(p => p.isLeadPassenger);
-    if (leadPassengers.length !== 1) {
-      return res.status(400).json({ error: 'Exactly one lead passenger is required' });
-    }
-
-    // Validate passenger names
-    for (const passenger of step4Data.passengers) {
-      if (!passenger.fullName || passenger.fullName.trim() === '') {
-        return res.status(400).json({ error: 'All passengers must have a full name' });
-    }
-    }
-
-    // Validate PAN card on lead passenger only
-    const leadPassenger = step4Data.passengers.find(p => p.isLeadPassenger);
-    if (!leadPassenger?.panCardPhoto) {
+    // Validate ZIP file upload for group bookings (ONLY requirement)
+    const zipFile = req.file; // Multer provides the uploaded file
+    if (!zipFile) {
       return res.status(400).json({ 
-        error: 'PAN card is required for lead passenger. Only one PAN card is required for the entire group.' 
+        error: 'PAN card ZIP file is required. Please upload a ZIP file containing all PAN cards for the group.' 
       });
     }
+
+    // Validate ZIP file type
+    const isValidZip = zipFile.mimetype === 'application/zip' || 
+                       zipFile.mimetype === 'application/x-zip-compressed' ||
+                       zipFile.originalname.toLowerCase().endsWith('.zip');
+    if (!isValidZip) {
+      return res.status(400).json({ error: 'Invalid file type. Please upload a ZIP file (.zip)' });
+    }
+
+    // Create passengers array from passengerCount (no individual names required)
+    const passengers = Array(passengerCount).fill(null).map((_, index) => ({
+      fullName: step1Data.groupName || `Passenger ${index + 1}`, // Use group name or default
+      isLeadPassenger: index === 0,
+    }));
 
     // Calculate hasTransportation
     const hasTransportation = (step3Data.transportSegments && step3Data.transportSegments.length > 0) ||
@@ -2071,7 +2175,7 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
       const service = await tx.service.create({
       data: {
           serviceType: 'umrah_visa',
-          partyId: validatedData.partyId,
+          partyId: partyId,
           status: 'completed',
         },
       });
@@ -2087,10 +2191,10 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
           umrahVisaProviderId: step1Data.umrahVisaProviderId || null,
           status: 'voucher',
           visaType: 'group_visa',
-          accommodationType: 'hotel',
+        accommodationType: 'hotel',
           hasTransportation,
-        },
-      });
+      },
+    });
 
       // 3. Create UmrahTravelDetails
       const travelDetails = await tx.umrahTravelDetails.create({
@@ -2115,15 +2219,94 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
         },
       });
 
-      // 5. Create UmrahHotelBooking (from step2Data for group bookings, or step3Data for backward compatibility)
-      const hotelBookingsData = step2Data.hotelBookings || step3Data.hotelBookings || [];
+      // 5. Create UmrahHotelBooking (from step2Data for group bookings)
+      const hotelBookingsData = step2Data.hotelBookings || [];
       if (hotelBookingsData.length > 0) {
+        // First, resolve locationId: frontend sends CityMaster ID, but we need LocationMaster ID
+        // Find LocationMaster entries for hotels to get their cityIds
+        const hotelIds = hotelBookingsData.map((h: any) => h.hotelId);
+        const hotelLocationMasters = await tx.locationMaster.findMany({
+          where: { id: { in: hotelIds } },
+          select: { id: true, cityId: true },
+        });
+
+        // Create map: hotelId -> cityId
+        const hotelCityMap = new Map<string, string>();
+        hotelLocationMasters.forEach((lm) => {
+          hotelCityMap.set(lm.id, lm.cityId);
+        });
+
+        // For each hotel booking, find LocationMaster entry for the city
+        // If frontend sent CityMaster ID as locationId, we need to find LocationMaster with matching cityId
+        // OR use the hotel's cityId to find/create a LocationMaster entry
         await Promise.all(
-          hotelBookingsData.map((hotel: any) =>
-            tx.umrahHotelBooking.create({
+          hotelBookingsData.map(async (hotel: any) => {
+            // Get cityId from hotel's LocationMaster entry
+            const cityId = hotelCityMap.get(hotel.hotelId);
+            
+            // Find LocationMaster entry for this city (could be DESTINATION, OTHERS, or any type)
+            // If not found, we'll use the hotel's cityId to find one, or create logic to handle it
+            let locationMasterId: string;
+            
+            if (cityId) {
+              // Try to find a LocationMaster entry for this city
+              // Usually there should be one, but if not, we might need to handle it differently
+              const cityLocationMaster = await tx.locationMaster.findFirst({
+                where: { 
+                  cityId: cityId,
+                  // Prefer OTHERS type for city location, or any LocationMaster in that city
+                  locationType: 'OTHERS',
+                },
+                select: { id: true },
+              });
+              
+              if (cityLocationMaster) {
+                locationMasterId = cityLocationMaster.id;
+              } else {
+                // If no LocationMaster found for city, use hotel's cityId directly
+                // But wait - we need a LocationMaster ID, not CityMaster ID
+                // Let's check if the frontend locationId might already be a LocationMaster ID
+                // OR we need to use the hotel's city as the location
+                // For now, let's check if hotel.locationId is actually a LocationMaster ID
+                const testLocationMaster = await tx.locationMaster.findUnique({
+                  where: { id: hotel.locationId },
+                });
+                
+                if (testLocationMaster) {
+                  // Frontend sent LocationMaster ID after all
+                  locationMasterId = hotel.locationId;
+                } else {
+                  // Use hotel's cityId to find or we need to create/find a LocationMaster
+                  // For now, let's use the hotel's city and find any LocationMaster in that city
+                  const anyLocationInCity = await tx.locationMaster.findFirst({
+                    where: { cityId: cityId },
+                    select: { id: true },
+                  });
+                  
+                  if (anyLocationInCity) {
+                    locationMasterId = anyLocationInCity.id;
+                  } else {
+                    throw new Error(`No LocationMaster found for city ${cityId}. Hotel booking requires a LocationMaster entry for the city.`);
+                  }
+                }
+              }
+            } else {
+              // Fallback: try using hotel.locationId as-is (might be LocationMaster ID)
+              const testLocationMaster = await tx.locationMaster.findUnique({
+                where: { id: hotel.locationId },
+              });
+              
+              if (testLocationMaster) {
+                locationMasterId = hotel.locationId;
+              } else {
+                throw new Error(`Invalid locationId ${hotel.locationId} for hotel booking`);
+              }
+            }
+
+            return tx.umrahHotelBooking.create({
               data: {
                 accommodationId: accommodationDetails.id,
-                locationId: hotel.locationId,
+                locationId: locationMasterId,
                 hotelId: hotel.hotelId,
                 checkInDate: hotel.checkInDate,
                 checkOutDate: hotel.checkOutDate,
@@ -2131,8 +2314,8 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
                   ? hotel.brn 
                   : null,
               },
-            })
-          )
+            });
+          })
         );
       }
 
@@ -2144,12 +2327,12 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
 
       // Convert ziyaraths to transport segments
       if (step3Data.ziyaraths && step3Data.ziyaraths.length > 0) {
-        // Get all hotel bookings and location masters to find hotel for each ziyarath city
-        const hotelBookingsData = step2Data.hotelBookings || step3Data.hotelBookings || [];
+        // Get all hotel bookings from step2Data (hotels are validated in step2)
+        const hotelBookingsData = step2Data.hotelBookings || [];
         
         // Fetch all location masters for ziyaraths and hotels
-        const ziyarathLocationIds = step3Data.ziyaraths.map(z => z.ziyarathId);
-        const hotelLocationIds = hotelBookingsData.map(h => h.hotelId);
+        const ziyarathLocationIds = step3Data.ziyaraths.map((z: any) => z.ziyarathId);
+        const hotelLocationIds = hotelBookingsData.map((h: any) => h.hotelId);
         const allLocationIds = [...ziyarathLocationIds, ...hotelLocationIds];
         
         const locationMasters = await tx.locationMaster.findMany({
@@ -2159,7 +2342,7 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
 
         // Create a map of ziyarath location -> city
         const ziyarathCityMap = new Map<string, string>();
-        step3Data.ziyaraths.forEach((ziyarath) => {
+        step3Data.ziyaraths.forEach((ziyarath: any) => {
           const ziyarathLoc = locationMasters.find(lm => lm.id === ziyarath.ziyarathId);
           if (ziyarathLoc) {
             const cityName = (ziyarathLoc.city || ziyarathLoc.cityMaster?.name || '').toLowerCase().trim();
@@ -2169,12 +2352,12 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
 
         // Find hotel for each ziyarath (hotel in same city)
         // Use for...of loop to handle async operations
-        for (const ziyarath of step3Data.ziyaraths) {
+        for (const ziyarath of step3Data.ziyaraths as any[]) {
           const ziyarathCity = ziyarathCityMap.get(ziyarath.ziyarathId);
           if (!ziyarathCity) continue;
 
           // Find hotel booking in the same city
-          const hotelBooking = hotelBookingsData.find((hb) => {
+          const hotelBooking = hotelBookingsData.find((hb: any) => {
             const hotelLoc = locationMasters.find(lm => lm.id === hb.hotelId);
             if (!hotelLoc) return false;
             const hotelCity = (hotelLoc.city || hotelLoc.cityMaster?.name || '').toLowerCase().trim();
@@ -2226,29 +2409,134 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
       }
 
       if (transportBookings.length > 0) {
+        // First, collect all location IDs that need to be resolved
+        const allLocationIds = new Set<string>();
+        transportBookings.forEach((transport: any) => {
+          if (transport.fromLocationId) allLocationIds.add(transport.fromLocationId);
+          if (transport.toLocationId) allLocationIds.add(transport.toLocationId);
+        });
+
+        // Check which ones are LocationMaster IDs and which might be CityMaster IDs
+        const locationIdsArray = Array.from(allLocationIds);
+        const existingLocationMasters = await tx.locationMaster.findMany({
+          where: { id: { in: locationIdsArray } },
+          select: { id: true },
+        });
+
+        const existingLocationMasterIds = new Set(existingLocationMasters.map(lm => lm.id));
+        const potentialCityMasterIds = locationIdsArray.filter(id => !existingLocationMasterIds.has(id));
+
+        // For potential CityMaster IDs, find corresponding LocationMaster entries
+        const cityToLocationMasterMap = new Map<string, string>();
+        if (potentialCityMasterIds.length > 0) {
+          // Find LocationMaster entries that have these cityIds
+          const cityLocationMasters = await tx.locationMaster.findMany({
+            where: {
+              cityId: { in: potentialCityMasterIds },
+              isActive: true,
+            },
+            select: { id: true, cityId: true },
+            orderBy: {
+              locationType: 'asc', // Prefer OTHERS type
+            },
+          });
+
+          // Group by cityId and take the first one for each city
+          const cityIdToLocationMaster = new Map<string, string>();
+          cityLocationMasters.forEach((lm) => {
+            if (!cityIdToLocationMaster.has(lm.cityId)) {
+              cityIdToLocationMaster.set(lm.cityId, lm.id);
+            }
+          });
+
+          // For each potential CityMaster ID, map to LocationMaster ID
+          potentialCityMasterIds.forEach((cityId) => {
+            const locationMasterId = cityIdToLocationMaster.get(cityId);
+            if (locationMasterId) {
+              cityToLocationMasterMap.set(cityId, locationMasterId);
+            }
+          });
+        }
+
         await Promise.all(
-          transportBookings.map(transport =>
-            tx.umrahTransportBooking.create({
+          transportBookings.map((transport: any) => {
+            // Resolve fromLocationId
+            let fromLocationId = transport.fromLocationId;
+            if (fromLocationId && !existingLocationMasterIds.has(fromLocationId)) {
+              const resolvedId = cityToLocationMasterMap.get(fromLocationId);
+              if (resolvedId) {
+                fromLocationId = resolvedId;
+              } else {
+                // If still not found, throw error
+                throw new Error(`Invalid fromLocationId: ${transport.fromLocationId}. Not found in LocationMaster or CityMaster.`);
+              }
+            }
+
+            // Resolve toLocationId
+            let toLocationId = transport.toLocationId;
+            if (toLocationId && !existingLocationMasterIds.has(toLocationId)) {
+              const resolvedId = cityToLocationMasterMap.get(toLocationId);
+              if (resolvedId) {
+                toLocationId = resolvedId;
+              } else {
+                // If still not found, throw error
+                throw new Error(`Invalid toLocationId: ${transport.toLocationId}. Not found in LocationMaster or CityMaster.`);
+              }
+            }
+
+            // Ensure travelTime is a valid Date or null
+            let travelTime: Date | null = null;
+            if (transport.travelTime) {
+              if (transport.travelTime instanceof Date) {
+                // Check if Date is valid
+                if (!isNaN(transport.travelTime.getTime())) {
+                  travelTime = transport.travelTime;
+                }
+              } else if (typeof transport.travelTime === 'string') {
+                // Try to parse as Date
+                const parsedDate = new Date(transport.travelTime);
+                if (!isNaN(parsedDate.getTime())) {
+                  travelTime = parsedDate;
+                }
+              }
+            }
+
+            // Ensure travelDate is a valid Date or null
+            let travelDate: Date | null = null;
+            if (transport.travelDate) {
+              if (transport.travelDate instanceof Date) {
+                if (!isNaN(transport.travelDate.getTime())) {
+                  travelDate = transport.travelDate;
+                }
+              } else if (typeof transport.travelDate === 'string') {
+                const parsedDate = new Date(transport.travelDate);
+                if (!isNaN(parsedDate.getTime())) {
+                  travelDate = parsedDate;
+                }
+              }
+            }
+
+            return tx.umrahTransportBooking.create({
               data: {
                 bookingId: booking.id,
-                fromLocationId: transport.fromLocationId,
-                toLocationId: transport.toLocationId,
-                fromSpecificLocationId: (transport as any).fromHotelId || null,
-                toSpecificLocationId: (transport as any).toHotelId || null,
+                fromLocationId: fromLocationId,
+                toLocationId: toLocationId,
+                fromSpecificLocationId: transport.fromHotelId || null,
+                toSpecificLocationId: transport.toHotelId || null,
                 vehicleType: transport.vehicleType || '',
                 paxCount: transport.paxCount || passengerCount || 1,
                 price: transport.price || 0,
-                travelDate: transport.travelDate,
-                travelTime: transport.travelTime,
+                travelDate: travelDate,
+                travelTime: travelTime,
               },
-            })
-          )
+            });
+          })
         );
       }
 
-      // 7. Create UmrahPassenger (all passengers)
-      const passengers = await Promise.all(
-        step4Data.passengers.map(passenger =>
+      // 7. Create UmrahPassenger (all passengers) - using generated passengers from passengerCount
+      const passengerRecords = await Promise.all(
+        passengers.map((passenger: any) =>
           tx.umrahPassenger.create({
           data: {
               bookingId: booking.id,
@@ -2259,9 +2547,23 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
         )
     );
 
+      // 7.5. Save ZIP file as Document (linked to service, not individual passenger)
+      if (zipFile) {
+        await tx.document.create({
+          data: {
+            serviceId: service.id,
+            documentType: 'pan_card_zip',
+            fileName: zipFile.originalname,
+            filePath: zipFile.path,
+            fileSize: zipFile.size,
+            mimeType: zipFile.mimetype,
+          },
+        });
+      }
+
       // 8. Get party name
       const party = await tx.party.findUnique({
-        where: { id: validatedData.partyId },
+        where: { id: partyId },
         select: { partyName: true },
       });
 
@@ -2298,16 +2600,31 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
       data: {
         bookingId: result.booking.id,
         serviceId: result.service.id,
-        passengerCount: step4Data.passengerCount,
+        passengerCount: passengerCount,
         passengers: result.passengers,
         tripInfo: result.tripInfo,
         status: 'voucher',
       },
     });
   } catch (error) {
+    // Handle multer errors
+    if ((error as any).code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File size exceeds 50MB limit. Please compress your files.' });
+    }
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ error: error.message });
+    }
+    
+    // Handle JSON parsing errors
+    if (error instanceof SyntaxError && error.message.includes('JSON')) {
+      return res.status(400).json({ error: 'Invalid JSON data in request' });
+    }
+    
+    // Handle validation errors
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
+    
     console.error('❌ Error creating group booking:', error);
     res.status(500).json({ error: 'Failed to create group booking' });
   }

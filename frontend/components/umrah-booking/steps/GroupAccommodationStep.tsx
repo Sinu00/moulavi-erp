@@ -131,7 +131,6 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
           toLocationId: '',
           fromHotelId: '',
           toHotelId: '',
-          vehicleType: '',
           paxCount: 0,
           price: 0,
           travelDate: '',

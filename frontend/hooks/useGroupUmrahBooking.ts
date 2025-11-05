@@ -27,14 +27,11 @@ export const useGroupUmrahBooking = () => {
       departureTime: '',
       departureAirportId: '',
       departureFlightNumber: '',
-      transportBookings: [],
       hotelBookings: [], // Moved from step3Data for group bookings
     },
     step3Data: {
-      accommodationType: 'hotel', // Always hotel for group bookings
-      hotelBookings: [], // Will be populated from step2Data on submit
       transportSegments: [],
-      ziyarah: [],
+      ziyaraths: [],
     },
     step4Data: {
       passengers: [{
@@ -47,6 +44,7 @@ export const useGroupUmrahBooking = () => {
         hotelBooking: null,
         ticketCopy: null,
       }],
+      panCardZipFile: null, // ZIP file for group bookings
     },
     showDurationDialog: false,
     remainingDays: 0,
@@ -212,13 +210,27 @@ export const useGroupUmrahBooking = () => {
   const submitStep3 = async () => {
     setIsLoading(true);
     try {
+      // Use passengerCount from step1Data for paxCount in transport segments
+      const passengerCount = bookingState.step1Data.passengerCount || 1;
+      
+      const step3Payload = {
+        ...bookingState.step3Data,
+        // Don't include hotelBookings here - they're already validated in step2
+        // Ensure transportSegments have required fields for backend
+        transportSegments: (bookingState.step3Data.transportSegments || []).map(segment => ({
+          ...segment,
+          vehicleType: '', // Keep empty - will be updated later in admin UI
+          paxCount: passengerCount, // Use passengerCount from step1
+        })),
+      };
+
       const response = await fetch(`${API_URL}/umrah-visa/group/step3`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
-        body: JSON.stringify(bookingState.step3Data),
+        body: JSON.stringify(step3Payload),
       });
 
       const data = await response.json();
@@ -257,28 +269,32 @@ export const useGroupUmrahBooking = () => {
         hotelBookings: bookingState.step2Data.hotelBookings || [],
       };
 
-      const payload = {
-        partyId,
-        step1: bookingState.step1Data,
-        step2: bookingState.step2Data,
-        step3: step3DataWithHotels,
-        step4: {
-          passengerCount: bookingState.step4Data.passengers.length,
-          passengers: bookingState.step4Data.passengers.map(p => ({
-            fullName: p.fullName,
-            isLeadPassenger: p.isLeadPassenger,
-            panCardPhoto: p.panCardPhoto,
-          })),
-        },
-      };
+      // Create FormData for file upload
+      const formData = new FormData();
+      
+      // Add ZIP file if present
+      const zipFile = (bookingState.step4Data as any).panCardZipFile;
+      if (zipFile) {
+        formData.append('panCardZipFile', zipFile);
+      }
+
+      // Add JSON data as string
+      formData.append('partyId', partyId);
+      formData.append('step1', JSON.stringify(bookingState.step1Data));
+      formData.append('step2', JSON.stringify(bookingState.step2Data));
+      formData.append('step3', JSON.stringify(step3DataWithHotels));
+      formData.append('step4', JSON.stringify({
+        passengerCount: bookingState.step1Data.passengerCount, // Use from step1 (user specified)
+        // No passengers array needed - backend will create from passengerCount
+      }));
 
       const response = await fetch(`${API_URL}/umrah-visa/group/create-booking`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          // Don't set Content-Type - browser will set it with boundary for FormData
         },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
       const data = await response.json();

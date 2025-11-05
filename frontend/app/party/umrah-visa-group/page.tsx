@@ -73,8 +73,8 @@ export default function GroupUmrahVisaPage() {
     },
     {
       id: 4,
-      title: 'Passengers & Documents',
-      description: 'Passenger count and documents',
+      title: 'PAN Cards Upload',
+      description: 'Upload ZIP file with PAN cards',
       icon: 'User',
     },
   ];
@@ -104,7 +104,7 @@ export default function GroupUmrahVisaPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data);
+        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data, true); // true = isGroupVisa
       default:
         return null;
     }
@@ -176,7 +176,7 @@ export default function GroupUmrahVisaPage() {
             locationMastersCount: masterData.locationMasters?.length || 0,
             found: !!arrivalAirport,
             arrivalAirport: arrivalAirport,
-            cityId: arrivalAirport?.cityId,
+            city: arrivalAirport?.city,
             cityMaster: arrivalAirport?.cityMaster,
             hotelBookingsCount: (bookingState.step2Data.hotelBookings || []).length,
           });
@@ -303,8 +303,8 @@ export default function GroupUmrahVisaPage() {
                     {isLoading ? 'Processing...' : bookingState.currentStep < 4 ? 'Next' : 'Submit Application'}
                     {bookingState.currentStep < 4 && <ChevronRight className="h-4 w-4 ml-2" />}
                   </Button>
-                  {/* Show indicator if step has unsaved changes */}
-                  {bookingState.completedSteps.includes(bookingState.currentStep) && hasStepDataChanged(bookingState.currentStep) && (
+                  {/* Show indicator if step has unsaved changes (only for steps 1-3, not step 4) */}
+                  {bookingState.currentStep < 4 && bookingState.completedSteps.includes(bookingState.currentStep) && hasStepDataChanged(bookingState.currentStep) && (
                     <div className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
                       <span>•</span>
                       <span className="ml-1">Unsaved changes</span>

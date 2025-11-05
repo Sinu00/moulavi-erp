@@ -59,7 +59,6 @@ export const useAutoTransportSegments = ({
         toLocationId: firstHotel.locationId,
         fromHotelId: '', // Airport, no hotel
         toHotelId: firstHotel.hotelId,
-        vehicleType: '',
         paxCount: 0,
         price: 0,
         travelDate: arrivalDate,
@@ -76,7 +75,6 @@ export const useAutoTransportSegments = ({
         toLocationId: curr.locationId,
         fromHotelId: prev.hotelId,
         toHotelId: curr.hotelId,
-        vehicleType: '',
         paxCount: 0,
         price: 0,
         travelDate: curr.checkInDate || '',
@@ -92,7 +90,6 @@ export const useAutoTransportSegments = ({
         toLocationId: departureAirportId, // Use departure airport ID
         fromHotelId: lastHotel.hotelId,
         toHotelId: '', // Airport, no hotel
-        vehicleType: '',
         paxCount: 0,
         price: 0,
         travelDate: departureDate,
@@ -178,7 +175,6 @@ export const generateZiyarahSegments = (
       toLocationId: cityLoc.id, // City location ID (same city)
       fromHotelId: cityHotelBooking.hotelId, // Hotel LocationMaster ID
       toHotelId: ziyarahHotel.id, // Ziyarah LocationMaster ID
-      vehicleType: '',
       paxCount: 0,
       price: 0,
       travelDate: dateStr,

@@ -257,17 +257,17 @@ router.get(
     
     // Get parties with pagination
     let parties = await prisma.party.findMany({
-      where,
+        where,
       skip: 0, // Fetch all matching suppliers first
       take: 10000, // Large limit to get all suppliers
-      orderBy: { createdAt: 'desc' },
-      include: {
-        accountCurrency: true,
-        contacts: true,
-        documents: {
-          where: { isDeleted: false }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          accountCurrency: true,
+          contacts: true,
+          documents: {
+            where: { isDeleted: false }
+          }
         }
-      }
     });
     
     // Filter by supplier service type if specified (filter after fetching due to JSON array)

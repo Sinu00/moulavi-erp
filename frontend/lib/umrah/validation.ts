@@ -202,16 +202,39 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
   return null;
 };
 
-export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: Step3Data): string | null => {
-  const hasGroupNumber = step1Data.bookingMode === 'group_number';
-  const passengerCount = data.passengers.length;
+export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: Step3Data, isGroupVisa: boolean = false): string | null => {
+  // For group visa bookings (visaType: 'group_visa'), ONLY ZIP file is required
+  // Note: Individual bookings can also have group numbers, so we check visaType, not hasGroupNumber
+  if (isGroupVisa) {
+    const zipFile = (data as any).panCardZipFile;
+    if (!zipFile) {
+      return 'Please upload a ZIP file containing all PAN cards for the group';
+    }
 
-  // Basic validation
+    // Validate ZIP file type
+    const isValidZip = zipFile.type === 'application/zip' || zipFile.name.toLowerCase().endsWith('.zip');
+    if (!isValidZip) {
+      return 'Please upload a valid ZIP file (.zip)';
+    }
+
+    // Validate ZIP file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (zipFile.size > maxSize) {
+      return 'ZIP file size exceeds 50MB limit. Please compress your files.';
+    }
+    
+    return null; // All validations passed for group bookings
+  }
+
+  // For individual bookings (without group number): validate passengers and documents
+  const passengerCount = data.passengers.length;
+  const accommodationType = step3Data.accommodationType || 'hotel';
+  
   if (passengerCount < 1) {
     return 'At least one passenger is required';
   }
-
-  if (step3Data.accommodationType === 'iqama' && passengerCount > BOOKING_LIMITS.MAX_PASSENGERS_IQAMA) {
+  
+  if (accommodationType === 'iqama' && passengerCount > BOOKING_LIMITS.MAX_PASSENGERS_IQAMA) {
     return `Maximum ${BOOKING_LIMITS.MAX_PASSENGERS_IQAMA} passengers allowed for iqama accommodation`;
   }
 
@@ -227,16 +250,25 @@ export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: 
     }
   }
 
-  // Document validation based on booking mode
-  if (hasGroupNumber) {
-    // Individual booking WITH group number: Only lead passenger needs documents
+  // Individual booking WITHOUT group number: All passengers need passport, lead needs PAN
+  for (const passenger of data.passengers) {
+    if (!passenger.passportFront) {
+      return `Passport front is required for ${passenger.fullName || 'passenger'}`;
+    }
+    if (!passenger.passportBack) {
+      return `Passport back is required for ${passenger.fullName || 'passenger'}`;
+    }
+
+    if (passenger.isLeadPassenger && !passenger.panCardPhoto) {
+      return 'Lead passenger PAN card is required';
+    }
+  }
+
+  // Individual booking WITH group number (legacy): Check accommodation type
+  if (step1Data.groupNumber && step3Data.accommodationType) {
     const leadPassenger = data.passengers.find(p => p.isLeadPassenger);
     if (!leadPassenger) {
       return 'Lead passenger not found';
-    }
-
-    if (!leadPassenger.panCardPhoto) {
-      return 'Lead passenger PAN card is required';
     }
 
     if (step3Data.accommodationType === 'hotel') {
@@ -249,20 +281,6 @@ export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: 
     } else if (step3Data.accommodationType === 'iqama') {
       if (!leadPassenger.iqamaPhoto) {
         return 'Iqama copy is required for lead passenger';
-      }
-    }
-  } else {
-    // Individual booking WITHOUT group number: All passengers need passport, lead needs PAN
-    for (const passenger of data.passengers) {
-      if (!passenger.passportFront) {
-        return `Passport front is required for ${passenger.fullName || 'passenger'}`;
-      }
-      if (!passenger.passportBack) {
-        return `Passport back is required for ${passenger.fullName || 'passenger'}`;
-      }
-
-      if (passenger.isLeadPassenger && !passenger.panCardPhoto) {
-        return 'Lead passenger PAN card is required';
       }
     }
   }

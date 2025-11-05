@@ -8,7 +8,6 @@ import { ZiyarathTable, ZiyarathEntry } from '../components/ZiyarathTable';
 import { useTransportOptions } from '../hooks/useTransportOptions';
 import { generateZiyarahSegments } from '../hooks/useAutoTransportSegments';
 import { JourneyFlowSummary } from '../components/JourneyFlowSummary';
-import { vehicleTypeMasterAPI } from '@/lib/api';
 
 interface MovementDetailsStepProps {
   data: Step3Data;
@@ -50,26 +49,9 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   onLoadOptions,
   disabled = false,
 }) => {
-  const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
-  
   const { loadOptionsForRow, getOptionsForRow } = useTransportOptions({
     transportSegments: data.transportSegments,
   });
-
-  // Load vehicle types on mount
-  useEffect(() => {
-    const loadVehicleTypes = async () => {
-      try {
-        const response = await vehicleTypeMasterAPI.getActive();
-        const vehicleTypesData = response.data?.data?.vehicleTypeMasters || [];
-        setVehicleTypes(Array.isArray(vehicleTypesData) ? vehicleTypesData : []);
-      } catch (error) {
-        console.error('Error loading vehicle types:', error);
-        setVehicleTypes([]);
-      }
-    };
-    loadVehicleTypes();
-  }, []);
 
   // Auto-generate transport segments when hotels are valid and no segments exist
   const areHotelsValid = React.useMemo(() => {
@@ -170,15 +152,13 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     onChange,
   ]);
 
-  // Auto-generate transport segments from hotel bookings (only if no segments exist)
+  // Auto-generate transport segments from hotel bookings (regenerates every time step 3 is reached)
   React.useEffect(() => {
-    // Only auto-generate when:
-    // 1. Hotels are valid
-    // 2. No segments exist yet
-    if (
-      areHotelsValid &&
-      (!data.transportSegments || data.transportSegments.length === 0)
-    ) {
+    // Only auto-generate when hotels are valid
+    if (!areHotelsValid) {
+      return;
+    }
+
       console.log('[MovementDetailsStep] Auto-generating transport segments from hotels');
       
       const bookings = hotelBookings || [];
@@ -240,11 +220,10 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
             toLocationId: hotelCityLocationId, // City ID (e.g., Makkah)
             fromHotelId: arrivalAirportId, // Airport LocationMaster ID
             toHotelId: firstHotel.hotelId, // Hotel LocationMaster ID
-            vehicleType: '',
-            paxCount: 0,
-            price: 0,
-            travelDate: arrivalDate,
-            travelTime: arrivalTime || '',
+          paxCount: 0,
+          price: 0,
+          travelDate: arrivalDate,
+          travelTime: arrivalTime || '',
           });
         }
       }
@@ -263,7 +242,6 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
           toLocationId: currCityLocationId, // City ID
           fromHotelId: prev.hotelId, // Hotel LocationMaster ID
           toHotelId: curr.hotelId, // Hotel LocationMaster ID
-          vehicleType: '',
           paxCount: 0,
           price: 0,
           travelDate: curr.checkInDate || '',
@@ -284,7 +262,6 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
             toLocationId: airportCityLocationId, // City ID
             fromHotelId: lastHotel.hotelId, // Hotel LocationMaster ID
             toHotelId: departureAirportId, // Airport LocationMaster ID
-            vehicleType: '',
             paxCount: 0,
             price: 0,
             travelDate: departureDate,
@@ -308,10 +285,8 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
       const allSegments = [...segments, ...ziyarahSegs];
       console.log('[MovementDetailsStep] Total segments:', allSegments.length, 'Base segments:', segments.length, 'Ziyarah segments:', ziyarahSegs.length);
       onChange({ transportSegments: allSegments });
-    }
   }, [
     areHotelsValid,
-    data.transportSegments,
     hotelBookings,
     locations,
     locationMasters,
@@ -336,7 +311,6 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
           toLocationId: '',
           fromHotelId: '',
           toHotelId: '',
-          vehicleType: '',
           paxCount: 0,
           price: 0,
           travelDate: '',
@@ -417,7 +391,6 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
             transportSegments={data.transportSegments || []}
             locations={locations}
             locationMasters={locationMasters}
-            vehicleTypes={vehicleTypes}
             getAllHotelsForLocation={getAllHotelsForLocation}
             getOptionsForRow={getOptionsForRow}
             onUpdateSegment={updateMovementSegment}

@@ -22,7 +22,7 @@ export interface Step2Data {
 }
 
 export interface Step3Data {
-  accommodationType: 'hotel' | 'iqama';
+  accommodationType?: 'hotel' | 'iqama'; // Made optional for group bookings
   iqamaDetails?: IqamaDetails;
   hotelBookings?: HotelBooking[]; // For backward compatibility and submission
   transportSegments?: TransportBooking[];
@@ -37,6 +37,7 @@ export interface Step3Data {
 
 export interface Step4Data {
   passengers: Passenger[];
+  panCardZipFile?: File | null; // ZIP file containing all PAN cards for group bookings
 }
 
 export interface TransportBooking {
@@ -44,7 +45,7 @@ export interface TransportBooking {
   toLocationId: string;
   fromHotelId?: string; // HotelMaster ID (can be hotel, ziyarah, or empty for airport)
   toHotelId?: string; // HotelMaster ID (can be hotel, ziyarah, or empty for airport)
-  vehicleType: string;
+  vehicleType?: string; // Optional - not required anymore
   paxCount: number;
   price: number;
   travelDate?: string;

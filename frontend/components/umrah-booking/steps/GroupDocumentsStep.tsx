@@ -1,10 +1,8 @@
-import React from 'react';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/card';
+import { UploadCloud, File, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Step4Data, Step1Data, Step3Data } from '@/lib/umrah/types';
-import { FileUpload } from 'lucide-react';
 
 interface GroupDocumentsStepProps {
   data: Step4Data;
@@ -22,181 +20,157 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
   step1Data,
   step3Data,
   onChange,
-  onStep1DataChange,
-  onAddPassenger,
-  onRemovePassenger,
   disabled = false,
 }) => {
-  const updatePassenger = (index: number, field: keyof typeof data.passengers[0], value: any) => {
-    const updatedPassengers = [...data.passengers];
-    updatedPassengers[index] = { ...updatedPassengers[index], [field]: value };
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get the uploaded ZIP file from step4Data
+  const zipFile = (data as any).panCardZipFile || null;
+
+  const handleFileSelect = (file: File) => {
+    // Validate file type - accept ZIP files or allow multiple files
+    const isValidZip = file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip');
     
-    if (field === 'isLeadPassenger' && value) {
-      updatedPassengers.forEach((p, i) => {
-        p.isLeadPassenger = i === index;
-      });
+    if (!isValidZip) {
+      alert('Please upload a ZIP file (.zip) containing all PAN cards');
+      return;
     }
-    
-    onChange({ passengers: updatedPassengers });
+
+    // Validate file size (e.g., max 50MB for ZIP)
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      alert('File size exceeds 50MB limit. Please compress your files.');
+      return;
+    }
+
+    // Store the file in step4Data
+    onChange({ panCardZipFile: file } as any);
   };
 
-  const handleFileUpload = (index: number, field: 'panCardPhoto', file: File | null) => {
-    updatePassenger(index, field, file);
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFileSelect(files[0]);
+    }
   };
 
-  // Ensure we have at least one passenger (lead passenger) for PAN card upload
-  const leadPassenger = data.passengers.find(p => p.isLeadPassenger) || data.passengers[0];
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    onChange({ panCardZipFile: null } as any);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h4 className="font-medium text-gray-900">Group Passengers & Documents</h4>
+        <h4 className="font-medium text-gray-900">PAN Cards Upload</h4>
         <p className="text-sm text-gray-600">
-          Add passengers for your group booking and upload the required PAN card
+          Upload a ZIP file containing all PAN cards for the group passengers
         </p>
       </div>
 
-      <div className="space-y-4">
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Group Name *</Label>
-              <Input
-                placeholder="Enter group name"
-                value={step1Data.groupName || ''}
-                onChange={(e) => onStep1DataChange({ groupName: e.target.value })}
+      <Card className="p-6">
+        <div className="space-y-4">
+          {/* Upload Area */}
+          {!zipFile ? (
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+                isDragging
+                  ? 'border-red-500 bg-red-50'
+                  : 'border-gray-300 bg-gray-50 hover:border-red-400 hover:bg-red-50/50'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                onChange={handleFileInputChange}
                 disabled={disabled}
+                className="hidden"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Number of Passengers *</Label>
-              <Input
-                type="number"
-                min="1"
-                max="50"
-                placeholder="Enter number of passengers in group"
-                value={data.passengers.length}
-                onChange={(e) => {
-                  const count = parseInt(e.target.value) || 1;
-                  if (count >= 1 && count <= 50) {
-                    onChange({
-                      passengers: Array(count).fill(null).map((_, index) => ({
-                        fullName: index === 0 ? step1Data.groupName : '',
-                        isLeadPassenger: index === 0,
-                        panCardPhoto: index === 0 ? (leadPassenger?.panCardPhoto || null) : null,
-                        passportFront: null,
-                        passportBack: null,
-                        iqamaPhoto: null,
-                        hotelBooking: null,
-                        ticketCopy: null,
-                      }))
-                    });
-                  }
-                }}
-                disabled={disabled}
-              />
-              <p className="text-xs text-gray-500">Enter the total number of passengers in your group (1-50 passengers)</p>
-            </div>
-
-            {/* Document Requirements Info */}
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h6 className="font-medium text-blue-900 mb-2">Required Documents:</h6>
-              <div className="space-y-1 text-sm text-blue-800">
-                <div className="flex items-center gap-2">
-                  <span className="text-blue-600">•</span>
-                  <span>PAN Card (lead passenger only)</span>
+              
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <UploadCloud className={`w-16 h-16 ${isDragging ? 'text-red-500' : 'text-gray-400'}`} />
+                <div>
+                  <p className="text-lg font-medium text-gray-700 mb-1">
+                    {isDragging ? 'Drop your ZIP file here' : 'Click to upload or drag and drop'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    ZIP file containing all PAN cards (MAX. 50MB)
+                  </p>
                 </div>
               </div>
-              <p className="text-xs text-blue-700 mt-2">
-                Only one PAN card is required for the entire group. Upload it for the lead passenger.
-              </p>
             </div>
-
-            {/* Passenger List */}
-            <div className="space-y-3">
-              {data.passengers.map((passenger, index) => (
-                <Card key={index} className="p-4 border border-gray-200">
-                  <div className="flex items-center justify-between mb-4">
-                    <h6 className="font-medium text-gray-900">
-                      Passenger {index + 1} {passenger.isLeadPassenger && <span className="text-red-600">(Lead Passenger)</span>}
-                    </h6>
-                    {data.passengers.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onRemovePassenger(index)}
-                        disabled={disabled || index === 0}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        Remove
-                      </Button>
-                    )}
+          ) : (
+            <div className="border-2 border-green-200 bg-green-50 rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <File className="w-8 h-8 text-green-600" />
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Full Name *</Label>
-                      <Input
-                        placeholder="As per passport"
-                        value={passenger.fullName}
-                        onChange={(e) => updatePassenger(index, 'fullName', e.target.value)}
-                        disabled={disabled}
-                      />
-                    </div>
-
-                    {/* PAN Card Upload - Only for Lead Passenger */}
-                    {passenger.isLeadPassenger && (
-                      <div className="space-y-2">
-                        <Label>PAN Card *</Label>
-                        <div className="flex items-center gap-4">
-                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                              <FileUpload className="w-8 h-8 mb-2 text-gray-500" />
-                              <p className="mb-2 text-sm text-gray-500">
-                                <span className="font-semibold">Click to upload</span> or drag and drop
-                              </p>
-                              <p className="text-xs text-gray-500">PNG, JPG, PDF (MAX. 10MB)</p>
-                            </div>
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept="image/*,.pdf"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0] || null;
-                                handleFileUpload(index, 'panCardPhoto', file);
-                              }}
-                              disabled={disabled}
-                            />
-                          </label>
-                        </div>
-                        {passenger.panCardPhoto && (
-                          <p className="text-sm text-green-600">
-                            ✓ {passenger.panCardPhoto.name}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                  <div>
+                    <p className="font-medium text-gray-900">{zipFile.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {(zipFile.size / (1024 * 1024)).toFixed(2)} MB
+                    </p>
                   </div>
-                </Card>
-              ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRemoveFile}
+                  disabled={disabled}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Remove
+                </Button>
+              </div>
             </div>
+          )}
 
-            {data.passengers.length < 50 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onAddPassenger}
-                disabled={disabled}
-                className="w-full"
-              >
-                Add Another Passenger
-              </Button>
-            )}
+          {/* Instructions */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h6 className="font-medium text-blue-900 mb-2">Instructions:</h6>
+            <ul className="space-y-1 text-sm text-blue-800 list-disc list-inside">
+              <li>Create a ZIP file containing all PAN card images/PDFs</li>
+              <li>Name each file clearly (e.g., passenger-name-pan.pdf)</li>
+              <li>Maximum file size: 50MB</li>
+              <li>Supported formats inside ZIP: PNG, JPG, PDF</li>
+            </ul>
+            <p className="text-xs text-blue-700 mt-2">
+              The ZIP file will be stored and can be downloaded later from the admin dashboard.
+            </p>
           </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
     </div>
   );
 };

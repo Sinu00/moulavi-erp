@@ -5,18 +5,10 @@ import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import { TransportBooking, Location, Hotel as HotelType, LocationMaster } from '@/lib/umrah/types';
 
-interface VehicleType {
-  id: string;
-  vehicleName: string;
-  paxCount: number;
-  isActive: boolean;
-}
-
 interface TransportSegmentTableProps {
   transportSegments: TransportBooking[];
   locations: Location[];
   locationMasters?: LocationMaster[];
-  vehicleTypes?: VehicleType[];
   getAllHotelsForLocation: (locationId: string) => HotelType[];
   getOptionsForRow: (index: number) => any[];
   onUpdateSegment: (index: number, field: keyof TransportBooking, value: any) => void;
@@ -36,7 +28,6 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
   transportSegments,
   locations,
   locationMasters = [],
-  vehicleTypes = [],
   getAllHotelsForLocation,
   getOptionsForRow,
   onUpdateSegment,
@@ -79,9 +70,6 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               Location Master
-            </th>
-            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Vehicle Type
             </th>
             <th className="border border-gray-200 p-3 text-center text-sm font-medium text-gray-700">
               Action
@@ -236,36 +224,6 @@ export const TransportSegmentTable: React.FC<TransportSegmentTableProps> = ({
                                 {loc.city ? `${loc.city} • ` : ''}{loc.locationType}
                               </span>
                             </div>
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </td>
-                <td className="border border-gray-200 p-3">
-                  <Select
-                    value={seg.vehicleType || undefined}
-                    onValueChange={(value) => {
-                      const selectedVehicle = vehicleTypes.find((vt) => vt.vehicleName === value);
-                      if (selectedVehicle) {
-                        onUpdateSegment(index, 'vehicleType', selectedVehicle.vehicleName);
-                        onUpdateSegment(index, 'paxCount', selectedVehicle.paxCount);
-                        // Price is not set from vehicle type, keep existing price or 0
-                      } else {
-                        onUpdateSegment(index, 'vehicleType', '');
-                        onUpdateSegment(index, 'paxCount', 0);
-                      }
-                    }}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select vehicle type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicleTypes
-                        .filter((vt) => vt.isActive)
-                        .map((vt) => (
-                          <SelectItem key={vt.id} value={vt.vehicleName}>
-                            {vt.vehicleName} ({vt.paxCount} PAX)
                           </SelectItem>
                         ))}
                     </SelectContent>
