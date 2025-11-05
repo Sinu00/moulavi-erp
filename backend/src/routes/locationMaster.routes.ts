@@ -11,8 +11,9 @@ const router = Router();
 const createLocationMasterValidation = [
   body('code').isString().notEmpty().trim().isLength({ min: 2, max: 20 }),
   body('name').isString().notEmpty().trim(),
-  body('locationType').isIn(['AIRPORT', 'DESTINATION', 'ZIYARAT']),
+  body('locationType').isIn(['HOTEL', 'AIRPORT', 'ZIYARAT', 'OTHERS']),
   body('countryId').isUUID(),
+  body('cityId').isUUID(),
   body('city').isString().notEmpty().trim(),
   body('isActive').isBoolean().optional(),
 ];
@@ -20,8 +21,9 @@ const createLocationMasterValidation = [
 const updateLocationMasterValidation = [
   body('code').isString().notEmpty().trim().isLength({ min: 2, max: 20 }).optional(),
   body('name').isString().notEmpty().trim().optional(),
-  body('locationType').isIn(['AIRPORT', 'DESTINATION', 'ZIYARAT']).optional(),
+  body('locationType').isIn(['HOTEL', 'AIRPORT', 'ZIYARAT', 'OTHERS']).optional(),
   body('countryId').isUUID().optional(),
+  body('cityId').isUUID().optional(),
   body('city').isString().notEmpty().trim().optional(),
   body('isActive').isBoolean().optional(),
 ];
@@ -41,7 +43,7 @@ router.post(
       });
     }
 
-    const { code, name, locationType, countryId, city, isActive } = req.body as CreateLocationMasterRequest;
+    const { code, name, locationType, countryId, cityId, city, isActive } = req.body as CreateLocationMasterRequest;
 
     // Check if location with same code and type already exists
     const existingLocation = await prisma.locationMaster.findUnique({
@@ -68,17 +70,44 @@ router.post(
       return res.status(400).json({ error: 'Invalid country ID' });
     }
 
+    // Verify city exists
+    const cityMaster = await prisma.cityMaster.findUnique({
+      where: { id: cityId },
+    });
+
+    if (!cityMaster) {
+      return res.status(400).json({ error: 'Invalid city ID' });
+    }
+
+    // Verify city belongs to the country
+    if (cityMaster.countryId !== countryId) {
+      return res.status(400).json({ error: 'City does not belong to the selected country' });
+    }
+
     const locationMaster = await prisma.locationMaster.create({
       data: {
         code,
         name,
         locationType: locationType as LocationType,
         countryId,
+        cityId,
         city,
         isActive: isActive ?? true,
       },
       include: {
-        country: true,
+        country: {
+          select: {
+            id: true,
+            countryCode: true,
+            countryName: true,
+          },
+        },
+        cityMaster: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -127,6 +156,12 @@ router.get(
               countryName: true,
             },
           },
+          cityMaster: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       }),
       prisma.locationMaster.count({ where }),
@@ -171,6 +206,12 @@ router.get(
             countryName: true,
           },
         },
+        cityMaster: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -189,7 +230,19 @@ router.get(
     const locationMaster = await prisma.locationMaster.findUnique({
       where: { id },
       include: {
-        country: true,
+        country: {
+          select: {
+            id: true,
+            countryCode: true,
+            countryName: true,
+          },
+        },
+        cityMaster: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -217,7 +270,7 @@ router.put(
     }
 
     const { id } = req.params;
-    const { code, name, locationType, countryId, city, isActive } = req.body as UpdateLocationMasterRequest;
+    const { code, name, locationType, countryId, cityId, city, isActive } = req.body as UpdateLocationMasterRequest;
 
     // Check if location exists
     const existingLocation = await prisma.locationMaster.findUnique({
@@ -252,6 +305,7 @@ router.put(
     }
 
     // Verify country if being updated
+    const finalCountryId = countryId || existingLocation.countryId;
     if (countryId) {
       const country = await prisma.countryMaster.findUnique({
         where: { id: countryId },
@@ -262,11 +316,29 @@ router.put(
       }
     }
 
+    // Verify city if being updated
+    const finalCityId = cityId || existingLocation.cityId;
+    if (cityId) {
+      const cityMaster = await prisma.cityMaster.findUnique({
+        where: { id: cityId },
+      });
+
+      if (!cityMaster) {
+        return res.status(400).json({ error: 'Invalid city ID' });
+      }
+
+      // Verify city belongs to the country
+      if (cityMaster.countryId !== finalCountryId) {
+        return res.status(400).json({ error: 'City does not belong to the selected country' });
+      }
+    }
+
     const updateData: any = {};
     if (code !== undefined) updateData.code = code;
     if (name !== undefined) updateData.name = name;
     if (locationType !== undefined) updateData.locationType = locationType as LocationType;
     if (countryId !== undefined) updateData.countryId = countryId;
+    if (cityId !== undefined) updateData.cityId = cityId;
     if (city !== undefined) updateData.city = city;
     if (isActive !== undefined) updateData.isActive = isActive;
 
@@ -274,7 +346,19 @@ router.put(
       where: { id },
       data: updateData,
       include: {
-        country: true,
+        country: {
+          select: {
+            id: true,
+            countryCode: true,
+            countryName: true,
+          },
+        },
+        cityMaster: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -302,7 +386,19 @@ router.patch(
       where: { id },
       data: { isActive: !locationMaster.isActive },
       include: {
-        country: true,
+        country: {
+          select: {
+            id: true,
+            countryCode: true,
+            countryName: true,
+          },
+        },
+        cityMaster: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 

@@ -257,6 +257,7 @@ model VehicleTypeMaster {
   createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   transports   TransportMaster[]
+  fullTrips    FullTripMaster[]
 
   @@index([vehicleName])
   @@index([paxCount])
@@ -310,11 +311,31 @@ model CountryMaster {
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   locations    LocationMaster[]
+  cities       CityMaster[]
 
   @@index([countryCode])
   @@index([countryName])
   @@index([isActive])
   @@map("country_masters")
+}
+
+model CityMaster {
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String                 @map("name") @db.VarChar(255)
+  countryId        String                 @map("country_id") @db.Uuid
+  isActive         Boolean                @default(true) @map("is_active")
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime               @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  country          CountryMaster          @relation(fields: [countryId], references: [id])
+  locations        LocationMaster[]
+  fullTripFrom     FullTripMaster[]       @relation("FullTripFromCity")
+  fullTripToCities FullTripMasterToCity[]
+
+  @@unique([name, countryId])
+  @@index([name])
+  @@index([countryId])
+  @@index([isActive])
+  @@map("city_masters")
 }
 
 model LocationMaster {
@@ -323,18 +344,22 @@ model LocationMaster {
   name         String       @map("name") @db.VarChar(255)
   locationType LocationType @map("location_type")
   countryId    String       @map("country_id") @db.Uuid
+  cityId       String       @map("city_id") @db.Uuid
   city         String       @db.VarChar(100)
   isActive     Boolean      @default(true) @map("is_active")
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
 
   country             CountryMaster           @relation(fields: [countryId], references: [id])
-  hotels              HotelMaster[]
+  cityMaster          CityMaster              @relation(fields: [cityId], references: [id])
   transportMasterFrom TransportMaster[]       @relation("TransportMasterFrom")
   transportMasterTo   TransportMaster[]       @relation("TransportMasterTo")
-  hotelBookings       UmrahHotelBooking[]
+  hotelBookings       UmrahHotelBooking[]     @relation("HotelBookings")
+  hotelBookingLocations UmrahHotelBooking[]   @relation("HotelBookingLocations")
   transportFromMaster UmrahTransportBooking[] @relation("TransportFrom")
   transportToMaster   UmrahTransportBooking[] @relation("TransportTo")
+  transportFromSpecific UmrahTransportBooking[] @relation("TransportFromSpecific")
+  transportToSpecific   UmrahTransportBooking[] @relation("TransportToSpecific")
   arrivalFlights      UmrahTravelDetails[]    @relation("ArrivalAirport")
   departureFlights    UmrahTravelDetails[]    @relation("DepartureAirport")
   airportRoutesFrom   AirportRouteMaster[]    @relation("AirportRouteFrom")
@@ -345,27 +370,11 @@ model LocationMaster {
   @@index([name])
   @@index([locationType])
   @@index([countryId])
+  @@index([cityId])
   @@index([isActive])
   @@map("location_masters")
 }
 
-model HotelMaster {
-  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  hotelCode     String              @unique @map("hotel_code") @db.VarChar(20)
-  hotelName     String              @map("hotel_name") @db.VarChar(255)
-  locationId    String              @map("location_id") @db.Uuid
-  isActive      Boolean             @default(true) @map("is_active")
-  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt     DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  location      LocationMaster      @relation(fields: [locationId], references: [id])
-  hotelBookings UmrahHotelBooking[]
-
-  @@index([hotelCode])
-  @@index([hotelName])
-  @@index([locationId])
-  @@index([isActive])
-  @@map("hotel_masters")
-}
 
 model AirportRouteMaster {
   id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -463,8 +472,8 @@ model UmrahHotelBooking {
   createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   accommodation   UmrahAccommodationDetails @relation(fields: [accommodationId], references: [id], onDelete: Cascade)
-  hotel           HotelMaster               @relation(fields: [hotelId], references: [id])
-  location        LocationMaster            @relation(fields: [locationId], references: [id])
+  hotel           LocationMaster            @relation("HotelBookings", fields: [hotelId], references: [id])
+  location        LocationMaster            @relation("HotelBookingLocations", fields: [locationId], references: [id])
 
   @@index([accommodationId])
   @@index([locationId])
@@ -475,24 +484,30 @@ model UmrahHotelBooking {
 }
 
 model UmrahTransportBooking {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bookingId      String           @map("booking_id") @db.Uuid
-  fromLocationId String           @map("from_location_id") @db.Uuid
-  toLocationId   String           @map("to_location_id") @db.Uuid
-  vehicleType    String           @map("vehicle_type") @db.VarChar(50)
-  paxCount       Int              @map("pax_count")
-  price          Decimal          @map("price") @db.Decimal(10, 2)
-  travelDate     DateTime?        @map("travel_date") @db.Date
-  travelTime     DateTime?        @map("travel_time") @db.Time
-  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  booking        UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  fromLocation   LocationMaster   @relation("TransportFrom", fields: [fromLocationId], references: [id])
-  toLocation     LocationMaster   @relation("TransportTo", fields: [toLocationId], references: [id])
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId             String           @map("booking_id") @db.Uuid
+  fromLocationId        String           @map("from_location_id") @db.Uuid
+  toLocationId          String           @map("to_location_id") @db.Uuid
+  fromSpecificLocationId String?         @map("from_specific_location_id") @db.Uuid
+  toSpecificLocationId   String?         @map("to_specific_location_id") @db.Uuid
+  vehicleType           String           @map("vehicle_type") @db.VarChar(50)
+  paxCount              Int              @map("pax_count")
+  price                 Decimal          @map("price") @db.Decimal(10, 2)
+  travelDate            DateTime?        @map("travel_date") @db.Date
+  travelTime            DateTime?        @map("travel_time") @db.Time
+  createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  booking               UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromLocation          LocationMaster   @relation("TransportFrom", fields: [fromLocationId], references: [id])
+  toLocation            LocationMaster   @relation("TransportTo", fields: [toLocationId], references: [id])
+  fromSpecificLocation  LocationMaster?  @relation("TransportFromSpecific", fields: [fromSpecificLocationId], references: [id])
+  toSpecificLocation    LocationMaster?  @relation("TransportToSpecific", fields: [toSpecificLocationId], references: [id])
 
   @@index([bookingId])
   @@index([fromLocationId])
   @@index([toLocationId])
+  @@index([fromSpecificLocationId])
+  @@index([toSpecificLocationId])
   @@index([vehicleType])
   @@index([travelDate])
   @@map("umrah_transport_bookings")
@@ -628,9 +643,10 @@ enum AccommodationType {
 }
 
 enum LocationType {
+  HOTEL
   AIRPORT
-  DESTINATION
   ZIYARAT
+  OTHERS
 }
 
 model PartyContact {
@@ -671,4 +687,37 @@ enum PartyDocumentType {
   pan_card
   aadhaar_card
   other
+}
+
+model FullTripMaster {
+  id             String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromCityId     String                  @map("from_city_id") @db.Uuid
+  vehicleTypeId  String                  @map("vehicle_type_id") @db.Uuid
+  price          Decimal                 @db.Decimal(10, 2)
+  isActive       Boolean                 @default(true) @map("is_active")
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  fromCity       CityMaster              @relation("FullTripFromCity", fields: [fromCityId], references: [id])
+  vehicleType    VehicleTypeMaster       @relation(fields: [vehicleTypeId], references: [id])
+  toCities       FullTripMasterToCity[]
+
+  @@index([fromCityId])
+  @@index([vehicleTypeId])
+  @@index([isActive])
+  @@map("full_trip_masters")
+}
+
+model FullTripMasterToCity {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullTripMasterId String          @map("full_trip_master_id") @db.Uuid
+  cityId            String          @map("city_id") @db.Uuid
+  sequenceOrder     Int             @map("sequence_order")
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamp(6)
+  fullTripMaster    FullTripMaster  @relation(fields: [fullTripMasterId], references: [id], onDelete: Cascade)
+  city              CityMaster      @relation(fields: [cityId], references: [id])
+
+  @@unique([fullTripMasterId, sequenceOrder])
+  @@index([fullTripMasterId])
+  @@index([cityId])
+  @@map("full_trip_master_to_cities")
 }

@@ -48,26 +48,24 @@ router.post(
 
     // Verify destinations exist if provided
     if (fromDestinationId) {
-      const fromDest = await prisma.locationMaster.findFirst({
+      const fromDest = await prisma.locationMaster.findUnique({
         where: {
           id: fromDestinationId,
-          locationType: 'DESTINATION',
         },
       });
       if (!fromDest) {
-        return res.status(400).json({ error: 'From destination not found' });
+        return res.status(400).json({ error: 'From location not found' });
       }
     }
 
     if (toDestinationId) {
-      const toDest = await prisma.locationMaster.findFirst({
+      const toDest = await prisma.locationMaster.findUnique({
         where: {
           id: toDestinationId,
-          locationType: 'DESTINATION',
         },
       });
       if (!toDest) {
-        return res.status(400).json({ error: 'To destination not found' });
+        return res.status(400).json({ error: 'To location not found' });
       }
     }
 
@@ -320,26 +318,24 @@ router.put(
 
     // Verify destinations exist if provided
     if (fromDestinationId) {
-      const fromDest = await prisma.locationMaster.findFirst({
+      const fromDest = await prisma.locationMaster.findUnique({
         where: {
           id: fromDestinationId,
-          locationType: 'DESTINATION',
         },
       });
       if (!fromDest) {
-        return res.status(400).json({ error: 'From destination not found' });
+        return res.status(400).json({ error: 'From location not found' });
       }
     }
 
     if (toDestinationId) {
-      const toDest = await prisma.locationMaster.findFirst({
+      const toDest = await prisma.locationMaster.findUnique({
         where: {
           id: toDestinationId,
-          locationType: 'DESTINATION',
         },
       });
       if (!toDest) {
-        return res.status(400).json({ error: 'To destination not found' });
+        return res.status(400).json({ error: 'To location not found' });
       }
     }
 

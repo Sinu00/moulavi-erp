@@ -7,7 +7,7 @@ import {
   RefreshToken,
   TransportMaster,
   CurrencyMaster,
-  HotelMaster,
+  CityMaster,
   LocationMaster,
   UserRole,
   CustomerType,
@@ -28,7 +28,7 @@ export type {
   RefreshToken,
   TransportMaster,
   CurrencyMaster,
-  HotelMaster,
+  CityMaster,
   LocationMaster,
   UserRole,
   CustomerType,
@@ -174,12 +174,26 @@ export interface UpdateCurrencyMasterRequest {
 }
 
 
+// City Master Types
+export interface CreateCityMasterRequest {
+  name: string;
+  countryId: string;
+  isActive?: boolean;
+}
+
+export interface UpdateCityMasterRequest {
+  name?: string;
+  countryId?: string;
+  isActive?: boolean;
+}
+
 // Location Master Types
 export interface CreateLocationMasterRequest {
   code: string;
   name: string;
   locationType: LocationType;
   countryId: string;
+  cityId: string;
   city: string;
   isActive?: boolean;
 }
@@ -189,22 +203,8 @@ export interface UpdateLocationMasterRequest {
   name?: string;
   locationType?: LocationType;
   countryId?: string;
+  cityId?: string;
   city?: string;
-  isActive?: boolean;
-}
-
-// Hotel Master Types (Simplified - removed category, capacity, amenities, description)
-export interface CreateHotelMasterRequest {
-  hotelCode: string;
-  hotelName: string;
-  locationId: string;
-  isActive?: boolean;
-}
-
-export interface UpdateHotelMasterRequest {
-  hotelCode?: string;
-  hotelName?: string;
-  locationId?: string;
   isActive?: boolean;
 }
 
@@ -250,6 +250,23 @@ export interface CreateUmrahVisaBookingRequest {
     fullName: string;
     isLeadPassenger: boolean;
   }>;
+}
+
+// Full Trip Master Types
+export interface CreateFullTripMasterRequest {
+  fromCityId: string;
+  toCityIds: string[];
+  vehicleTypeId: string;
+  price: number;
+  isActive?: boolean;
+}
+
+export interface UpdateFullTripMasterRequest {
+  fromCityId?: string;
+  toCityIds?: string[];
+  vehicleTypeId?: string;
+  price?: number;
+  isActive?: boolean;
 }
 
 

@@ -271,20 +271,17 @@ const validateDateRange = (arrivalDate: Date, departureDate: Date) => {
   return diffDays <= 80;
 };
 
-// Helper function to find destination by city with spelling variations
-const findDestinationByCity = async (city: string) => {
-  const cityVariations = [city];
-  if (city === 'Medina') cityVariations.push('Madinah');
-  if (city === 'Madinah') cityVariations.push('Medina');
-  if (city === 'Mecca') cityVariations.push('Makkah');
-  if (city === 'Makkah') cityVariations.push('Mecca');
+// Helper function to find city by name with spelling variations
+const findCityByName = async (cityName: string) => {
+  const cityVariations = [cityName];
+  if (cityName === 'Medina') cityVariations.push('Madinah');
+  if (cityName === 'Madinah') cityVariations.push('Medina');
+  if (cityName === 'Mecca') cityVariations.push('Makkah');
+  if (cityName === 'Makkah') cityVariations.push('Mecca');
   
-  return await prisma.locationMaster.findFirst({
+  return await prisma.cityMaster.findFirst({
     where: {
-      locationType: 'DESTINATION',
-      city: {
-        in: cityVariations,
-      },
+      name: { in: cityVariations },
       isActive: true,
     },
   });
@@ -527,6 +524,8 @@ router.post('/create-booking', authenticate, async (req, res) => {
                 bookingId: booking.id,
                 fromLocationId: transport.fromLocationId,
                 toLocationId: transport.toLocationId,
+                fromSpecificLocationId: (transport as any).fromHotelId || null,
+                toSpecificLocationId: (transport as any).toHotelId || null,
                 vehicleType: transport.vehicleType,
                 paxCount: transport.paxCount,
                 price: transport.price,
@@ -935,23 +934,24 @@ router.get('/transport-options/:airportId', authenticate, async (req, res) => {
       });
     }
 
-    // Find the destination that matches the airport's city
-    const fromDestination = await findDestinationByCity(airport.city);
+    // Find the city that matches the airport's city
+    const fromCity = await findCityByName(airport.city);
 
-    if (!fromDestination) {
-      console.warn(`No destination found for airport city: ${airport.city}`);
+    if (!fromCity) {
+      console.warn(`No city found for airport city: ${airport.city}`);
       return res.json({
         requiresTransport: true,
         airport,
         transportOptions: [],
-        message: `No destination found for city: ${airport.city}`,
+        message: `No city found for airport city: ${airport.city}`,
       });
     }
 
-    // Get available transport options FROM this location
+    // Get available transport options FROM this airport or any location in the city
+    // Use the airport itself as the from location since transport routes are between locations
     const transportOptions = await prisma.transportMaster.findMany({
       where: {
-        fromLocationId: fromDestination.id,
+        fromLocationId: airport.id, // Use the airport itself as the from location
         isActive: true,
       },
       include: {
@@ -968,7 +968,7 @@ router.get('/transport-options/:airportId', authenticate, async (req, res) => {
     res.json({
       requiresTransport: true,
       airport,
-      fromLocation: fromDestination,
+      fromCity: fromCity,
       transportOptions,
     });
   } catch (error) {
@@ -982,16 +982,13 @@ router.get('/masters/destinations', authenticate, async (req, res) => {
   try {
     const q = (req.query.q as string) || '';
     
-    // Use LocationMaster with locationType='DESTINATION'
-    const locationRows = await prisma.locationMaster.findMany({
+    // Use CityMaster instead of DESTINATION locations
+    const cityRows = await prisma.cityMaster.findMany({
       where: {
-        locationType: 'DESTINATION',
         isActive: true,
         ...(q ? { 
           OR: [
             { name: { contains: q, mode: 'insensitive' } },
-            { code: { contains: q, mode: 'insensitive' } },
-            { city: { contains: q, mode: 'insensitive' } },
           ]
         } : {}),
       },
@@ -1009,20 +1006,20 @@ router.get('/masters/destinations', authenticate, async (req, res) => {
     });
     
     // Convert to old format for backward compatibility
-    const destinations = locationRows.map(loc => ({
-      id: loc.id,
-      destinationCode: loc.code,
-      destinationName: loc.name,
-      city: loc.city,
-      country: loc.country?.countryName || 'Saudi Arabia',
-      isActive: loc.isActive,
-      createdAt: loc.createdAt,
-      updatedAt: loc.updatedAt,
+    const destinations = cityRows.map(city => ({
+      id: city.id,
+      destinationCode: city.name.substring(0, 3).toUpperCase(),
+      destinationName: city.name,
+      city: city.name,
+      country: city.country?.countryName || 'Saudi Arabia',
+      isActive: city.isActive,
+      createdAt: city.createdAt,
+      updatedAt: city.updatedAt,
     }));
     
     res.json({ 
       destinations, // Backward compatible format
-      locationMasters: locationRows, // New unified locations
+      cities: cityRows, // New city master format
     });
   } catch (error) {
     console.error('Error fetching destinations:', error);
@@ -1074,18 +1071,35 @@ router.get('/masters/locations', authenticate, async (req, res) => {
   }
 });
 
-// Masters: GET hotels by destination
+// Masters: GET hotels by city
 router.get('/masters/hotels', authenticate, async (req, res) => {
   try {
-    const locationId = req.query.locationId as string | undefined;
+    const cityId = req.query.cityId as string | undefined;
     const q = (req.query.q as string) || '';
-    const rows = await prisma.hotelMaster.findMany({
+    const rows = await prisma.locationMaster.findMany({
       where: {
-        ...(locationId ? { locationId } : {}),
-        ...(q ? { hotelName: { contains: q, mode: 'insensitive' } } : {}),
+        locationType: 'HOTEL',
+        isActive: true,
+        ...(cityId ? { cityId } : {}),
+        ...(q ? { name: { contains: q, mode: 'insensitive' } } : {}),
       },
-      orderBy: { hotelName: 'asc' },
+      orderBy: { name: 'asc' },
       take: 100,
+      include: {
+          cityMaster: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        country: {
+          select: {
+            id: true,
+            countryCode: true,
+            countryName: true,
+          },
+        },
+      },
     });
     res.json({ hotels: rows });
   } catch (error) {
@@ -1113,21 +1127,34 @@ router.get('/masters/airports', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/umrah-visa/hotels/:locationId - Get hotels by location
-router.get('/hotels/:locationId', authenticate, async (req, res) => {
+// GET /api/umrah-visa/hotels/:cityId - Get hotels by city
+router.get('/hotels/:cityId', authenticate, async (req, res) => {
   try {
-    const { locationId } = req.params;
+    const { cityId } = req.params;
 
-    const hotels = await prisma.hotelMaster.findMany({
+    const hotels = await prisma.locationMaster.findMany({
       where: {
-        locationId: locationId,
+        cityId: cityId,
+        locationType: 'HOTEL',
         isActive: true,
       },
       include: {
-        location: true,
+          cityMaster: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        country: {
+          select: {
+            id: true,
+            countryCode: true,
+            countryName: true,
+          },
+        },
       },
       orderBy: [
-        { hotelName: 'asc' },
+        { name: 'asc' },
       ],
     });
 
@@ -1443,6 +1470,8 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
           include: {
             fromLocation: true,
             toLocation: true,
+            fromSpecificLocation: true,
+            toSpecificLocation: true,
           },
           orderBy: {
             travelDate: 'asc',
@@ -1479,6 +1508,15 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       }
     }
 
+    // Get the total count of all transport bookings EXCEPT the current booking's
+    // This ensures route numbers continue sequentially across all bookings
+    const totalTransportBookings = await prisma.umrahTransportBooking.count({
+      where: {
+        bookingId: { not: bookingId },
+      },
+    });
+    const baseRouteNumber = totalTransportBookings;
+
     // Format data for voucher preview
     const voucherData = {
       bookingId: booking.id,
@@ -1491,21 +1529,35 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       hotelSchedules: booking.accommodationDetails?.hotelBookings.map((hb, idx) => ({
         number: idx + 1,
         location: hb.location.name,
-        hotelName: hb.hotel.hotelName,
+        hotelName: hb.hotel.name,
         checkIn: hb.checkInDate,
         checkOut: hb.checkOutDate,
         days: Math.ceil((new Date(hb.checkOutDate).getTime() - new Date(hb.checkInDate).getTime()) / (1000 * 60 * 60 * 24)),
       })) || [],
-      movementDetails: booking.transportBookings.map((tb, idx) => ({
-        sr: idx + 1,
-        route: '', // Will be auto-generated
-        date: tb.travelDate,
-        time: tb.travelTime,
-        fromLocation: tb.fromLocation.name,
-        fromLocationId: tb.fromLocationId,
-        toLocation: tb.toLocation.name,
-        toLocationId: tb.toLocationId,
-      })),
+      movementDetails: booking.transportBookings.map((tb, idx) => {
+        // Generate route numbers starting from (totalTransportBookings + 1), incrementing for each transport
+        // Format as 5-digit zero-padded number (00001, 00002, etc.)
+        // This ensures route numbers continue sequentially across all bookings
+        const routeNumber = (baseRouteNumber + idx + 1).toString().padStart(5, '0');
+        
+        return {
+          sr: idx + 1,
+          route: routeNumber, // Sequential route number continuing from previous bookings
+          date: tb.travelDate ? formatDate(tb.travelDate) : '', // DD-MM-YYYY format
+          time: tb.travelTime ? formatTime(tb.travelTime) : '', // HH:MM format
+          from: tb.fromLocation?.name || '', // City name from LocationMaster
+          fromLocation: tb.fromSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
+          fromLocationId: tb.fromLocationId,
+          fromSpecificLocationId: tb.fromSpecificLocationId,
+          to: tb.toLocation?.name || '', // City name from LocationMaster
+          toLocation: tb.toSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
+          toLocationId: tb.toLocationId,
+          toSpecificLocationId: tb.toSpecificLocationId,
+          vehicleType: tb.vehicleType || '',
+          paxCount: tb.paxCount || 0,
+          price: tb.price ? Number(tb.price) : 0,
+        };
+      }),
       flightDetails: booking.travelDetails ? [
         {
           type: 'AA', // Arrival
@@ -1895,6 +1947,8 @@ const groupStep3Schema = z.object({
   transportSegments: z.array(z.object({
     fromLocationId: z.string().uuid(),
     toLocationId: z.string().uuid(),
+    fromHotelId: z.string().uuid().optional(), // LocationMaster ID for specific "from" location
+    toHotelId: z.string().uuid().optional(),   // LocationMaster ID for specific "to" location
     vehicleType: z.string(),
     paxCount: z.number().min(1),
     price: z.number().min(0),
@@ -1905,6 +1959,12 @@ const groupStep3Schema = z.object({
       today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
       return today;
     }).optional(),
+  })).optional(),
+  ziyaraths: z.array(z.object({
+    id: z.string(),
+    ziyarathId: z.string().uuid(), // LocationMaster ID of ziyarath
+    date: z.string().transform((str) => new Date(str)),
+    time: z.string(),
   })).optional(),
 });
 
@@ -2066,6 +2126,89 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
         ...(step2Data.transportBookings || []),
       ];
 
+      // Convert ziyaraths to transport segments
+      if (step3Data.ziyaraths && step3Data.ziyaraths.length > 0) {
+        // Get all hotel bookings and location masters to find hotel for each ziyarath city
+        const hotelBookingsData = step3Data.hotelBookings || [];
+        
+        // Fetch all location masters for ziyaraths and hotels
+        const ziyarathLocationIds = step3Data.ziyaraths.map(z => z.ziyarathId);
+        const hotelLocationIds = hotelBookingsData.map(h => h.hotelId);
+        const allLocationIds = [...ziyarathLocationIds, ...hotelLocationIds];
+        
+        const locationMasters = await tx.locationMaster.findMany({
+          where: { id: { in: allLocationIds } },
+          include: { cityMaster: true },
+        });
+
+        // Create a map of ziyarath location -> city
+        const ziyarathCityMap = new Map<string, string>();
+        step3Data.ziyaraths.forEach((ziyarath) => {
+          const ziyarathLoc = locationMasters.find(lm => lm.id === ziyarath.ziyarathId);
+          if (ziyarathLoc) {
+            const cityName = (ziyarathLoc.city || ziyarathLoc.cityMaster?.name || '').toLowerCase().trim();
+            ziyarathCityMap.set(ziyarath.ziyarathId, cityName);
+          }
+        });
+
+        // Find hotel for each ziyarath (hotel in same city)
+        // Use for...of loop to handle async operations
+        for (const ziyarath of step3Data.ziyaraths) {
+          const ziyarathCity = ziyarathCityMap.get(ziyarath.ziyarathId);
+          if (!ziyarathCity) continue;
+
+          // Find hotel booking in the same city
+          const hotelBooking = hotelBookingsData.find((hb) => {
+            const hotelLoc = locationMasters.find(lm => lm.id === hb.hotelId);
+            if (!hotelLoc) return false;
+            const hotelCity = (hotelLoc.city || hotelLoc.cityMaster?.name || '').toLowerCase().trim();
+            return hotelCity === ziyarathCity;
+          });
+
+          if (!hotelBooking) continue;
+
+          // Get city location ID (from hotel's city)
+          const hotelLoc = locationMasters.find(lm => lm.id === hotelBooking.hotelId);
+          if (!hotelLoc || !hotelLoc.cityId) continue;
+
+          // Find the LocationMaster that represents the city itself
+          // Cities are typically stored as LocationMaster entries with the same cityId
+          // Try to find any LocationMaster with the same cityId (could be OTHERS type or any type)
+          const cityLocationMaster = await tx.locationMaster.findFirst({
+            where: {
+              cityId: hotelLoc.cityId,
+              isActive: true,
+            },
+            orderBy: {
+              locationType: 'asc', // Prefer specific types first
+            },
+          });
+
+          if (!cityLocationMaster) {
+            console.warn(`[create-group-booking] City LocationMaster not found for cityId: ${hotelLoc.cityId}`);
+            continue;
+          }
+
+          // Convert ziyarath to transport segment
+          transportBookings.push({
+            fromLocationId: cityLocationMaster.id, // City LocationMaster ID
+            toLocationId: cityLocationMaster.id,   // Same city (ziyarath is within city)
+            fromHotelId: hotelBooking.hotelId, // Hotel LocationMaster ID
+            toHotelId: ziyarath.ziyarathId,    // Ziyarath LocationMaster ID
+            vehicleType: '',                   // Ziyarath doesn't require vehicle type
+            paxCount: 0,                       // Will be set based on passenger count
+            price: 0,                          // Ziyarath is typically included
+            travelDate: ziyarath.date,
+            travelTime: ziyarath.time ? (() => {
+              const today = new Date();
+              const [hours, minutes] = ziyarath.time.split(':');
+              today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+              return today;
+            })() : null,
+          } as any);
+        }
+      }
+
       if (transportBookings.length > 0) {
         await Promise.all(
           transportBookings.map(transport =>
@@ -2074,9 +2217,11 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
                 bookingId: booking.id,
                 fromLocationId: transport.fromLocationId,
                 toLocationId: transport.toLocationId,
-                vehicleType: transport.vehicleType,
-                paxCount: transport.paxCount,
-                price: transport.price,
+                fromSpecificLocationId: (transport as any).fromHotelId || null,
+                toSpecificLocationId: (transport as any).toHotelId || null,
+                vehicleType: transport.vehicleType || '',
+                paxCount: transport.paxCount || step4Data.passengerCount,
+                price: transport.price || 0,
                 travelDate: transport.travelDate,
                 travelTime: transport.travelTime,
               },
@@ -2153,43 +2298,56 @@ router.post('/group/create-booking', authenticate, async (req, res) => {
 });
 
 
-// POST /api/umrah-visa/seed-ziyarah-hotels - Seed Ziyarah hotels in HotelMaster
+// POST /api/umrah-visa/seed-ziyarah-hotels - Seed Ziyarah hotels as LocationMaster entries
 router.post('/seed-ziyarah-hotels', authenticate, authorize('admin'), async (req, res) => {
   try {
-    // Find Makkah and Madinah destinations
-    const makkah = await prisma.locationMaster.findFirst({
+    // Find Makkah and Madinah cities
+    const makkahCity = await prisma.cityMaster.findFirst({
       where: {
-        locationType: 'DESTINATION',
-        city: { in: ['Makkah', 'Mecca'] },
+        name: { in: ['Makkah', 'Mecca', 'Makkah Al Mukarramah'] },
         isActive: true,
       },
     });
 
-    const madinah = await prisma.locationMaster.findFirst({
+    const madinahCity = await prisma.cityMaster.findFirst({
       where: {
-        locationType: 'DESTINATION',
-        city: { in: ['Madinah', 'Medina'] },
+        name: { in: ['Madinah', 'Medina', 'Al Madinah Al Munawwarah'] },
         isActive: true,
       },
     });
 
-    if (!makkah) {
-      return res.status(404).json({ error: 'Makkah destination not found' });
+    if (!makkahCity) {
+      return res.status(404).json({ error: 'Makkah city not found. Please create it in City Master first.' });
     }
-    if (!madinah) {
-      return res.status(404).json({ error: 'Madinah destination not found' });
+    if (!madinahCity) {
+      return res.status(404).json({ error: 'Madinah city not found. Please create it in City Master first.' });
+    }
+
+    // Get country for the cities
+    const makkahCountry = await prisma.countryMaster.findUnique({
+      where: { id: makkahCity.countryId },
+    });
+
+    const madinahCountry = await prisma.countryMaster.findUnique({
+      where: { id: madinahCity.countryId },
+    });
+
+    if (!makkahCountry || !madinahCountry) {
+      return res.status(404).json({ error: 'Country not found for cities' });
     }
 
     // Check if ziyarah hotels already exist
-    const makZiyExists = await prisma.hotelMaster.findFirst({
+    const makZiyExists = await prisma.locationMaster.findFirst({
       where: {
-        hotelCode: 'MAK_ZIY',
+        code: 'MAK_ZIY',
+        locationType: 'HOTEL',
       },
     });
 
-    const madZiyExists = await prisma.hotelMaster.findFirst({
+    const madZiyExists = await prisma.locationMaster.findFirst({
       where: {
-        hotelCode: 'MAD_ZIY',
+        code: 'MAD_ZIY',
+        locationType: 'HOTEL',
       },
     });
 
@@ -2197,11 +2355,14 @@ router.post('/seed-ziyarah-hotels', authenticate, authorize('admin'), async (req
 
     // Create Makkah Ziyarah if it doesn't exist
     if (!makZiyExists) {
-      const makZiy = await prisma.hotelMaster.create({
+      const makZiy = await prisma.locationMaster.create({
         data: {
-          hotelCode: 'MAK_ZIY',
-          hotelName: 'Makkah Ziyarah',
-          locationId: makkah.id,
+          code: 'MAK_ZIY',
+          name: 'Makkah Ziyarah',
+          locationType: 'HOTEL',
+          countryId: makkahCity.countryId,
+          cityId: makkahCity.id,
+          city: makkahCity.name,
           isActive: true,
         },
       });
@@ -2212,11 +2373,14 @@ router.post('/seed-ziyarah-hotels', authenticate, authorize('admin'), async (req
 
     // Create Madinah Ziyarah if it doesn't exist
     if (!madZiyExists) {
-      const madZiy = await prisma.hotelMaster.create({
+      const madZiy = await prisma.locationMaster.create({
         data: {
-          hotelCode: 'MAD_ZIY',
-          hotelName: 'Madinah Ziyarah',
-          locationId: madinah.id,
+          code: 'MAD_ZIY',
+          name: 'Madinah Ziyarah',
+          locationType: 'HOTEL',
+          countryId: madinahCity.countryId,
+          cityId: madinahCity.id,
+          city: madinahCity.name,
           isActive: true,
         },
       });
