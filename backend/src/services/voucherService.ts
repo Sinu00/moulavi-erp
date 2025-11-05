@@ -3,13 +3,25 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /**
- * Generate next sequential voucher number starting from "001"
+ * Generate next sequential voucher number starting from "001" for the current year
  * Format: "001", "002", "003", etc.
+ * Resets to "001" on January 1st of each year
  */
 export async function generateVoucherNumber(): Promise<string> {
   try {
-    // Find the highest voucher number
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    // Get the start of the current year (January 1st, 00:00:00)
+    const yearStart = new Date(currentYear, 0, 1);
+    
+    // Find the highest voucher number for vouchers generated this year
     const lastVoucher = await prisma.voucher.findFirst({
+      where: {
+        generatedAt: {
+          gte: yearStart,
+        },
+      },
       orderBy: {
         voucherNumber: 'desc',
       },
@@ -24,6 +36,10 @@ export async function generateVoucherNumber(): Promise<string> {
 
     // Extract numeric part and increment
     const lastNumber = parseInt(lastVoucher.voucherNumber, 10);
+    if (isNaN(lastNumber)) {
+      return '001';
+    }
+    
     const nextNumber = lastNumber + 1;
     
     // Format as 3-digit string with leading zeros

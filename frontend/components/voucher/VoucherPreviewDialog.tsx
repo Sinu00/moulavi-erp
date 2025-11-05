@@ -47,9 +47,11 @@ interface MovementDetail {
   route: string;
   date: string;
   time: string;
-  fromLocation: string;
+  from: string; // City name
+  fromLocation: string; // Specific location (Airport, Hotel, Ziyarat)
+  to: string; // City name
+  toLocation: string; // Specific location (Airport, Hotel, Ziyarat)
   fromLocationId?: string;
-  toLocation: string;
   toLocationId?: string;
 }
 
@@ -74,10 +76,21 @@ export function VoucherPreviewDialog({
   const [submitting, setSubmitting] = useState(false);
   const [voucherData, setVoucherData] = useState({
     reservationDate: '',
+    reservationNumber: '',
     guestName: '',
     guestMobile: '',
     groupCode: '',
     paxCount: 0,
+    umrahVisaProvider: null as {
+      partyName: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      contactNumber?: string;
+      whatsappNumber?: string;
+      email?: string;
+    } | null,
     hotelSchedules: [] as HotelSchedule[],
     movementDetails: [] as MovementDetail[],
     flightDetails: [] as FlightDetail[],
@@ -99,18 +112,63 @@ export function VoucherPreviewDialog({
       
       setVoucherData({
         reservationDate: data.reservationDate ? new Date(data.reservationDate).toISOString().split('T')[0] : '',
+        reservationNumber: data.reservationNumber || '',
         guestName: data.guestName || '',
         guestMobile: data.guestMobile || '',
         groupCode: data.groupCode || '',
         paxCount: data.paxCount || 0,
-        hotelSchedules: data.hotelSchedules || [],
-        movementDetails: (data.movementDetails || []).map((m: any, idx: number) => ({
-          ...m,
-          sr: idx + 1,
-          date: m.date ? new Date(m.date).toISOString().split('T')[0] : '',
-          time: m.time ? (typeof m.time === 'string' && m.time.includes('T') ? m.time.split('T')[1].slice(0, 5) : m.time.slice(0, 5)) : '',
+        umrahVisaProvider: data.umrahVisaProvider || null,
+        hotelSchedules: (data.hotelSchedules || []).map((hs: any) => ({
+          ...hs,
+          checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' && hs.checkIn.match(/^\d{2}-\d{2}-\d{4}/) 
+            ? (() => { const [d, m, y] = hs.checkIn.split('-'); return `${y}-${m}-${d}`; })() 
+            : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
+          checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' && hs.checkOut.match(/^\d{2}-\d{2}-\d{4}/) 
+            ? (() => { const [d, m, y] = hs.checkOut.split('-'); return `${y}-${m}-${d}`; })() 
+            : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
         })),
-        flightDetails: data.flightDetails || [],
+        movementDetails: (data.movementDetails || []).map((m: any, idx: number) => {
+          // Handle date format - backend sends DD-MM-YYYY, convert to YYYY-MM-DD for date input
+          let dateValue = '';
+          if (m.date) {
+            if (typeof m.date === 'string') {
+              // Check if it's already in ISO format (YYYY-MM-DD)
+              if (m.date.match(/^\d{4}-\d{2}-\d{2}/)) {
+                dateValue = m.date.split('T')[0]; // Extract date part if ISO format
+              } else if (m.date.match(/^\d{2}-\d{2}-\d{4}/)) {
+                // Handle DD-MM-YYYY format from backend
+                const [day, month, year] = m.date.split('-');
+                dateValue = `${year}-${month}-${day}`;
+              } else {
+                // Try to parse as Date object
+                const dateObj = new Date(m.date);
+                if (!isNaN(dateObj.getTime())) {
+                  dateValue = dateObj.toISOString().split('T')[0];
+                }
+              }
+            } else if (m.date instanceof Date) {
+              dateValue = m.date.toISOString().split('T')[0];
+            }
+          }
+
+          return {
+            ...m,
+            sr: idx + 1,
+            date: dateValue,
+            time: m.time ? (typeof m.time === 'string' && m.time.includes('T') ? m.time.split('T')[1].slice(0, 5) : m.time.slice(0, 5)) : '',
+            // Ensure from/to and fromLocation/toLocation are properly set
+            from: m.from || '',
+            fromLocation: m.fromLocation || '',
+            to: m.to || '',
+            toLocation: m.toLocation || '',
+          };
+        }),
+        flightDetails: (data.flightDetails || []).map((fd: any) => ({
+          ...fd,
+          date: fd.date ? (typeof fd.date === 'string' && fd.date.match(/^\d{2}-\d{2}-\d{4}/) 
+            ? (() => { const [d, m, y] = fd.date.split('-'); return `${y}-${m}-${d}`; })() 
+            : new Date(fd.date).toISOString().split('T')[0]) : '',
+        })),
       });
     } catch (error: any) {
       console.error('Error loading voucher data:', error);
@@ -174,7 +232,9 @@ export function VoucherPreviewDialog({
       route: '',
       date: '',
       time: '',
+      from: '',
       fromLocation: '',
+      to: '',
       toLocation: '',
     };
     setVoucherData({
@@ -221,11 +281,13 @@ export function VoucherPreviewDialog({
         
         generateVoucherPDF({
           voucherNumber: generatedVoucher?.voucherNumber || '001',
+          reservationNumber: submissionData.reservationNumber || generatedVoucher?.reservationNumber || '',
           reservationDate: submissionData.reservationDate || generatedVoucher?.reservationDate,
           guestName: submissionData.guestName || generatedVoucher?.guestName,
           guestMobile: submissionData.guestMobile || generatedVoucher?.guestMobile,
           groupCode: submissionData.groupCode || generatedVoucher?.groupCode,
           paxCount: submissionData.paxCount || generatedVoucher?.paxCount,
+          umrahVisaProvider: submissionData.umrahVisaProvider || generatedVoucher?.umrahVisaProvider || null,
           hotelSchedules: submissionData.hotelSchedules || generatedVoucher?.hotelSchedules || [],
           movementDetails: movementDetailsWithRoutes,
           flightDetails: submissionData.flightDetails || generatedVoucher?.flightDetails || [],
@@ -276,6 +338,14 @@ export function VoucherPreviewDialog({
             <div className="space-y-4 p-4 border rounded-lg bg-white">
               <h3 className="font-semibold text-lg">Reservation Summary</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Reservation Number</Label>
+                  <Input
+                    value={voucherData.reservationNumber}
+                    onChange={(e) => setVoucherData({ ...voucherData, reservationNumber: e.target.value })}
+                    placeholder="Auto-generated"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Reservation Date</Label>
                   <Input
@@ -418,8 +488,22 @@ export function VoucherPreviewDialog({
                               className="w-32"
                             />
                           </TableCell>
-                          <TableCell>{movement.fromLocation}</TableCell>
-                          <TableCell>{movement.toLocation}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div className="font-medium">{movement.from || 'N/A'}</div>
+                              {movement.fromLocation && (
+                                <div className="text-gray-500 text-xs">{movement.fromLocation}</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <div className="font-medium">{movement.to || 'N/A'}</div>
+                              {movement.toLocation && (
+                                <div className="text-gray-500 text-xs">{movement.toLocation}</div>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Button
                               type="button"

@@ -229,11 +229,11 @@ export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: 
   // For individual bookings (without group number): validate passengers and documents
   const passengerCount = data.passengers.length;
   const accommodationType = step3Data.accommodationType || 'hotel';
-  
+
   if (passengerCount < 1) {
     return 'At least one passenger is required';
   }
-  
+
   if (accommodationType === 'iqama' && passengerCount > BOOKING_LIMITS.MAX_PASSENGERS_IQAMA) {
     return `Maximum ${BOOKING_LIMITS.MAX_PASSENGERS_IQAMA} passengers allowed for iqama accommodation`;
   }

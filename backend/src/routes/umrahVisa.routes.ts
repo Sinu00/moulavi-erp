@@ -1471,7 +1471,22 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
             },
           },
         },
+        umrahVisaProvider: {
+          select: {
+            id: true,
+            partyName: true,
+            address: true,
+            contactNumber: true,
+            whatsappNumber: true,
+            email: true,
+          },
+        },
         tripInfo: true,
+        voucher: {
+          select: {
+            voucherNumber: true,
+          },
+        },
         travelDetails: {
           include: {
             arrivalAirport: true,
@@ -1546,20 +1561,30 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
     const voucherData = {
       bookingId: booking.id,
       reservationDate: booking.createdAt,
+      reservationNumber: booking.voucher?.voucherNumber || '', // Use voucher number as reservation number (empty if voucher not generated yet)
       guestName: booking.service.party.partyName,
       guestMobile: booking.service.party.contactNumber || booking.service.party.whatsappNumber || '',
       groupCode: booking.groupNumber || tripInfo.groupNumber || '',
-      paxCount: booking.passengerCount,
       groupName: booking.groupName || tripInfo.groupName || '',
-      hotelSchedules: booking.accommodationDetails?.hotelBookings.map((hb, idx) => ({
+      paxCount: booking.passengerCount,
+      // Umrah Visa Provider details (for header section)
+      umrahVisaProvider: booking.umrahVisaProvider ? {
+        partyName: booking.umrahVisaProvider.partyName,
+        address: booking.umrahVisaProvider.address || '',
+        contactNumber: booking.umrahVisaProvider.contactNumber || '',
+        whatsappNumber: booking.umrahVisaProvider.whatsappNumber || '',
+        email: booking.umrahVisaProvider.email || '',
+      } : null,
+      hotelSchedules: booking.accommodationDetails?.hotelBookings.map((hb: any, idx: number) => ({
         number: idx + 1,
         location: hb.location.name,
         hotelName: hb.hotel.name,
         checkIn: hb.checkInDate,
         checkOut: hb.checkOutDate,
         days: Math.ceil((new Date(hb.checkOutDate).getTime() - new Date(hb.checkInDate).getTime()) / (1000 * 60 * 60 * 24)),
+        brn: hb.brn && Array.isArray(hb.brn) ? hb.brn : null, // Include BRN if available
       })) || [],
-      movementDetails: booking.transportBookings.map((tb, idx) => {
+      movementDetails: booking.transportBookings.map((tb: any, idx: number) => {
         // Generate route numbers starting from (totalTransportBookings + 1), incrementing for each transport
         // Format as 5-digit zero-padded number (00001, 00002, etc.)
         // This ensures route numbers continue sequentially across all bookings
@@ -1586,22 +1611,22 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       flightDetails: booking.travelDetails ? [
         {
           type: 'AA', // Arrival
-          date: booking.travelDetails.arrivalDate,
+          date: booking.travelDetails.arrivalDate ? formatDate(booking.travelDetails.arrivalDate) : '',
           carrier: booking.travelDetails.arrivalFlightNumber?.split('-')[0] || '',
           number: booking.travelDetails.arrivalFlightNumber?.split('-')[1] || '',
           from: booking.travelDetails.arrivalAirport.code,
           to: 'JED',
           etd: '',
-          eta: booking.travelDetails.arrivalTime,
+          eta: booking.travelDetails.arrivalTime ? formatTime(booking.travelDetails.arrivalTime) : '',
         },
         {
           type: 'AD', // Departure
-          date: booking.travelDetails.departureDate,
+          date: booking.travelDetails.departureDate ? formatDate(booking.travelDetails.departureDate) : '',
           carrier: booking.travelDetails.departureFlightNumber?.split('-')[0] || '',
           number: booking.travelDetails.departureFlightNumber?.split('-')[1] || '',
           from: 'JED',
           to: booking.travelDetails.departureAirport.code,
-          etd: booking.travelDetails.departureTime,
+          etd: booking.travelDetails.departureTime ? formatTime(booking.travelDetails.departureTime) : '',
           eta: '',
         },
       ] : [],
@@ -1631,6 +1656,11 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       where: { id: bookingId },
       include: {
         tripInfo: true,
+        umrahVisaProvider: {
+          select: {
+            id: true,
+          },
+        },
         service: {
           include: {
             party: {
@@ -1657,6 +1687,11 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
           where: { id: bookingId },
           include: { 
             tripInfo: true,
+            umrahVisaProvider: {
+              select: {
+                id: true,
+              },
+            },
             service: {
               include: {
                 party: {
@@ -1718,6 +1753,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
           guestName: voucherData.guestName || booking!.service?.party?.partyName || '',
           guestMobile: voucherData.guestMobile || '',
           groupCode: voucherData.groupCode || booking!.groupNumber || (booking!.tripInfo?.groupNumber || ''),
+          umrahVisaProviderId: booking!.umrahVisaProviderId || null,
           paxCount: voucherData.paxCount || booking!.passengerCount,
           hotelSchedules: voucherData.hotelSchedules || [],
           movementDetails: movementDetailsWithRoutes,

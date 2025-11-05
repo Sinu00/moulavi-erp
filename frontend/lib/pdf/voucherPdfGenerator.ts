@@ -13,11 +13,20 @@ declare module 'jspdf' {
 
 interface VoucherPdfData {
   voucherNumber: string;
+  reservationNumber?: string; // Added for reservation number
   reservationDate: string;
   guestName: string;
   guestMobile: string;
   groupCode: string;
+  groupName?: string; // Added for group name
   paxCount: number;
+  umrahVisaProvider?: { // Added for Umrah Visa Provider details
+    partyName: string;
+    address?: string;
+    contactNumber?: string;
+    whatsappNumber?: string;
+    email?: string;
+  } | null;
   hotelSchedules: Array<{
     number: number;
     location: string;
@@ -25,14 +34,17 @@ interface VoucherPdfData {
     days: number;
     checkIn: string;
     checkOut: string;
+    brn?: string[] | null; // Added for BRN
   }>;
   movementDetails: Array<{
     sr: number;
     route: string;
     date: string;
     time: string;
-    fromLocation: string;
-    toLocation: string;
+    from: string; // City name
+    fromLocation: string; // Specific location (Airport, Hotel, Ziyarat)
+    to: string; // City name
+    toLocation: string; // Specific location (Airport, Hotel, Ziyarat)
   }>;
   flightDetails: Array<{
     type: string;
@@ -103,29 +115,35 @@ export function generateVoucherPDF(data: VoucherPdfData): void {
 
   const [redR, redG, redB] = hexToRgb(redColor);
 
-  // ========== RED HEADER BAR ==========
-  doc.setFillColor(redR, redG, redB);
-  doc.rect(0, 0, pageWidth, 42, 'F');
+  // ========== HEADER SECTION ==========
+  // Green header bar (based on screenshot - green background)
+  const greenColor = [34, 139, 34]; // Green color for header
+  doc.setFillColor(greenColor[0], greenColor[1], greenColor[2]);
+  doc.rect(0, 0, pageWidth, 50, 'F'); // Taller header
   yPos = 18;
 
-  // Company Name in Header (White Text)
+  // Company Name in Header (White Text) - Use Umrah Visa Provider name if available
+  const providerName = data.umrahVisaProvider?.partyName || 'UMRA SERVICES';
   doc.setFontSize(24);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('UMRA SERVICES', pageWidth / 2, yPos, { align: 'center' });
+  doc.text(providerName.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
   yPos += 10;
 
-  // Address (White Text, Smaller)
+  // Address (White Text, Smaller) - Use provider address if available
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
-  doc.text('JEDDAH - SAUDI ARABIA', pageWidth / 2, yPos, { align: 'center' });
+  const address = data.umrahVisaProvider?.address || 'JEDDAH - SAUDI ARABIA';
+  doc.text(address.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
   yPos += 8;
 
   // Contact Info (White Text, Even Smaller)
   doc.setFontSize(9);
-  doc.text('OPERATION DEPARTMENT: +966 538634100', pageWidth / 2 - 30, yPos);
+  const contactNumber = data.umrahVisaProvider?.contactNumber || data.umrahVisaProvider?.whatsappNumber || '+966 538634100';
+  const email = data.umrahVisaProvider?.email || 'info@test.com.sa';
+  doc.text(`OPERATION DEPARTMENT NO: ${contactNumber}`, pageWidth / 2 - 35, yPos);
   doc.text('|', pageWidth / 2, yPos);
-  doc.text('info@test.com.sa', pageWidth / 2 + 30, yPos);
+  doc.text(email, pageWidth / 2 + 30, yPos);
   
   // ========== WATERMARK / BACKGROUND PATTERN ==========
   // Subtle watermark in light gray (drawn first so it's behind content)
@@ -138,13 +156,13 @@ export function generateVoucherPDF(data: VoucherPdfData): void {
   });
   doc.setTextColor(0, 0, 0);
 
-  // ========== RESERVATION SUMMARY CARD ==========
-  yPos = 52;
+  // ========== RESERVATION DETAILS SECTION ==========
+  yPos = 58;
   
-  // Card background with border
+  // Reservation Details Card - Match screenshot layout (3 columns)
   doc.setDrawColor(220, 220, 220);
   doc.setFillColor(255, 255, 255);
-  const cardHeight = 45;
+  const cardHeight = 50;
   doc.roundedRect(margin, yPos, pageWidth - 2 * margin, cardHeight, 3, 3, 'FD');
   
   // Red accent line on left
@@ -156,56 +174,54 @@ export function generateVoucherPDF(data: VoucherPdfData): void {
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(redR, redG, redB);
-  doc.text('RESERVATION SUMMARY', margin + 8, yPos);
+  doc.text('RESERVATION DETAILS', margin + 8, yPos);
 
-  // Card content
-  yPos += 5;
-  doc.setFontSize(10);
+  // Card content - 3 columns layout
+  yPos += 8;
+  doc.setFontSize(9);
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'normal');
+  
+  const leftColX = margin + 10;
+  const middleColX = margin + 70;
+  const rightColX = margin + 130;
+  const lineHeight = 7;
 
-  // Reservation Number
+  // Left Column
   doc.setFont('helvetica', 'bold');
-  doc.text('Reservation Number:', margin + 8, yPos);
+  doc.text('RESERVATION NUMBER:', leftColX, yPos);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.voucherNumber, margin + 60, yPos);
-  yPos += 6;
-
-  // Reservation Date
+  doc.text(data.reservationNumber || data.voucherNumber || 'N/A', leftColX, yPos + lineHeight);
+  
   doc.setFont('helvetica', 'bold');
-  doc.text('Reservation Date:', margin + 8, yPos);
+  doc.text('GUEST NAME:', leftColX, yPos + lineHeight * 2);
   doc.setFont('helvetica', 'normal');
-  doc.text(formatDate(data.reservationDate), margin + 60, yPos);
-  yPos += 6;
+  doc.text(data.guestName || 'N/A', leftColX, yPos + lineHeight * 3);
 
-  // Guest Name
+  // Middle Column
   doc.setFont('helvetica', 'bold');
-  doc.text('Guest Name:', margin + 8, yPos);
+  doc.text('NUMBER OF PASSANGER:', middleColX, yPos);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.guestName || 'N/A', margin + 60, yPos);
-  yPos += 6;
+  // Format: ADT : 35 CHD : 0 INF : 0 = 35
+  doc.text(`ADT : ${data.paxCount} CHD : 0 INF : 0 = ${data.paxCount}`, middleColX, yPos + lineHeight);
 
-  // Number of Passengers
+  // Right Column
   doc.setFont('helvetica', 'bold');
-  doc.text('Number of Passengers:', margin + 8, yPos);
+  doc.text('RESERVATION DATE:', rightColX, yPos);
   doc.setFont('helvetica', 'normal');
-  doc.text(`PAX: ${data.paxCount}`, margin + 60, yPos);
-  yPos += 6;
-
-  // Guest Mobile
+  doc.text(formatDate(data.reservationDate), rightColX, yPos + lineHeight);
+  
   doc.setFont('helvetica', 'bold');
-  doc.text('Guest Mobile:', margin + 8, yPos);
+  doc.text('GUEST MOBILE:', rightColX, yPos + lineHeight * 2);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.guestMobile || 'N/A', margin + 60, yPos);
-  yPos += 6;
-
-  // Group Code
+  doc.text(data.guestMobile || 'N/A', rightColX, yPos + lineHeight * 3);
+  
   doc.setFont('helvetica', 'bold');
-  doc.text('Group Code:', margin + 8, yPos);
+  doc.text('GROUP CODE:', rightColX, yPos + lineHeight * 4);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.groupCode || 'N/A', margin + 60, yPos);
+  doc.text(data.groupCode || 'N/A', rightColX, yPos + lineHeight * 5);
 
-  yPos = 105;
+  yPos = 115;
 
   // ========== HOTEL SCHEDULES TABLE ==========
   if (data.hotelSchedules && data.hotelSchedules.length > 0) {
@@ -275,14 +291,15 @@ export function generateVoucherPDF(data: VoucherPdfData): void {
     doc.text('MOVEMENT DETAILS', margin, yPos);
     yPos += 3;
 
-    // Prepare movement data for autotable
+    // Prepare movement data for autotable - Match screenshot format
+    // Format: "City, Specific Location" (e.g., "Jeddah, Jeddah Airport" or "Makkah, ROYAL BAKKAH")
     const movementRows = data.movementDetails.map((movement) => [
       movement.sr.toString(),
       movement.route || 'Auto',
       formatDate(movement.date),
       formatTime(movement.time),
-      movement.fromLocation || 'N/A',
-      movement.toLocation || 'N/A',
+      `${movement.from || ''}${movement.fromLocation ? `, ${movement.fromLocation}` : ''}`.trim() || 'N/A',
+      `${movement.to || ''}${movement.toLocation ? `, ${movement.toLocation}` : ''}`.trim() || 'N/A',
     ]);
 
     autoTable(doc, {
