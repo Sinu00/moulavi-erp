@@ -15,11 +15,16 @@
     "start:backend": "cd backend && npm start",
     "start:frontend": "cd frontend && npm start"
   },
-  "keywords": ["erp", "umrah", "visa", "booking"],
+  "keywords": [
+    "erp",
+    "umrah",
+    "visa",
+    "booking"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "shadcn": "^3.5.0"
   }
 }
-

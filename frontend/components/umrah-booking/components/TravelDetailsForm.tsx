@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Calendar } from 'lucide-react';
 import { Step2Data, Airport } from '@/lib/umrah/types';
 import { formatFlightNumber } from '@/lib/umrah/validation';
+import { TimePicker } from '@/components/ui/time-picker';
 
 interface TravelDetailsFormProps {
   data: Step2Data;
@@ -119,10 +120,9 @@ export const TravelDetailsForm: React.FC<TravelDetailsFormProps> = ({
                   />
                 </td>
                 <td className="border border-gray-200 p-3">
-                  <Input
-                    type="time"
-                    value={data.arrivalTime}
-                    onChange={(e) => onChange({ arrivalTime: e.target.value })}
+                  <TimePicker
+                    value={data.arrivalTime || '00:00'}
+                    onChange={(value) => onChange({ arrivalTime: value })}
                     disabled={disabled}
                     className="w-full"
                   />
@@ -178,10 +178,9 @@ export const TravelDetailsForm: React.FC<TravelDetailsFormProps> = ({
                   />
                 </td>
                 <td className="border border-gray-200 p-3">
-                  <Input
-                    type="time"
-                    value={data.departureTime}
-                    onChange={(e) => onChange({ departureTime: e.target.value })}
+                  <TimePicker
+                    value={data.departureTime || '00:00'}
+                    onChange={(value) => onChange({ departureTime: value })}
                     disabled={disabled}
                     className="w-full"
                   />
@@ -214,11 +213,10 @@ export const TravelDetailsForm: React.FC<TravelDetailsFormProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label>Time *</Label>
-                <Input
-                  type="time"
-                  value={data.arrivalTime}
-                  onChange={(e) => onChange({ arrivalTime: e.target.value })}
+                <Label>Time * (24-hour format)</Label>
+                <TimePicker
+                  value={data.arrivalTime || '00:00'}
+                  onChange={(value) => onChange({ arrivalTime: value })}
                   disabled={disabled}
                 />
               </div>
@@ -281,11 +279,10 @@ export const TravelDetailsForm: React.FC<TravelDetailsFormProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label>Time *</Label>
-                <Input
-                  type="time"
-                  value={data.departureTime}
-                  onChange={(e) => onChange({ departureTime: e.target.value })}
+                <Label>Time * (24-hour format)</Label>
+                <TimePicker
+                  value={data.departureTime || '00:00'}
+                  onChange={(value) => onChange({ departureTime: value })}
                   disabled={disabled}
                 />
               </div>

@@ -720,23 +720,54 @@ router.patch('/:bookingId/travel-details', authenticate, async (req, res) => {
       departureFlightNumber,
     } = req.body || {};
 
+    // Convert time strings (HH:mm) to Date objects if they are strings
+    let arrivalTimeDate: Date | undefined = undefined;
+    if (arrivalTime) {
+      if (typeof arrivalTime === 'string' && arrivalTime.includes(':')) {
+        // Time is in HH:mm format, combine with today's date
+        const today = new Date();
+        const [hours, minutes] = arrivalTime.split(':');
+        today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        arrivalTimeDate = today;
+      } else if (arrivalTime instanceof Date) {
+        arrivalTimeDate = arrivalTime;
+      } else {
+        arrivalTimeDate = new Date(arrivalTime);
+      }
+    }
+
+    let departureTimeDate: Date | undefined = undefined;
+    if (departureTime) {
+      if (typeof departureTime === 'string' && departureTime.includes(':')) {
+        // Time is in HH:mm format, combine with today's date
+        const today = new Date();
+        const [hours, minutes] = departureTime.split(':');
+        today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        departureTimeDate = today;
+      } else if (departureTime instanceof Date) {
+        departureTimeDate = departureTime;
+      } else {
+        departureTimeDate = new Date(departureTime);
+      }
+    }
+
     const travel = await prisma.umrahTravelDetails.upsert({
       where: { bookingId },
       update: {
-        arrivalDate: arrivalDate ?? undefined,
-        arrivalTime: arrivalTime ?? undefined,
+        arrivalDate: arrivalDate ? new Date(arrivalDate) : undefined,
+        arrivalTime: arrivalTimeDate,
         arrivalFlightNumber: arrivalFlightNumber ?? undefined,
-        departureDate: departureDate ?? undefined,
-        departureTime: departureTime ?? undefined,
+        departureDate: departureDate ? new Date(departureDate) : undefined,
+        departureTime: departureTimeDate,
         departureFlightNumber: departureFlightNumber ?? undefined,
       },
       create: {
         bookingId,
-        arrivalDate: arrivalDate ?? new Date(),
-        arrivalTime: arrivalTime ?? new Date(),
+        arrivalDate: arrivalDate ? new Date(arrivalDate) : new Date(),
+        arrivalTime: arrivalTimeDate ?? new Date(),
         arrivalFlightNumber: arrivalFlightNumber ?? '',
-        departureDate: departureDate ?? new Date(),
-        departureTime: departureTime ?? new Date(),
+        departureDate: departureDate ? new Date(departureDate) : new Date(),
+        departureTime: departureTimeDate ?? new Date(),
         departureFlightNumber: departureFlightNumber ?? '',
         arrivalAirportId: req.body?.arrivalAirportId ?? undefined,
         departureAirportId: req.body?.departureAirportId ?? undefined,
