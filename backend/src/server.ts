@@ -11,6 +11,9 @@ import serviceRoutes from './routes/service.routes';
 import uploadRoutes from './routes/upload.routes';
 import userMasterRoutes from './routes/userMaster.routes';
 import umrahVisaRoutes from './routes/umrahVisa.routes';
+import umrahVisaIndividualRoutes from './routes/umrahVisaIndividual.routes';
+import umrahVisaGroupRoutes from './routes/umrahVisaGroup.routes';
+import umrahVisaWorkflowRoutes from './routes/umrahVisaWorkflow.routes';
 import auditRoutes from './routes/audit.routes';
 import transportPricingRoutes from './routes/transportPricing.routes';
 import transportMasterRoutes from './routes/transportMaster.routes';
@@ -58,6 +61,11 @@ app.use('/api', partyContactRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userMasterRoutes);
+// Register workflow routes first (more specific routes like /:bookingId/voucher-data)
+// Then individual and group routes, then shared routes (less specific like /:bookingId)
+app.use('/api/umrah-visa', umrahVisaWorkflowRoutes);
+app.use('/api/umrah-visa', umrahVisaIndividualRoutes);
+app.use('/api/umrah-visa', umrahVisaGroupRoutes);
 app.use('/api/umrah-visa', umrahVisaRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/transport-pricing', transportPricingRoutes);
