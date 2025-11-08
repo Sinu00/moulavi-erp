@@ -38,23 +38,28 @@ export const StepProgress: React.FC<StepProgressProps> = ({
           const isCurrent = currentStep === step.id;
           const isAccessible = step.id <= currentStep || completedSteps.includes(step.id);
           
+          // Progress line should be red if:
+          // 1. This step is completed (we've passed it), OR
+          // 2. This step is the current step (showing progress toward next step)
+          const shouldShowRedLine = isCompleted || isCurrent;
+          
           return (
             <div key={step.id} className="flex flex-col items-center relative">
               {/* Progress Line */}
               {index < steps.length - 1 && (
-                <div className={`absolute top-6 left-1/2 w-full h-0.5 ${
-                  completedSteps.includes(step.id) ? 'bg-red-400' : 'bg-gray-200'
-                }`} style={{ transform: 'translateX(50%)' }} />
+                <div className={`absolute top-6 left-1/2 w-1/2 h-0.5 z-0 ${
+                  shouldShowRedLine ? 'bg-red-400' : 'bg-gray-200'
+                }`} />
               )}
               
               <button
                 onClick={() => onStepClick(step.id)}
                 disabled={!isAccessible}
-                className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all shadow-sm relative z-0 ${
+                className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all shadow-sm relative z-10 ${
                   isCompleted
                     ? 'bg-red-400 border-red-400 text-white'
                     : isCurrent
-                    ? 'bg-red-500 border-red-500 text-white'
+                    ? 'bg-red-500 border-red-500 text-white ring-2 ring-red-200 ring-offset-2'
                     : isAccessible
                     ? 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
                     : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
@@ -69,11 +74,13 @@ export const StepProgress: React.FC<StepProgressProps> = ({
               
               <div className="mt-4 text-center px-2">
                 <p className={`text-sm font-medium mb-1 ${
-                  isCurrent ? 'text-red-600' : isCompleted ? 'text-red-600' : 'text-gray-500'
+                  isCurrent ? 'text-red-600 font-semibold' : isCompleted ? 'text-red-600' : 'text-gray-500'
                 }`}>
                   {step.title}
                 </p>
-                <p className="text-xs text-gray-400 leading-relaxed">
+                <p className={`text-xs leading-relaxed ${
+                  isCurrent ? 'text-gray-600' : 'text-gray-400'
+                }`}>
                   {step.description}
                 </p>
               </div>

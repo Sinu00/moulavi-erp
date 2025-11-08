@@ -39,10 +39,9 @@ export default function ViewPartyDialog({
           </SheetTitle>
         </SheetHeader>
         
-        <div className="flex-1 overflow-y-auto py-4 px-1">
-          <div className="space-y-6 pr-2">
-            {/* Basic Information */}
-            <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto py-4 px-1 space-y-6 pr-2">
+          {/* Basic Information */}
+          <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
                 Basic Information
               </h3>
@@ -282,7 +281,6 @@ export default function ViewPartyDialog({
                 </div>
               </div>
             </div>
-          </div>
         </div>
 
         <SheetFooter className="flex-shrink-0 flex justify-end space-x-2 pt-4 border-t">
