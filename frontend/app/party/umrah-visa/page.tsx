@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { PartyLayout } from '@/components/layouts/PartyLayout';
 import { ArrowLeft, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -168,80 +167,78 @@ export default function UmrahVisaNewPage() {
       title="Umrah Visa Application" 
       subtitle="Complete the steps below to apply for your Umrah visa"
     >
-      <div className="p-6">
-        <div className="max-w-4xl mx-auto">
-          <Card className="shadow-sm border border-gray-100">
-            <CardContent className="p-6">
-              {/* Step Progress */}
-              <StepProgress
-                currentStep={bookingState.currentStep}
-                completedSteps={bookingState.completedSteps}
-                onStepClick={goToStep}
-              />
+      <div className="p-6 pb-24">
+        <div className="w-full">
+          {/* Step Progress */}
+          <StepProgress
+            currentStep={bookingState.currentStep}
+            completedSteps={bookingState.completedSteps}
+            onStepClick={goToStep}
+          />
 
-              {/* Step Content */}
-              <div className="mb-8">
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
-                      <ArrowLeft className="h-5 w-5 text-red-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Step {bookingState.currentStep}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {bookingState.currentStep === 1 && 'Choose your booking type'}
-                        {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
-                        {bookingState.currentStep === 3 && 'Select accommodation type and details'}
-                        {bookingState.currentStep === 4 && 'Upload required documents'}
-                      </p>
-                    </div>
-                  </div>
-                  {renderStepContent()}
+          {/* Step Content */}
+          <div className="mb-8 mt-6">
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <div className="flex items-center space-x-3 mb-6">
+                <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
+                  <ArrowLeft className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Step {bookingState.currentStep}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {bookingState.currentStep === 1 && 'Choose your booking type'}
+                    {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
+                    {bookingState.currentStep === 3 && 'Select accommodation type and details'}
+                    {bookingState.currentStep === 4 && 'Upload required documents'}
+                  </p>
                 </div>
               </div>
+              {renderStepContent()}
+            </div>
+          </div>
+        </div>
+      </div>
 
-              {/* Navigation Buttons */}
-              <div className="flex justify-between pt-6 border-t border-gray-200">
-                <div className="flex space-x-3">
-                  {bookingState.currentStep > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={prevStep}
-                      disabled={isLoading}
-                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-2" />
-                      Previous
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => router.push('/party/dashboard')}
-                    disabled={isLoading}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </Button>
-                </div>
+      {/* Fixed Navigation Buttons Footer */}
+      <div className="fixed bottom-0 left-64 right-0 bg-white border-t border-gray-200 px-6 py-4 shadow-lg z-10">
+        <div className="flex justify-between">
+          <div className="flex space-x-3">
+            {bookingState.currentStep > 1 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={prevStep}
+                disabled={isLoading}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Previous
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push('/party/dashboard')}
+              disabled={isLoading}
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </Button>
+          </div>
 
-                <div className="flex space-x-3">
-                  <Button
-                    type="button"
-                    onClick={nextStep}
-                    disabled={isLoading}
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    {isLoading ? 'Processing...' : bookingState.currentStep < 4 ? 'Next' : 'Submit Application'}
-                    {bookingState.currentStep < 4 && <ChevronRight className="h-4 w-4 ml-2" />}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex space-x-3">
+            <Button
+              type="button"
+              onClick={nextStep}
+              disabled={isLoading}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isLoading ? 'Processing...' : bookingState.currentStep < 4 ? 'Next' : 'Submit Application'}
+              {bookingState.currentStep < 4 && <ChevronRight className="h-4 w-4 ml-2" />}
+            </Button>
+          </div>
         </div>
       </div>
     </PartyLayout>
