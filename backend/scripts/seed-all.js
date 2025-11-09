@@ -260,6 +260,93 @@ async function seedAll() {
     }
     console.log(`✅ Created ${hotelCount} hotel locations\n`);
 
+    // 5.5. Seed Location Master - Ziyarat Locations
+    console.log('5.5️⃣ Seeding Location Master - Ziyarat Locations...');
+    
+    const ziyaratLocations = [
+      { code: 'MAK_ZIY', name: 'Makkah Ziyarah', city: 'Makkah' },
+      { code: 'MAD_ZIY', name: 'Madinah Ziyarath', city: 'Madinah' }
+    ];
+
+    let ziyaratCount = 0;
+    for (const ziyarat of ziyaratLocations) {
+      const city = cityMap[ziyarat.city];
+      if (!city) {
+        console.warn(`   ⚠️  City ${ziyarat.city} not found, skipping ziyarat ${ziyarat.code}`);
+        continue;
+      }
+
+      await prisma.locationMaster.upsert({
+        where: { 
+          code_locationType: { 
+            code: ziyarat.code, 
+            locationType: 'ZIYARAT' 
+          } 
+        },
+        update: { 
+          name: ziyarat.name, 
+          city: ziyarat.city,
+          cityId: city.id,
+          countryId: saudiArabia.id 
+        },
+        create: { 
+          code: ziyarat.code, 
+          name: ziyarat.name, 
+          city: ziyarat.city,
+          cityId: city.id,
+          locationType: 'ZIYARAT',
+          countryId: saudiArabia.id,
+          isActive: true
+        }
+      });
+      ziyaratCount++;
+    }
+    console.log(`✅ Created ${ziyaratCount} ziyarat locations\n`);
+
+    // 5.6. Seed Location Master - City Centers
+    console.log('5.6️⃣ Seeding Location Master - City Centers...');
+    
+    const cityCenters = [
+      { code: 'JEDCC', name: 'Jeddah City Center', city: 'Jeddah' },
+      { code: 'MEDCC', name: 'Madinah City Center', city: 'Madinah' },
+      { code: 'MAKCC', name: 'Makkah City Center', city: 'Makkah' }
+    ];
+
+    let cityCenterCount = 0;
+    for (const center of cityCenters) {
+      const city = cityMap[center.city];
+      if (!city) {
+        console.warn(`   ⚠️  City ${center.city} not found, skipping city center ${center.code}`);
+        continue;
+      }
+
+      await prisma.locationMaster.upsert({
+        where: { 
+          code_locationType: { 
+            code: center.code, 
+            locationType: 'OTHERS' 
+          } 
+        },
+        update: { 
+          name: center.name, 
+          city: center.city,
+          cityId: city.id,
+          countryId: saudiArabia.id 
+        },
+        create: { 
+          code: center.code, 
+          name: center.name, 
+          city: center.city,
+          cityId: city.id,
+          locationType: 'OTHERS',
+          countryId: saudiArabia.id,
+          isActive: true
+        }
+      });
+      cityCenterCount++;
+    }
+    console.log(`✅ Created ${cityCenterCount} city center locations\n`);
+
     // 6. Seed Vehicle Type Master
     console.log('6️⃣ Seeding Vehicle Type Master...');
     
@@ -269,6 +356,7 @@ async function seedAll() {
       { vehicleName: 'Staria', paxCount: 8 },
       { vehicleName: 'Hiace', paxCount: 9 },
       { vehicleName: 'Coaster Bus', paxCount: 25 },
+      { vehicleName: 'Coach Bus Vip', paxCount: 30 },
       { vehicleName: 'Large Bus', paxCount: 45 }
     ];
 
@@ -297,65 +385,118 @@ async function seedAll() {
     await prisma.transportMaster.deleteMany({});
     console.log('   Cleared existing transport masters...');
 
-    // Get location IDs for cities (using airports as reference points for routes)
-    const makkahCity = cityMap['Makkah'];
-    const madinahCity = cityMap['Madinah'];
-    const jeddahCity = cityMap['Jeddah'];
-    
-    // Find locations for these cities (prefer airports for transport routes)
-    const makkahLoc = await prisma.locationMaster.findFirst({ 
-      where: { cityId: makkahCity.id, locationType: { in: ['AIRPORT', 'OTHERS'] } } 
+    // Get location IDs for city centers and airport
+    const jeddahCityCenter = await prisma.locationMaster.findUnique({
+      where: { code_locationType: { code: 'JEDCC', locationType: 'OTHERS' } }
     });
-    const madinahLoc = await prisma.locationMaster.findFirst({ 
-      where: { cityId: madinahCity.id, locationType: { in: ['AIRPORT', 'OTHERS'] } } 
+    const makkahCityCenter = await prisma.locationMaster.findUnique({
+      where: { code_locationType: { code: 'MAKCC', locationType: 'OTHERS' } }
     });
-    const jeddahLoc = await prisma.locationMaster.findFirst({ 
-      where: { cityId: jeddahCity.id, locationType: { in: ['AIRPORT', 'OTHERS'] } } 
+    const madinahCityCenter = await prisma.locationMaster.findUnique({
+      where: { code_locationType: { code: 'MEDCC', locationType: 'OTHERS' } }
+    });
+    const jeddahAirport = await prisma.locationMaster.findUnique({
+      where: { code_locationType: { code: 'JED', locationType: 'AIRPORT' } }
     });
 
-    // If no OTHERS locations, use airports
-    const makkahRef = makkahLoc || await prisma.locationMaster.findFirst({ 
-      where: { cityId: makkahCity.id, locationType: 'AIRPORT' } 
-    });
-    const madinahRef = madinahLoc || await prisma.locationMaster.findFirst({ 
-      where: { cityId: madinahCity.id, locationType: 'AIRPORT' } 
-    });
-    const jeddahRef = jeddahLoc || await prisma.locationMaster.findFirst({ 
-      where: { cityId: jeddahCity.id, locationType: 'AIRPORT' } 
-    });
-
-    if (!makkahRef || !madinahRef || !jeddahRef) {
+    if (!jeddahCityCenter || !makkahCityCenter || !madinahCityCenter || !jeddahAirport) {
       console.warn('   ⚠️  Some reference locations not found, skipping transport routes');
     } else {
-      const routes = [
-        { from: jeddahRef.id, to: makkahRef.id, basePrice: 559 },
-        { from: jeddahRef.id, to: madinahRef.id, basePrice: 700 },
-        { from: makkahRef.id, to: madinahRef.id, basePrice: 500 },
-        { from: madinahRef.id, to: makkahRef.id, basePrice: 500 },
-        { from: makkahRef.id, to: jeddahRef.id, basePrice: 559 },
-        { from: madinahRef.id, to: jeddahRef.id, basePrice: 700 }
+      // Seed actual transport routes from database
+      const coasterBus = vehicleTypeMap['Coaster Bus'];
+      if (!coasterBus) {
+        console.warn('   ⚠️  Coaster Bus vehicle type not found');
+      } else {
+        const transportRoutes = [
+          { from: jeddahCityCenter.id, to: madinahCityCenter.id, price: 44400 },
+          { from: jeddahCityCenter.id, to: makkahCityCenter.id, price: 32400 },
+          { from: jeddahAirport.id, to: jeddahCityCenter.id, price: 25200 },
+          { from: madinahCityCenter.id, to: jeddahCityCenter.id, price: 44400 },
+          { from: madinahCityCenter.id, to: makkahCityCenter.id, price: 44000 },
+          { from: makkahCityCenter.id, to: madinahCityCenter.id, price: 44400 }
+        ];
+
+        const transportData = transportRoutes.map(route => ({
+          fromLocationId: route.from,
+          toLocationId: route.to,
+          vehicleTypeId: coasterBus.id,
+          price: route.price,
+          isActive: true
+        }));
+
+        await prisma.transportMaster.createMany({ data: transportData });
+        console.log(`✅ Created ${transportData.length} transport routes\n`);
+      }
+    }
+
+    // 8. Seed Full Trip Master
+    console.log('8️⃣ Seeding Full Trip Master...');
+    
+    // Delete related records first
+    await prisma.fullTripMasterToCity.deleteMany({});
+    console.log('   Cleared full trip master to cities...');
+    
+    await prisma.fullTripMaster.deleteMany({});
+    console.log('   Cleared existing full trip masters...');
+
+    const jeddahCity = cityMap['Jeddah'];
+    const makkahCity = cityMap['Makkah'];
+    const madinahCity = cityMap['Madinah'];
+    const coachBusVip = vehicleTypeMap['Coach Bus Vip'];
+
+    if (!jeddahCity || !makkahCity || !madinahCity || !coachBusVip) {
+      console.warn('   ⚠️  Required cities or vehicle type not found, skipping full trip masters');
+    } else {
+      // Seed actual full trip masters from database
+      const fullTripMasters = [
+        {
+          fromCityId: jeddahCity.id,
+          vehicleTypeId: coachBusVip.id,
+          price: 97200,
+          toCities: [
+            { cityId: makkahCity.id, sequenceOrder: 1 },
+            { cityId: madinahCity.id, sequenceOrder: 2 },
+            { cityId: madinahCity.id, sequenceOrder: 3 }
+          ]
+        },
+        {
+          fromCityId: jeddahCity.id,
+          vehicleTypeId: coachBusVip.id,
+          price: 109200,
+          toCities: [
+            { cityId: madinahCity.id, sequenceOrder: 1 },
+            { cityId: makkahCity.id, sequenceOrder: 2 },
+            { cityId: jeddahCity.id, sequenceOrder: 3 }
+          ]
+        },
+        {
+          fromCityId: jeddahCity.id,
+          vehicleTypeId: coachBusVip.id,
+          price: 109200,
+          toCities: [
+            { cityId: makkahCity.id, sequenceOrder: 1 },
+            { cityId: madinahCity.id, sequenceOrder: 2 },
+            { cityId: jeddahCity.id, sequenceOrder: 3 }
+          ]
+        }
       ];
 
-      const transportData = [];
-      routes.forEach(route => {
-        vehicleTypes.forEach(vehicle => {
-          const vehicleType = vehicleTypeMap[vehicle.vehicleName];
-          if (!vehicleType) return;
-
-          const priceMultiplier = vehicle.paxCount <= 3 ? 1 : vehicle.paxCount <= 5 ? 1.3 : vehicle.paxCount <= 8 ? 1.5 : 1.8;
-          const price = Math.round(route.basePrice * priceMultiplier);
-
-          transportData.push({
-            fromLocationId: route.from,
-            toLocationId: route.to,
-            vehicleTypeId: vehicleType.id,
-            price: price
-          });
+      let fullTripCount = 0;
+      for (const trip of fullTripMasters) {
+        const createdTrip = await prisma.fullTripMaster.create({
+          data: {
+            fromCityId: trip.fromCityId,
+            vehicleTypeId: trip.vehicleTypeId,
+            price: trip.price,
+            isActive: true,
+            toCities: {
+              create: trip.toCities
+            }
+          }
         });
-      });
-
-      await prisma.transportMaster.createMany({ data: transportData });
-      console.log(`✅ Created ${transportData.length} transport options\n`);
+        fullTripCount++;
+      }
+      console.log(`✅ Created ${fullTripCount} full trip masters\n`);
     }
 
     console.log('🎉 All master data seeded successfully!\n');
@@ -365,11 +506,15 @@ async function seedAll() {
     console.log(`   - ${cities.length} Cities`);
     console.log(`   - ${airportCount} Airport Locations`);
     console.log(`   - ${hotelCount} Hotel Locations`);
+    console.log(`   - ${ziyaratCount} Ziyarat Locations`);
+    console.log(`   - ${cityCenterCount} City Center Locations`);
     console.log(`   - ${vehicleTypes.length} Vehicle Types`);
     
-    // Count transport options
+    // Count transport options and full trip masters
     const transportCount = await prisma.transportMaster.count();
+    const fullTripCount = await prisma.fullTripMaster.count();
     console.log(`   - ${transportCount} Transport Options`);
+    console.log(`   - ${fullTripCount} Full Trip Masters`);
 
   } catch (error) {
     console.error('❌ Error seeding data:', error);

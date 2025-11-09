@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { getUser, hasRole } from '@/lib/auth';
-import { partyAPI, serviceAPI } from '@/lib/api';
+import { partyAPI, umrahVisaAPI } from '@/lib/api';
 import Sidebar from '@/components/Sidebar';
 import NotificationDropdown from '@/components/NotificationDropdown';
 import { Users, FileText, TrendingUp, Activity, Menu } from 'lucide-react';
@@ -23,8 +23,8 @@ export default function DashboardPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     totalParties: 0,
-    totalServices: 0,
-    pendingServices: 0,
+    totalServices: 0, // Keep for backward compatibility, but will be totalBookings
+    pendingServices: 0, // Keep for backward compatibility, but will be pendingBookings
   });
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -39,16 +39,19 @@ export default function DashboardPage() {
 
   const loadStats = async () => {
     try {
-      const [partiesRes, servicesRes, pendingRes] = await Promise.all([
+      const [partiesRes, bookingsRes, pendingBookingsRes] = await Promise.all([
         partyAPI.getAll({ limit: 1 }),
-        serviceAPI.getAll({ limit: 1 }),
-        serviceAPI.getAll({ status: 'pending', limit: 1 }),
+        umrahVisaAPI.getBookings({ limit: 1 }),
+        umrahVisaAPI.getBookings({ 
+          status: ['pending', 'documents_downloaded', 'group_assigned'],
+          limit: 1 
+        }),
       ]);
 
       setStats({
         totalParties: partiesRes.data.pagination.total,
-        totalServices: servicesRes.data.pagination.total,
-        pendingServices: pendingRes.data.pagination.total,
+        totalServices: bookingsRes.data.pagination.total, // Total bookings
+        pendingServices: pendingBookingsRes.data.pagination.total, // Pending bookings
       });
     } catch (error) {
       // Error handling is done by the API interceptor
@@ -151,7 +154,7 @@ export default function DashboardPage() {
 
             <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Total Services</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-600">Total Bookings</CardTitle>
                 <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
                   <FileText className="h-5 w-5 text-green-600" />
                 </div>
@@ -160,14 +163,14 @@ export default function DashboardPage() {
                 <div className="text-3xl font-bold text-gray-900">{stats.totalServices}</div>
                 <p className="text-xs text-gray-500 mt-1 flex items-center">
                   <Activity className="h-3 w-3 mr-1 text-green-500" />
-                  All service requests
+                  All bookings
                 </p>
               </CardContent>
             </Card>
 
             <Card className="border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Pending Services</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-600">Pending Bookings</CardTitle>
                 <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
                   <Activity className="h-5 w-5 text-yellow-600" />
                 </div>

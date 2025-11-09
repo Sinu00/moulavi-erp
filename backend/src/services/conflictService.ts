@@ -46,7 +46,7 @@ export class ConflictService {
     // Check for date overlaps
     if (bookingData.travelDetails?.arrivalDate && bookingData.travelDetails?.departureDate) {
       const dateConflict = await this.checkDateOverlap(
-        bookingData.serviceId,
+        bookingData.partyId,
         bookingData.travelDetails.arrivalDate,
         bookingData.travelDetails.departureDate
       );
@@ -147,25 +147,13 @@ export class ConflictService {
    * Check for overlapping date ranges
    */
   static async checkDateOverlap(
-    serviceId: string,
+    partyId: string,
     arrivalDate: string,
     departureDate: string
   ): Promise<ConflictDetail | null> {
-    // Get the service to find the party
-    const service = await prisma.service.findUnique({
-      where: { id: serviceId },
-      select: { partyId: true }
-    });
-
-    if (!service) {
-      return null;
-    }
-
     const overlappingBookings = await prisma.umrahVisaBooking.findMany({
       where: {
-        service: {
-          partyId: service.partyId
-        },
+        partyId: partyId,
         isDeleted: false,
         status: {
           not: 'cancelled'
@@ -248,14 +236,10 @@ export class ConflictService {
           // Check if it's the same party booking
           const existingBooking = await prisma.umrahVisaBooking.findUnique({
             where: { id: conflict.conflictingData?.id },
-            include: {
-              service: {
-                select: { partyId: true }
-              }
-            }
+            select: { partyId: true }
           });
 
-          if (existingBooking?.service.partyId === bookingData.serviceId) {
+          if (existingBooking?.partyId === bookingData.partyId) {
             resolved.push({
               ...conflict,
               message: 'Same party booking - conflict resolved',

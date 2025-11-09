@@ -82,7 +82,6 @@ export default function TripInfoPage() {
           booking: {
             id: booking.id,
             passengerCount: booking.passengerCount,
-            service: booking.service,
           },
         }));
 

@@ -19,14 +19,14 @@ const storage = isS3Configured()
       s3: s3Client!,
       bucket: S3_CONFIG.BUCKET_NAME,
       key: (req: any, file: Express.Multer.File, cb: any) => {
-        const { serviceId } = req.params;
+        const { bookingId } = req.params;
         const { passenger_id, document_type } = req.body;
         
         // Generate unique filename
         const uniqueFileName = generateUniqueFileName(file.originalname, file.mimetype);
         
         // Generate S3 key
-        const key = generateS3Key(serviceId, passenger_id || null, document_type || 'general', uniqueFileName);
+        const key = generateS3Key(bookingId, passenger_id || null, document_type || 'general', uniqueFileName);
         cb(null, key);
       },
       metadata: (req: any, file: Express.Multer.File, cb: any) => {
@@ -76,27 +76,27 @@ const upload = multer({
   },
 });
 
-// Upload document for a service
+// Upload document for a booking
 router.post(
-  '/service/:serviceId',
+  '/booking/:bookingId',
   authenticate,
   upload.single('document'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { serviceId } = req.params;
+    const { bookingId } = req.params;
     const { document_type, passenger_id } = req.body;
     
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    // Verify service exists and user has access
-    const service = await prisma.service.findUnique({
-      where: { id: serviceId },
+    // Verify booking exists and user has access
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
       select: { partyId: true }
     });
     
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found' });
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
     }
     
     // Check authorization for party role
@@ -106,31 +106,29 @@ router.post(
         select: { id: true }
       });
       
-      if (!userParty || userParty.id !== service.partyId) {
+      if (!userParty || userParty.id !== booking.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
     
-    // If passenger_id is provided, verify it belongs to the service
+    // If passenger_id is provided, verify it belongs to the booking
     if (passenger_id) {
       const passenger = await prisma.umrahPassenger.findFirst({
         where: {
           id: passenger_id,
-          booking: {
-            serviceId: serviceId
-          }
+          bookingId: bookingId
         }
       });
       
       if (!passenger) {
-        return res.status(404).json({ error: 'Passenger not found for this service' });
+        return res.status(404).json({ error: 'Passenger not found for this booking' });
       }
     }
     
     // Save document record
     const document = await prisma.document.create({
       data: {
-        serviceId,
+        bookingId,
         passengerId: passenger_id || null,
         documentType: document_type || 'general',
         fileName: req.file.originalname,
@@ -178,10 +176,9 @@ router.post(
     // Verify booking exists and user has access
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
-      include: {
-        service: {
-          select: { partyId: true }
-        },
+      select: {
+        id: true,
+        partyId: true,
         passengers: {
           where: { id: passengerId }
         }
@@ -203,7 +200,7 @@ router.post(
         select: { id: true }
       });
       
-      if (!userParty || userParty.id !== booking.service.partyId) {
+      if (!userParty || userParty.id !== booking.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -221,7 +218,7 @@ router.post(
       files.map((file, index) => 
         prisma.document.create({
           data: {
-            serviceId: booking.serviceId,
+            bookingId: bookingId,
             passengerId: passengerId,
             documentType: documentTypes[index] || 'general',
             fileName: file.originalname,
@@ -266,7 +263,7 @@ router.get(
     const document = await prisma.document.findUnique({
       where: { id: documentId },
       include: {
-        service: {
+        booking: {
           select: { partyId: true }
         }
       }
@@ -283,7 +280,7 @@ router.get(
         select: { id: true }
       });
       
-      if (!userParty || userParty.id !== document.service.partyId) {
+      if (!userParty || userParty.id !== document.booking.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -324,7 +321,7 @@ router.delete(
     const document = await prisma.document.findUnique({
       where: { id: documentId },
       include: {
-        service: {
+        booking: {
           select: { partyId: true }
         }
       }
@@ -341,7 +338,7 @@ router.delete(
         select: { id: true }
       });
       
-      if (!userParty || userParty.id !== document.service.partyId) {
+      if (!userParty || userParty.id !== document.booking.partyId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }

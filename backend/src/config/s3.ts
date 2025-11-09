@@ -41,7 +41,7 @@ export const S3_CONFIG = {
 
 // Generate S3 key for document
 export function generateS3Key(
-  serviceId: string, 
+  bookingId: string, 
   passengerId: string | null, 
   documentType: string, 
   fileName: string
@@ -50,10 +50,10 @@ export function generateS3Key(
   const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
   
   if (passengerId) {
-    return `services/${serviceId}/passengers/${passengerId}/${documentType}/${timestamp}_${sanitizedFileName}`;
+    return `bookings/${bookingId}/passengers/${passengerId}/${documentType}/${timestamp}_${sanitizedFileName}`;
   }
   
-  return `services/${serviceId}/${documentType}/${timestamp}_${sanitizedFileName}`;
+  return `bookings/${bookingId}/${documentType}/${timestamp}_${sanitizedFileName}`;
 }
 
 // Generate presigned URL for upload

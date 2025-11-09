@@ -18,13 +18,9 @@ export async function ensureTripInfoExists(bookingId: string, userId: string) {
   const booking = await prisma.umrahVisaBooking.findUnique({
     where: { id: bookingId },
     include: {
-      service: {
-        include: {
-          party: {
-            select: {
-              partyName: true,
-            },
-          },
+      party: {
+        select: {
+          partyName: true,
         },
       },
       travelDetails: true,
@@ -46,7 +42,7 @@ export async function ensureTripInfoExists(bookingId: string, userId: string) {
       bookingId,
       groupNumber: booking.groupNumber,
       groupName: booking.groupName,
-      partyName: booking.service.party.partyName,
+      partyName: booking.party.partyName,
       arrivalDate: booking.travelDetails.arrivalDate,
       departureDate: booking.travelDetails.departureDate,
       iqamaNumber: booking.accommodationDetails?.iqamaNumber,
@@ -91,13 +87,9 @@ export async function syncBookingAndTripInfoStatusInTx(
     const booking = await tx.umrahVisaBooking.findUnique({
       where: { id: bookingId },
       include: {
-        service: {
-          include: {
-            party: {
-              select: {
-                partyName: true,
-              },
-            },
+        party: {
+          select: {
+            partyName: true,
           },
         },
         travelDetails: true,
@@ -114,7 +106,7 @@ export async function syncBookingAndTripInfoStatusInTx(
         bookingId,
         groupNumber: booking.groupNumber,
         groupName: booking.groupName,
-        partyName: booking.service.party.partyName,
+        partyName: booking.party.partyName,
         arrivalDate: booking.travelDetails.arrivalDate,
         departureDate: booking.travelDetails.departureDate,
         iqamaNumber: booking.accommodationDetails?.iqamaNumber,

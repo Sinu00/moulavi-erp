@@ -111,7 +111,7 @@ export default function AddGroupNumberDialog({
                   <span className="font-medium">Booking ID:</span> {booking.id}
                 </p>
                 <p className="text-sm text-gray-600">
-                  <span className="font-medium">Party:</span> {booking.service?.party?.partyName || 'N/A'}
+                  <span className="font-medium">Party:</span> {booking.party?.partyName || 'N/A'}
                 </p>
                 <p className="text-sm text-gray-600">
                   <span className="font-medium">Passengers:</span> {booking.passengerCount}

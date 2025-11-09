@@ -56,10 +56,10 @@ model Party {
   accountCurrency       CurrencyMaster @relation(fields: [accountCurrencyId], references: [id])
   creator               User           @relation("CreatedBy", fields: [createdBy], references: [id])
   user                  User?          @relation("PartyUser", fields: [userId], references: [id])
-  services              Service[]
   contacts              PartyContact[]
   documents             PartyDocument[]
   umrahVisaBookings     UmrahVisaBooking[] @relation("UmrahVisaProvider")
+  bookings              UmrahVisaBooking[] @relation("BookingParty")
 
   @@index([email])
   @@index([partyName])
@@ -69,28 +69,10 @@ model Party {
   @@map("parties")
 }
 
-model Service {
-  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  serviceType      String            @map("service_type") @db.VarChar(50)
-  partyId          String            @map("party_id") @db.Uuid
-  status           ServiceStatus     @default(pending)
-  submittedAt      DateTime          @default(now()) @map("submitted_at") @db.Timestamp(6)
-  details          Json?
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  documents        Document[]
-  party            Party             @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  umrahVisaBooking UmrahVisaBooking?
-
-  @@index([partyId])
-  @@index([serviceType])
-  @@index([status])
-  @@map("services")
-}
-
 model UmrahVisaBooking {
   id                   String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  serviceId            String                     @unique @map("service_id") @db.Uuid
+  partyId              String                     @map("party_id") @db.Uuid
+  submittedAt          DateTime                   @default(now()) @map("submitted_at") @db.Timestamp(6)
   groupNumber          String?                    @map("group_number") @db.VarChar(100)
   groupName            String?                    @map("group_name") @db.VarChar(255)
   passengerCount       Int                        @map("passenger_count")
@@ -115,10 +97,11 @@ model UmrahVisaBooking {
   transportBookings    UmrahTransportBooking[]
   travelDetails        UmrahTravelDetails?
   voucher              Voucher?
-  service              Service                    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  documents            Document[]
+  party                Party                      @relation("BookingParty", fields: [partyId], references: [id], onDelete: Cascade)
   umrahVisaProvider    Party?                     @relation("UmrahVisaProvider", fields: [umrahVisaProviderId], references: [id])
 
-  @@index([serviceId])
+  @@index([partyId])
   @@index([status])
   @@index([umrahVisaProviderId])
   @@index([isDeleted])
@@ -127,6 +110,7 @@ model UmrahVisaBooking {
   @@index([accommodationType])
   @@index([visaType])
   @@index([hasTransportation])
+  @@index([submittedAt])
   @@map("umrah_visa_bookings")
 }
 
@@ -167,20 +151,20 @@ model TransportPricing {
 }
 
 model Document {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  serviceId    String    @map("service_id") @db.Uuid
-  documentType String    @map("document_type") @db.VarChar(100)
-  fileName     String    @map("file_name") @db.VarChar(255)
-  filePath     String    @map("file_path") @db.VarChar(500)
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId    String            @map("booking_id") @db.Uuid
+  documentType String            @map("document_type") @db.VarChar(100)
+  fileName     String            @map("file_name") @db.VarChar(255)
+  filePath     String            @map("file_path") @db.VarChar(500)
   fileSize     Int?
-  mimeType     String?   @map("mime_type") @db.VarChar(100)
-  uploadedAt   DateTime  @default(now()) @map("uploaded_at") @db.Timestamp(6)
-  passengerId  String?   @map("passenger_id") @db.Uuid
-  deletedAt    DateTime? @map("deleted_at") @db.Timestamp(6)
-  isDeleted    Boolean   @default(false) @map("is_deleted")
-  service      Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  mimeType     String?           @map("mime_type") @db.VarChar(100)
+  uploadedAt   DateTime          @default(now()) @map("uploaded_at") @db.Timestamp(6)
+  passengerId  String?           @map("passenger_id") @db.Uuid
+  deletedAt    DateTime?         @map("deleted_at") @db.Timestamp(6)
+  isDeleted    Boolean           @default(false) @map("is_deleted")
+  booking      UmrahVisaBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  @@index([serviceId])
+  @@index([bookingId])
   @@index([passengerId])
   @@index([documentType])
   @@index([isDeleted])
@@ -614,13 +598,6 @@ enum AccountCurrency {
   SAR
   INR
   AED
-}
-
-enum ServiceStatus {
-  pending
-  processing
-  completed
-  cancelled
 }
 
 enum UmrahVisaStatus {

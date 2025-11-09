@@ -75,7 +75,7 @@ export default function AssignGroupPage() {
         .map((booking: any) => ({
           ...booking.tripInfo,
           visaType: booking.visaType,
-          booking: { id: booking.id, passengerCount: booking.passengerCount, service: booking.service },
+          booking: { id: booking.id, passengerCount: booking.passengerCount },
         }));
 
       setTripInfoList(tripInfoData);

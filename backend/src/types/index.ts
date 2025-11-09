@@ -2,7 +2,6 @@ import { Request } from 'express';
 import { 
   User, 
   Party, 
-  Service, 
   Document, 
   RefreshToken,
   TransportMaster,
@@ -12,7 +11,6 @@ import {
   UserRole,
   CustomerType,
   AccountCurrency,
-  ServiceStatus,
   UmrahVisaStatus,
   VisaType,
   Gender,
@@ -23,7 +21,6 @@ import {
 export type { 
   User, 
   Party, 
-  Service, 
   Document, 
   RefreshToken,
   TransportMaster,
@@ -33,7 +30,6 @@ export type {
   UserRole,
   CustomerType,
   AccountCurrency,
-  ServiceStatus,
   UmrahVisaStatus,
   VisaType,
   Gender,
@@ -210,7 +206,7 @@ export interface UpdateLocationMasterRequest {
 
 // Umrah Visa Booking Request Types
 export interface CreateUmrahVisaBookingRequest {
-  serviceId: string;
+  partyId: string;
   groupNumber?: string;
   groupName?: string;
   passengerCount: number;

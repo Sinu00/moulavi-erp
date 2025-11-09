@@ -105,7 +105,7 @@ export default function ViewUmrahVisaBookingPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Party Name</p>
-                      <p className="text-lg font-bold text-gray-900">{booking.service?.party?.partyName || 'N/A'}</p>
+                      <p className="text-lg font-bold text-gray-900">{booking.party?.partyName || 'N/A'}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Group Number</p>
@@ -128,18 +128,18 @@ export default function ViewUmrahVisaBookingPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Email</p>
-                      <p className="text-sm text-gray-900 break-all">{booking.service?.party?.email || 'N/A'}</p>
+                      <p className="text-sm text-gray-900 break-all">{booking.party?.email || 'N/A'}</p>
                     </div>
-                    {booking.service?.party?.contactNumber && (
+                    {booking.party?.contactNumber && (
                       <div>
                         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Contact</p>
-                        <p className="text-sm text-gray-900">{booking.service?.party?.contactNumber}</p>
+                        <p className="text-sm text-gray-900">{booking.party.contactNumber}</p>
                       </div>
                     )}
-                    {booking.service?.party?.whatsappNumber && (
+                    {booking.party?.whatsappNumber && (
                       <div>
                         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">WhatsApp</p>
-                        <p className="text-sm text-gray-900">{booking.service?.party?.whatsappNumber}</p>
+                        <p className="text-sm text-gray-900">{booking.party.whatsappNumber}</p>
                       </div>
                     )}
                   </div>

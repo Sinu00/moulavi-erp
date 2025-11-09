@@ -131,7 +131,7 @@ const EMAIL_TEMPLATES = {
     </html>
   `,
 
-  serviceConfirmation: (name: string, serviceType: string, serviceId: string) => `
+  serviceConfirmation: (name: string, serviceType: string, bookingId: string) => `
     <!DOCTYPE html>
     <html>
     <head>
@@ -194,8 +194,8 @@ const EMAIL_TEMPLATES = {
               <span class="detail-value">${serviceType}</span>
             </div>
             <div class="detail-item">
-              <span class="detail-label">Request ID:</span>
-              <span class="detail-value">${serviceId}</span>
+              <span class="detail-label">Booking ID:</span>
+              <span class="detail-value">${bookingId}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Submitted:</span>
@@ -299,14 +299,14 @@ export const sendServiceConfirmationEmail = async (
   to: string,
   name: string,
   serviceType: string,
-  serviceId: string,
+  bookingId: string,
   phoneNumber?: string
 ): Promise<void> => {
   const mailOptions: nodemailer.SendMailOptions = {
     from: EMAIL_CONFIG.from,
     to,
     subject: `${serviceType} Service Request Confirmation`,
-    html: EMAIL_TEMPLATES.serviceConfirmation(name, serviceType, serviceId),
+    html: EMAIL_TEMPLATES.serviceConfirmation(name, serviceType, bookingId),
   };
   
   await sendEmail(mailOptions);
@@ -315,7 +315,7 @@ export const sendServiceConfirmationEmail = async (
   if (phoneNumber) {
     try {
       const { sendServiceConfirmationWhatsApp } = await import('./whatsappService');
-      await sendServiceConfirmationWhatsApp(phoneNumber, name, serviceType, serviceId);
+      await sendServiceConfirmationWhatsApp(phoneNumber, name, serviceType, bookingId);
       console.log(`WhatsApp service confirmation sent to ${phoneNumber}`);
     } catch (error) {
       console.error('Failed to send WhatsApp service confirmation:', error);

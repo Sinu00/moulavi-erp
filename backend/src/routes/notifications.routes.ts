@@ -29,14 +29,10 @@ router.get(
         include: {
           booking: {
             include: {
-              service: {
-                include: {
-                  party: {
-                    select: {
-                      partyName: true,
-                      email: true,
-                    },
-                  },
+              party: {
+                select: {
+                  partyName: true,
+                  email: true,
                 },
               },
             },
@@ -63,7 +59,7 @@ router.get(
         type: 'status_change',
         title: getStatusChangeTitle(history.oldStatus, history.newStatus),
         message: getStatusChangeMessage(history),
-        partyName: history.booking.service.party.partyName,
+        partyName: history.booking.party.partyName,
         groupNumber: history.booking.groupNumber,
         changedBy: history.user.name,
         changedAt: history.changedAt,
@@ -217,7 +213,7 @@ function getStatusChangeTitle(oldStatus: string | null, newStatus: string): stri
 
 function getStatusChangeMessage(history: any): string {
   const { booking, user, newStatus, groupNumber } = history;
-  const partyName = booking.service.party.partyName;
+  const partyName = booking.party.partyName;
   
   let message = `${user.name} changed ${partyName}'s booking status to ${newStatus.replace('_', ' ')}`;
   

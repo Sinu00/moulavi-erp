@@ -171,39 +171,39 @@ export default function ViewUmrahVisaDialog({ bookingId, open, onOpenChange }: V
               <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <p className="text-xs sm:text-sm text-gray-500">Party Name</p>
-                  <p className="font-medium text-xs sm:text-sm">{booking.service?.party?.partyName || 'N/A'}</p>
+                  <p className="font-medium text-xs sm:text-sm">{booking.party?.partyName || 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-xs sm:text-sm text-gray-500">Email</p>
                   <p className="font-medium text-xs sm:text-sm flex items-center break-all">
                     <Mail className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex-shrink-0" />
-                    {booking.service?.party?.email || 'N/A'}
+                    {booking.party?.email || 'N/A'}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs sm:text-sm text-gray-500">Contact Number</p>
                   <p className="font-medium text-xs sm:text-sm flex items-center">
                     <Phone className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    {booking.service?.party?.contactNumber || 'N/A'}
+                    {booking.party?.contactNumber || 'N/A'}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs sm:text-sm text-gray-500">WhatsApp Number</p>
                   <p className="font-medium text-xs sm:text-sm flex items-center">
                     <Phone className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    {booking.service?.party?.whatsappNumber || 'N/A'}
+                    {booking.party?.whatsappNumber || 'N/A'}
                   </p>
                 </div>
-                {booking.service?.party?.gstNumber && (
+                {booking.party?.gstNumber && (
                   <div>
                     <p className="text-xs sm:text-sm text-gray-500">GST Number</p>
-                    <p className="font-medium text-xs sm:text-sm">{booking.service.party.gstNumber}</p>
+                    <p className="font-medium text-xs sm:text-sm">{booking.party.gstNumber}</p>
                   </div>
                 )}
-                {booking.service?.party?.address && (
+                {booking.party?.address && (
                   <div className="col-span-1 sm:col-span-2">
                     <p className="text-xs sm:text-sm text-gray-500">Address</p>
-                    <p className="font-medium text-xs sm:text-sm">{booking.service.party.address}</p>
+                    <p className="font-medium text-xs sm:text-sm">{booking.party.address}</p>
                   </div>
                 )}
               </CardContent>

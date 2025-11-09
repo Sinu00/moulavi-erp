@@ -247,19 +247,11 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Service
-      const service = await tx.service.create({
-        data: {
-          serviceType: 'umrah_visa',
-          partyId: partyId,
-          status: 'completed',
-        },
-      });
-
-      // 2. Create UmrahVisaBooking (group visa, always hotel, status = voucher)
+      // 1. Create UmrahVisaBooking directly with partyId (group visa, always hotel, status = voucher)
       const booking = await tx.umrahVisaBooking.create({
         data: {
-          serviceId: service.id,
+          partyId: partyId,
+          submittedAt: new Date(),
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
           hasGroupNumber: true,
@@ -623,11 +615,11 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         )
       );
 
-      // 7.5. Save ZIP file as Document (linked to service, not individual passenger)
+      // 7.5. Save ZIP file as Document (linked to booking, not individual passenger)
       if (zipFile) {
         await tx.document.create({
           data: {
-            serviceId: service.id,
+            bookingId: booking.id,
             documentType: 'pan_card_zip',
             fileName: zipFile.originalname,
             filePath: zipFile.path,
@@ -668,14 +660,13 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         },
       });
 
-      return { booking, service, travelDetails, accommodationDetails, passengers: passengerRecords, tripInfo };
+      return { booking, travelDetails, accommodationDetails, passengers: passengerRecords, tripInfo };
     });
 
     res.status(201).json({
       message: 'Group Umrah visa booking completed successfully',
       data: {
         bookingId: result.booking.id,
-        serviceId: result.service.id,
         passengerCount: passengerCount,
         passengers: result.passengers,
         tripInfo: result.tripInfo,

@@ -187,19 +187,11 @@ router.post('/create-booking', authenticate, async (req, res) => {
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Service
-      const service = await tx.service.create({
-        data: {
-          serviceType: 'umrah_visa',
-          partyId: validatedData.partyId,
-          status: 'completed',
-        },
-      });
-
-      // 2. Create UmrahVisaBooking
+      // 1. Create UmrahVisaBooking directly with partyId
       const booking = await tx.umrahVisaBooking.create({
         data: {
-          serviceId: service.id,
+          partyId: validatedData.partyId,
+          submittedAt: new Date(),
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
           hasGroupNumber,
@@ -325,14 +317,13 @@ router.post('/create-booking', authenticate, async (req, res) => {
         },
       });
 
-      return { booking, service, travelDetails, accommodationDetails, passengers, tripInfo };
+      return { booking, travelDetails, accommodationDetails, passengers, tripInfo };
     });
 
     res.status(201).json({
       message: 'Booking completed successfully',
       data: {
         bookingId: result.booking.id,
-        serviceId: result.service.id,
         passengerCount: step4Data.passengerCount,
         passengers: result.passengers,
         tripInfo: result.tripInfo,

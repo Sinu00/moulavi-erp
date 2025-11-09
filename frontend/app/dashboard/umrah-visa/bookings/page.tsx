@@ -98,8 +98,8 @@ export default function UmrahVisaPage() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(booking =>
-        booking.service?.party?.partyName?.toLowerCase().includes(query) ||
-        booking.service?.party?.email?.toLowerCase().includes(query) ||
+        booking.party?.partyName?.toLowerCase().includes(query) ||
+        booking.party?.email?.toLowerCase().includes(query) ||
         booking.groupNumber?.toLowerCase().includes(query) ||
         booking.groupName?.toLowerCase().includes(query)
       );
@@ -399,8 +399,8 @@ export default function UmrahVisaPage() {
                             </TableCell>
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="font-semibold text-gray-900">{booking.service?.party?.partyName}</div>
-                                <div className="text-xs text-gray-500">{booking.service?.party?.email}</div>
+                                <div className="font-semibold text-gray-900">{booking.party?.partyName}</div>
+                                <div className="text-xs text-gray-500">{booking.party?.email}</div>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -451,7 +451,7 @@ export default function UmrahVisaPage() {
                             <Button
                                   size="sm"
                               variant="outline"
-                                  onClick={() => handleDeleteBooking(booking.id, booking.service?.party?.partyName)}
+                                  onClick={() => handleDeleteBooking(booking.id, booking.party?.partyName || 'Unknown')}
                                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                                   <Trash2 className="h-3 w-3" />

@@ -272,15 +272,11 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
       include: {
-        service: {
-          include: {
-            party: {
-              select: {
-                partyName: true,
-                contactNumber: true,
-                whatsappNumber: true,
-              },
-            },
+        party: {
+          select: {
+            partyName: true,
+            contactNumber: true,
+            whatsappNumber: true,
           },
         },
         umrahVisaProvider: {
@@ -374,8 +370,8 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       bookingId: booking.id,
       reservationDate: booking.createdAt,
       reservationNumber: booking.voucher?.voucherNumber || '', // Use voucher number as reservation number (empty if voucher not generated yet)
-      guestName: booking.service.party.partyName,
-      guestMobile: booking.service.party.contactNumber || booking.service.party.whatsappNumber || '',
+      guestName: booking.party.partyName,
+      guestMobile: booking.party.contactNumber || booking.party.whatsappNumber || '',
       groupCode: booking.groupNumber || tripInfo.groupNumber || '',
       groupName: booking.groupName || tripInfo.groupName || '',
       paxCount: booking.passengerCount,
@@ -473,13 +469,9 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
             id: true,
           },
         },
-        service: {
-          include: {
-            party: {
-              select: {
-                partyName: true,
-              },
-            },
+        party: {
+          select: {
+            partyName: true,
           },
         },
       },
@@ -504,20 +496,15 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
                 id: true,
               },
             },
-            service: {
-              include: {
-                party: {
-                  select: {
-                    partyName: true,
-                  },
-                },
+            party: {
+              select: {
+                partyName: true,
               },
             },
           },
         });
-        if (updatedBooking) {
-          booking = updatedBooking;
-          tripInfo = updatedBooking.tripInfo || tripInfo;
+        if (updatedBooking && updatedBooking.tripInfo) {
+          tripInfo = updatedBooking.tripInfo;
         }
       } catch (error: any) {
         return res.status(400).json({ 
@@ -531,6 +518,11 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
     }
 
     // Check status - use booking.status as source of truth, but also check tripInfo.status
+    if (!tripInfo) {
+      return res.status(400).json({ 
+        error: 'TripInfo is required to generate voucher'
+      });
+    }
     const currentStatus = booking.status === 'voucher' ? 'voucher' : tripInfo.status;
     if (currentStatus !== 'voucher') {
       return res.status(400).json({ 
@@ -562,7 +554,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
           bookingId,
           voucherNumber,
           reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
-          guestName: voucherData.guestName || booking!.service?.party?.partyName || '',
+          guestName: voucherData.guestName || booking!.party?.partyName || '',
           guestMobile: voucherData.guestMobile || '',
           groupCode: voucherData.groupCode || booking!.groupNumber || (booking!.tripInfo?.groupNumber || ''),
           umrahVisaProviderId: booking!.umrahVisaProviderId || null,
@@ -722,11 +714,7 @@ router.get('/:bookingId/trip-info', authenticate, async (req, res) => {
       include: {
         booking: {
           include: {
-            service: {
-              include: {
-                party: true,
-              },
-            },
+            party: true,
           },
         },
         updatedByUser: {

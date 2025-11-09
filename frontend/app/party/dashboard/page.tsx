@@ -52,7 +52,7 @@ interface UmrahPassenger {
 
 interface UmrahVisaBooking {
   id: string;
-  serviceId: string;
+  bookingId: string;
   groupNumber?: string;
   groupName?: string;
   passengerCount: number;
@@ -106,7 +106,7 @@ export default function PartyDashboardPage() {
 
     if (searchTerm) {
       filtered = filtered.filter(booking => 
-        booking.service.party.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        booking.party?.partyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         booking.groupNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         booking.groupName?.toLowerCase().includes(searchTerm.toLowerCase())
       );

@@ -121,30 +121,33 @@ export const partyDocumentAPI = {
   deleteDocument: (documentId: string) => api.delete(`/upload/party-document/${documentId}`),
 };
 
-// Service API
+// Service API - DEPRECATED: Use umrahVisaAPI instead
+// All service-related functionality has been moved to booking routes
 export const serviceAPI = {
-  createUmrahVisa: (data: any) => api.post('/services/umrah-visa', data),
+  // Deprecated: Use umrahVisaAPI.getBookings() instead
+  getAll: (params?: any) => umrahVisaAPI.getBookings(params),
   
-  getAll: (params?: any) => api.get('/services', { params }),
+  // Deprecated: Use umrahVisaAPI.getBookingById() instead
+  getById: (id: string) => umrahVisaAPI.getBookingById(id),
   
-  getById: (id: string) => api.get(`/services/${id}`),
-  
+  // Deprecated: Use umrahVisaAPI.updateBookingStatus() instead
   updateStatus: (id: string, status: string) =>
-    api.patch(`/services/${id}/status`, { status }),
+    umrahVisaAPI.updateBookingStatus(id, status),
   
-  // Umrah Visa specific endpoints - deprecated, use umrahVisaAPI instead
+  // Deprecated: Use umrahVisaAPI.getBookings() instead
   getUmrahVisas: (params?: any) => umrahVisaAPI.getBookings(params),
   
+  // Deprecated: Use umrahVisaAPI.updateBookingStatus() instead
   updateUmrahVisaStatus: (id: string, status: string) =>
     umrahVisaAPI.updateBookingStatus(id, status),
   
-  // Party-specific endpoints
-  getPartyServices: (params?: any) => api.get('/services/party-services', { params }),
+  // Deprecated: Use umrahVisaAPI.getBookings() instead (party role filters automatically)
+  getPartyServices: (params?: any) => umrahVisaAPI.getBookings(params),
 };
 
 // Upload API
 export const uploadAPI = {
-  uploadDocument: (serviceId: string, file: File, documentType: string, passengerId?: string) => {
+  uploadDocument: (bookingId: string, file: File, documentType: string, passengerId?: string) => {
     const formData = new FormData();
     formData.append('document', file);
     formData.append('document_type', documentType);
@@ -152,7 +155,7 @@ export const uploadAPI = {
       formData.append('passenger_id', passengerId);
     }
     
-    return api.post(`/upload/service/${serviceId}`, formData, {
+    return api.post(`/upload/booking/${bookingId}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

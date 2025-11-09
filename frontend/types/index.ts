@@ -149,25 +149,8 @@ export type UmrahVisaStatus =
 // Visa Type
 export type VisaType = 'individual_visa' | 'group_visa';
 
-// Service Types
-export interface Service {
-  id: string;
-  serviceType: string;
-  partyId: string;
-  status: 'pending' | 'processing' | 'completed' | 'cancelled';
-  submittedAt: string;
-  details: Record<string, any>;
-  createdAt: string;
-  updatedAt: string;
-  // Additional fields for party services
-  umrahVisaStatus?: UmrahVisaStatus;
-  umrahVisaDetail?: UmrahVisaDetails | null;
-  documents?: Document[];
-}
-
 export interface UmrahVisaDetails {
   id?: string;
-  serviceId?: string;
   fullName: string;
   passportNumber: string;
   nationality: string;
@@ -204,7 +187,8 @@ export interface UmrahPassenger {
 
 export interface UmrahVisaBooking {
   id?: string;
-  serviceId?: string;
+  partyId?: string;
+  submittedAt?: string;
   bookingMode: BookingMode;
   groupNumber?: string;
   groupName?: string;
@@ -232,6 +216,8 @@ export interface UmrahVisaBooking {
   status?: UmrahVisaStatus;
   passengers?: UmrahPassenger[];
   tripInfo?: TripInfo;
+  party?: Party;
+  documents?: Document[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -336,7 +322,7 @@ export interface TransportPricingResponse {
 // Document Types
 export interface Document {
   id: string;
-  serviceId: string;
+  bookingId: string;
   documentType: string;
   fileName: string;
   filePath: string;

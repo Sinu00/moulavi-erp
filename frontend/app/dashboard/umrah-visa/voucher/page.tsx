@@ -68,7 +68,7 @@ export default function VoucherPage() {
           ...(booking.tripInfo || {
             id: `temp-${booking.id}`,
             bookingId: booking.id,
-            partyName: booking.service?.party?.partyName || '',
+            partyName: booking.party?.partyName || '',
             groupNumber: booking.groupNumber || '',
             groupName: booking.groupName || '',
             arrivalDate: booking.travelDetails?.arrivalDate || new Date().toISOString(),
@@ -80,7 +80,7 @@ export default function VoucherPage() {
             updatedBy: '',
           }),
           visaType: booking.visaType,
-          booking: { id: booking.id, passengerCount: booking.passengerCount, service: booking.service },
+          booking: { id: booking.id, passengerCount: booking.passengerCount },
         }));
 
       setTripInfoList(tripInfoData);

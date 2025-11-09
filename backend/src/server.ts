@@ -7,7 +7,6 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import partyRoutes from './routes/party.routes';
 import partyContactRoutes from './routes/partyContact.routes';
-import serviceRoutes from './routes/service.routes';
 import uploadRoutes from './routes/upload.routes';
 import userMasterRoutes from './routes/userMaster.routes';
 import umrahVisaRoutes from './routes/umrahVisa.routes';
@@ -58,7 +57,6 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/parties', partyRoutes);
 app.use('/api', partyContactRoutes);
-app.use('/api/services', serviceRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/users', userMasterRoutes);
 // Register workflow routes first (more specific routes like /:bookingId/voucher-data)

@@ -60,16 +60,12 @@ router.get('/bookings', authenticate, async (req, res) => {
         take: limitNum,
         orderBy: { createdAt: 'desc' },
         include: {
-          service: {
-            include: {
-              party: {
-                select: {
-                  id: true,
-                  partyName: true,
-                  email: true,
-                  contactNumber: true,
-                },
-              },
+          party: {
+            select: {
+              id: true,
+              partyName: true,
+              email: true,
+              contactNumber: true,
             },
           },
           travelDetails: {
@@ -136,11 +132,7 @@ router.get('/:bookingId', authenticate, async (req, res) => {
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
       include: {
-        service: {
-          include: {
-            party: true,
-          },
-        },
+        party: true,
         travelDetails: {
           include: {
             arrivalAirport: true,

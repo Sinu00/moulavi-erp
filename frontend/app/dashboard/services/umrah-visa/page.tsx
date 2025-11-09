@@ -59,7 +59,7 @@ interface UmrahPassenger {
 
 interface UmrahVisaBooking {
   id: string;
-  serviceId: string;
+  bookingId: string;
   bookingMode: string;
   groupNumber?: string;
   groupName?: string;
@@ -431,9 +431,9 @@ export default function UmrahVisaPage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
-                                  {booking.service.party.partyName}
+                                  {booking.party?.partyName}
                                 </h3>
-                                <p className="text-xs sm:text-sm text-gray-500 truncate">{booking.service.party.email}</p>
+                                <p className="text-xs sm:text-sm text-gray-500 truncate">{booking.party?.email}</p>
                               </div>
                             </div>
                           </div>
@@ -535,7 +535,7 @@ export default function UmrahVisaPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDeleteBooking(booking.id, booking.service.party.partyName)}
+                              onClick={() => handleDeleteBooking(booking.id, booking.party?.partyName || 'Unknown')}
                               className="flex items-center justify-center text-xs sm:text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />

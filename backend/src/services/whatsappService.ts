@@ -32,14 +32,14 @@ Welcome to Moulavi ERP! Your account has been successfully created.
 Thank you for choosing Moulavi ERP!
   `.trim(),
 
-  serviceConfirmation: (name: string, serviceType: string, serviceId: string) => `
+  serviceConfirmation: (name: string, serviceType: string, bookingId: string) => `
 ✅ *MOULAVI ERP - Service Request Confirmation*
 
 Dear ${name},
 
 Your ${serviceType} service request has been successfully submitted!
 
-📋 *Request ID:* ${serviceId}
+📋 *Booking ID:* ${bookingId}
 📅 *Submitted:* ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
 
 📊 *Status:* Under Review
@@ -150,9 +150,9 @@ export const sendServiceConfirmationWhatsApp = async (
   phoneNumber: string,
   name: string,
   serviceType: string,
-  serviceId: string
+  bookingId: string
 ): Promise<void> => {
-  const message = WHATSAPP_TEMPLATES.serviceConfirmation(name, serviceType, serviceId);
+  const message = WHATSAPP_TEMPLATES.serviceConfirmation(name, serviceType, bookingId);
   
   await sendWhatsAppMessage(phoneNumber, message);
 };
