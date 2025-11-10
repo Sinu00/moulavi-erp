@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { prisma } from './umrahVisa/shared';
 import { ensureTripInfoExists, syncBookingAndTripInfoStatus, syncBookingAndTripInfoStatusInTx } from '../services/statusSyncService';
-import { generateVoucherNumber, generateRouteNumbers, formatTime, formatDate } from '../services/voucherService';
+import { generateVoucherNumber, generateRouteNumbers, formatTime, formatDate, assignRouteNumbersToMovementDetails } from '../services/voucherService';
 
 const router = Router();
 
@@ -313,10 +313,19 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         sponsorIqamaDetails: true,
         transportBookings: {
           include: {
-            fromLocation: true,
-            toLocation: true,
-            fromSpecificLocation: true,
-            toSpecificLocation: true,
+            transportMaster: {
+              include: {
+                route: {
+                  include: {
+                    city1: true,
+                    city2: true,
+                    city3: true,
+                    city4: true,
+                  },
+                },
+                vehicleType: true,
+              },
+            },
           },
           orderBy: {
             travelDateTime: 'asc',
@@ -325,6 +334,17 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         passengers: {
           where: {
             isDeleted: false,
+          },
+        },
+        movementDetails: {
+          include: {
+            fromCity: true,
+            fromLocation: true,
+            toCity: true,
+            toLocation: true,
+          },
+          orderBy: {
+            travelDateTime: 'asc',
           },
         },
       },
@@ -353,14 +373,26 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       }
     }
 
-    // Get the total count of all transport bookings EXCEPT the current booking's
-    // This ensures route numbers continue sequentially across all bookings
-    const totalTransportBookings = await prisma.umrahTransportBooking.count({
-      where: {
-        bookingId: { not: bookingId },
+    // Assign route numbers to movement details before generating voucher data
+    await assignRouteNumbersToMovementDetails(bookingId);
+
+    // Re-fetch booking to get movement details with assigned route numbers
+    const bookingWithMovements = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        movementDetails: {
+          include: {
+            fromCity: true,
+            fromLocation: true,
+            toCity: true,
+            toLocation: true,
+          },
+          orderBy: {
+            travelDateTime: 'asc',
+          },
+        },
       },
     });
-    const baseRouteNumber = totalTransportBookings;
 
     // Format data for voucher preview
     const voucherData = {
@@ -389,30 +421,23 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         days: Math.ceil((new Date(hb.checkOutDate).getTime() - new Date(hb.checkInDate).getTime()) / (1000 * 60 * 60 * 24)),
         brn: hb.brn && Array.isArray(hb.brn) ? hb.brn : null, // Include BRN if available
       })) || [],
-      movementDetails: booking.transportBookings.map((tb: any, idx: number) => {
-        // Generate route numbers starting from (totalTransportBookings + 1), incrementing for each transport
-        // Format as 5-digit zero-padded number (00001, 00002, etc.)
-        // This ensures route numbers continue sequentially across all bookings
-        const routeNumber = (baseRouteNumber + idx + 1).toString().padStart(5, '0');
-        
-        return {
-          sr: idx + 1,
-          route: routeNumber, // Sequential route number continuing from previous bookings
-          date: tb.travelDateTime ? formatDate(tb.travelDateTime) : '', // DD-MM-YYYY format
-          time: tb.travelDateTime ? formatTime(tb.travelDateTime) : '', // HH:MM format
-          from: tb.fromLocation?.name || '', // City name from LocationMaster
-          fromLocation: tb.fromSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
-          fromLocationId: tb.fromLocationId,
-          fromSpecificLocationId: tb.fromSpecificLocationId,
-          to: tb.toLocation?.name || '', // City name from LocationMaster
-          toLocation: tb.toSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
-          toLocationId: tb.toLocationId,
-          toSpecificLocationId: tb.toSpecificLocationId,
-          vehicleType: tb.vehicleType || '',
-          paxCount: tb.paxCount || 0,
-          price: tb.price ? Number(tb.price) : 0,
-        };
-      }),
+      movementDetails: (bookingWithMovements?.movementDetails || []).map((md: any, idx: number) => ({
+        sr: idx + 1,
+        route: md.routeNumber || '', // 5-digit route number assigned during voucher generation
+        date: formatDate(md.travelDateTime), // DD-MM-YYYY format
+        time: formatTime(md.travelDateTime), // HH:MM format
+        from: md.fromCity?.name || '',
+        fromLocation: md.fromLocation?.name || '',
+        fromLocationId: md.fromLocationId,
+        fromSpecificLocationId: '', // Not used in new schema
+        to: md.toCity?.name || '',
+        toLocation: md.toLocation?.name || '',
+        toLocationId: md.toLocationId,
+        toSpecificLocationId: '', // Not used in new schema
+        vehicleType: '', // Not stored in movement details (only in transport bookings)
+        paxCount: 0, // Not stored in movement details (only in transport bookings)
+        price: 0, // Not stored in movement details (only in transport bookings)
+      })),
       flightDetails: booking.travelDetails ? [
         {
           type: 'AA', // Arrival
@@ -533,15 +558,10 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
     // Generate voucher number
     const voucherNumber = await generateVoucherNumber();
 
-    // Generate route numbers for movements
-    const baseRouteNumber = 16469; // Starting route number
-    const routeNumbers = generateRouteNumbers(baseRouteNumber, voucherData.movementDetails?.length || 0);
-
-    // Add route numbers to movement details
-    const movementDetailsWithRoutes = (voucherData.movementDetails || []).map((movement: any, idx: number) => ({
-      ...movement,
-      route: routeNumbers[idx] || movement.route,
-    }));
+    // Route numbers are already assigned to movement details in the database
+    // via assignRouteNumbersToMovementDetails called in voucher-data endpoint
+    // Use movementDetails from voucherData as-is
+    const movementDetailsWithRoutes = voucherData.movementDetails || [];
 
     // Create voucher record
     const voucher = await prisma.$transaction(async (tx) => {
@@ -756,21 +776,43 @@ router.patch('/:bookingId/transport-bookings', authenticate, async (req, res) =>
           ? (t.travelDateTime instanceof Date ? t.travelDateTime : new Date(t.travelDateTime))
           : undefined;
         
+        // Build update data - only travelDateTime and transportMasterId can be updated
+        // vehicleType, paxCount, and price come from TransportMaster and cannot be changed here
+        const updateData: any = {};
+        if (travelDateTime !== undefined) {
+          updateData.travelDateTime = travelDateTime;
+        }
+        if (t.transportMasterId) {
+          updateData.transportMasterId = t.transportMasterId;
+        }
+        
+        // Only update if there's data to update
+        if (Object.keys(updateData).length > 0) {
         await prisma.umrahTransportBooking.update({
           where: { id: t.id },
-          data: {
-            travelDateTime,
-            vehicleType: t.vehicleType ?? undefined,
-            paxCount: t.paxCount ?? undefined,
-            price: t.price ?? undefined,
-          },
+            data: updateData,
         });
+        }
       }
     }
 
     const refreshed = await prisma.umrahTransportBooking.findMany({
       where: { bookingId },
-      include: { fromLocation: true, toLocation: true },
+      include: { 
+        transportMaster: {
+          include: {
+            route: {
+              include: {
+                city1: true,
+                city2: true,
+                city3: true,
+                city4: true,
+              },
+            },
+            vehicleType: true,
+          },
+        },
+      },
     });
     res.json({ transportBookings: refreshed });
   } catch (error) {
@@ -783,7 +825,11 @@ router.patch('/:bookingId/transport-bookings', authenticate, async (req, res) =>
 router.post('/:bookingId/transport-bookings', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { fromLocationId, toLocationId, vehicleType, paxCount, price, travelDateTime } = req.body || {};
+    const { transportMasterId, travelDateTime } = req.body || {};
+    
+    if (!transportMasterId) {
+      return res.status(400).json({ error: 'transportMasterId is required' });
+    }
     
     // Parse travelDateTime if provided
     const parsedDateTime = travelDateTime 
@@ -793,14 +839,24 @@ router.post('/:bookingId/transport-bookings', authenticate, async (req, res) => 
     const created = await prisma.umrahTransportBooking.create({
       data: {
         bookingId,
-        fromLocationId,
-        toLocationId,
-        vehicleType,
-        paxCount,
-        price,
+        transportMasterId,
         travelDateTime: parsedDateTime,
       },
-      include: { fromLocation: true, toLocation: true },
+      include: { 
+        transportMaster: {
+          include: {
+            route: {
+              include: {
+                city1: true,
+                city2: true,
+                city3: true,
+                city4: true,
+              },
+            },
+            vehicleType: true,
+          },
+        },
+      },
     });
     res.json({ transportBooking: created });
   } catch (error) {

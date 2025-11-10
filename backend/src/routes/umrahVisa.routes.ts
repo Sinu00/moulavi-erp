@@ -160,8 +160,19 @@ router.get('/:bookingId', authenticate, async (req, res) => {
         sponsorIqamaDetails: true,
         transportBookings: {
           include: {
-            fromLocation: true,
-            toLocation: true,
+            transportMaster: {
+              include: {
+                route: {
+                  include: {
+                    city1: true,
+                    city2: true,
+                    city3: true,
+                    city4: true,
+                  },
+                },
+                vehicleType: true,
+              },
+            },
           },
         },
         passengers: {

@@ -77,18 +77,19 @@ export class CancellationService {
       // Get booking details with related data
       const booking = await prisma.umrahVisaBooking.findUnique({
         where: { id: bookingId },
-        select: {
-          id: true,
-          status: true,
-          isDeleted: true,
+        include: {
           travelDetails: {
             select: {
               arrivalDateTime: true
             }
           },
           transportBookings: {
+            include: {
+              transportMaster: {
             select: {
               price: true
+                }
+              }
             }
           }
         }
@@ -154,8 +155,8 @@ export class CancellationService {
       }
 
       // Calculate refund from transport bookings
-      const totalTransportCost = booking.transportBookings?.reduce((sum, transport) => {
-        return sum + Number(transport.price || 0);
+      const totalTransportCost = booking.transportBookings?.reduce((sum: number, transport: any) => {
+        return sum + Number(transport.transportMaster?.price || 0);
       }, 0) || 0;
       const totalCost = totalTransportCost;
       const cancellationFee = policy.cancellationFee;

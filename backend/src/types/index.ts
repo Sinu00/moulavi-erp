@@ -249,6 +249,20 @@ export interface UpdateTransportMasterRequest {
   isActive?: boolean;
 }
 
+// Umrah Movement Detail Types
+export interface UmrahMovementDetail {
+  id: string;
+  bookingId: string;
+  routeNumber?: string;
+  travelDateTime: Date;
+  fromCityId: string;
+  fromLocationId: string;
+  toCityId: string;
+  toLocationId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Umrah Visa Booking Request Types
 export interface CreateUmrahVisaBookingRequest {
   partyId: string;

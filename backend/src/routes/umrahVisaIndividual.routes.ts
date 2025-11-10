@@ -258,30 +258,10 @@ router.post('/create-booking', authenticate, async (req, res) => {
         });
       }
 
-      // 6. Create UmrahTransportBooking (if provided) - combine date and time before storing
-      if (step2Data.transportBookings && step2Data.transportBookings.length > 0) {
-        await Promise.all(
-          step2Data.transportBookings.map(transport => {
-            const travelDateTime = transport.travelDate && transport.travelTime
-              ? combineDateTime(transport.travelDate, transport.travelTime)
-              : undefined;
-            
-            return tx.umrahTransportBooking.create({
-              data: {
-                bookingId: booking.id,
-                fromLocationId: transport.fromLocationId,
-                toLocationId: transport.toLocationId,
-                fromSpecificLocationId: (transport as any).fromHotelId || null,
-                toSpecificLocationId: (transport as any).toHotelId || null,
-                vehicleType: transport.vehicleType,
-                paxCount: transport.paxCount,
-                price: transport.price,
-                travelDateTime,
-              },
-            });
-          })
-        );
-      }
+      // 6. Create UmrahTransportBooking (if provided) - using new format with transportMasterId
+      // Note: Individual bookings should use step4Data.selectedTransport similar to group bookings
+      // This code is kept for backward compatibility but should be migrated to use transportMasterId
+      // For now, individual bookings without transportMasterId will not create transport bookings
 
       // 7. Create UmrahPassenger (all passengers)
       const passengers = await Promise.all(

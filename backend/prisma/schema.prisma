@@ -96,6 +96,7 @@ model UmrahVisaBooking {
   sponsorIqamaDetails  UmrahSponserIqamaDetails?
   passengers           UmrahPassenger[]
   transportBookings    UmrahTransportBooking[]
+  movementDetails      UmrahMovementDetail[]
   travelDetails        UmrahTravelDetails?
   voucher              Voucher?
   documents            Document[]
@@ -281,6 +282,8 @@ model CityMaster {
   transportRoutesAsCity2 TransportRouteMaster[] @relation("TransportRouteCity2")
   transportRoutesAsCity3 TransportRouteMaster[] @relation("TransportRouteCity3")
   transportRoutesAsCity4 TransportRouteMaster[] @relation("TransportRouteCity4")
+  movementDetailsFrom UmrahMovementDetail[] @relation("MovementFromCity")
+  movementDetailsTo UmrahMovementDetail[] @relation("MovementToCity")
 
   @@unique([name, countryId])
   @@index([name])
@@ -305,12 +308,10 @@ model LocationMaster {
   cityMaster          CityMaster              @relation(fields: [cityId], references: [id])
   hotelBookings       UmrahHotelBooking[]     @relation("HotelBookings")
   hotelBookingLocations UmrahHotelBooking[]   @relation("HotelBookingLocations")
-  transportFromMaster UmrahTransportBooking[] @relation("TransportFrom")
-  transportToMaster   UmrahTransportBooking[] @relation("TransportTo")
-  transportFromSpecific UmrahTransportBooking[] @relation("TransportFromSpecific")
-  transportToSpecific   UmrahTransportBooking[] @relation("TransportToSpecific")
   arrivalFlights      UmrahTravelDetails[]    @relation("ArrivalAirport")
   departureFlights    UmrahTravelDetails[]    @relation("DepartureAirport")
+  movementDetailsFrom UmrahMovementDetail[]   @relation("MovementFromLocation")
+  movementDetailsTo   UmrahMovementDetail[]   @relation("MovementToLocation")
 
   @@unique([code, locationType])
   @@index([code])
@@ -372,6 +373,7 @@ model TransportMaster {
   updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   route          TransportRouteMaster  @relation(fields: [routeId], references: [id])
   vehicleType   VehicleTypeMaster     @relation(fields: [vehicleTypeId], references: [id])
+  transportBookings UmrahTransportBooking[]
 
   @@unique([routeId, vehicleTypeId])
   @@index([routeId])
@@ -445,30 +447,43 @@ model UmrahSponserIqamaDetails {
 model UmrahTransportBooking {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   bookingId             String           @map("booking_id") @db.Uuid
-  fromLocationId        String           @map("from_location_id") @db.Uuid
-  toLocationId          String           @map("to_location_id") @db.Uuid
-  fromSpecificLocationId String?         @map("from_specific_location_id") @db.Uuid
-  toSpecificLocationId   String?         @map("to_specific_location_id") @db.Uuid
-  vehicleType           String           @map("vehicle_type") @db.VarChar(50)
-  paxCount              Int              @map("pax_count")
-  price                 Decimal          @map("price") @db.Decimal(10, 2)
+  transportMasterId    String           @map("transport_master_id") @db.Uuid
   travelDateTime        DateTime?        @map("travel_datetime") @db.Timestamp(6)
   createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt             DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   booking               UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  fromLocation          LocationMaster   @relation("TransportFrom", fields: [fromLocationId], references: [id])
-  toLocation            LocationMaster   @relation("TransportTo", fields: [toLocationId], references: [id])
-  fromSpecificLocation  LocationMaster?  @relation("TransportFromSpecific", fields: [fromSpecificLocationId], references: [id])
-  toSpecificLocation    LocationMaster?  @relation("TransportToSpecific", fields: [toSpecificLocationId], references: [id])
+  transportMaster       TransportMaster  @relation(fields: [transportMasterId], references: [id])
 
   @@index([bookingId])
-  @@index([fromLocationId])
-  @@index([toLocationId])
-  @@index([fromSpecificLocationId])
-  @@index([toSpecificLocationId])
-  @@index([vehicleType])
+  @@index([transportMasterId])
   @@index([travelDateTime])
   @@map("umrah_transport_bookings")
+}
+
+model UmrahMovementDetail {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId         String           @map("booking_id") @db.Uuid
+  routeNumber       String?          @map("route_number") @db.VarChar(5)
+  travelDateTime    DateTime         @map("travel_datetime") @db.Timestamp(6)
+  fromCityId        String           @map("from_city_id") @db.Uuid
+  fromLocationId    String           @map("from_location_id") @db.Uuid
+  toCityId          String           @map("to_city_id") @db.Uuid
+  toLocationId      String           @map("to_location_id") @db.Uuid
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  
+  booking           UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromCity          CityMaster      @relation("MovementFromCity", fields: [fromCityId], references: [id])
+  fromLocation      LocationMaster  @relation("MovementFromLocation", fields: [fromLocationId], references: [id])
+  toCity            CityMaster      @relation("MovementToCity", fields: [toCityId], references: [id])
+  toLocation        LocationMaster  @relation("MovementToLocation", fields: [toLocationId], references: [id])
+
+  @@index([bookingId])
+  @@index([routeNumber])
+  @@index([travelDateTime])
+  @@index([fromCityId])
+  @@index([toCityId])
+  @@map("umrah_movement_details")
 }
 
 model PassengerDocument {

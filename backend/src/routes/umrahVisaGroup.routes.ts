@@ -200,9 +200,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
     }));
 
     // Calculate hasTransportation
-    const hasTransportation = (step3Data.transportSegments && step3Data.transportSegments.length > 0) ||
-                              (step2Data.transportBookings && step2Data.transportBookings.length > 0) ||
-                              (step4Data.selectedTransport !== undefined && step4Data.selectedTransport !== null);
+    const hasTransportation = step4Data.selectedTransport !== undefined && step4Data.selectedTransport !== null;
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -343,242 +341,251 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         );
       }
 
-      // 6. Create UmrahTransportBooking (from step3 transportSegments, step2 transportBookings, or step4 selectedTransport)
-      const transportBookings = [
-        ...(step3Data.transportSegments || []),
-        ...(step2Data.transportBookings || []),
-      ];
-
-      // Handle selected transport from step4 (new transport vehicle selection step)
+      // 6. Create UmrahTransportBooking (from step4 selectedTransport)
       if (step4Data.selectedTransport) {
-        const { routeId, transportId, vehicleTypeId, price } = step4Data.selectedTransport;
+        const { transportId } = step4Data.selectedTransport;
         
-        // Get the route to determine from/to locations
-        const route = await tx.transportRouteMaster.findUnique({
-          where: { id: routeId },
-          include: {
-            city1: { select: { id: true, name: true } },
-            city2: { select: { id: true, name: true } },
-            city3: { select: { id: true, name: true } },
-            city4: { select: { id: true, name: true } },
-          },
-        });
-
-        if (route) {
-          // Get LocationMaster IDs for first and last cities in the route
-          const firstCityId = route.city1.id;
-          const lastCityId = route.city4?.id || route.city3?.id || route.city2.id;
-
-          // Find LocationMaster entries for these cities
-          const firstCityLocation = await tx.locationMaster.findFirst({
-            where: {
-              cityId: firstCityId,
-              isActive: true,
-            },
-            orderBy: { locationType: 'asc' },
-          });
-
-          const lastCityLocation = await tx.locationMaster.findFirst({
-            where: {
-              cityId: lastCityId,
-              isActive: true,
-            },
-            orderBy: { locationType: 'asc' },
-          });
-
-          if (firstCityLocation && lastCityLocation) {
-            // Get vehicle type for paxCount and vehicleName
-            const vehicleType = await tx.vehicleTypeMaster.findUnique({
-              where: { id: vehicleTypeId },
-              select: { paxCount: true, vehicleName: true },
-            });
-
-            transportBookings.push({
-              fromLocationId: firstCityLocation.id,
-              toLocationId: lastCityLocation.id,
-              vehicleType: vehicleType?.vehicleName || vehicleTypeId, // Use vehicle name or fallback to ID
-              paxCount: vehicleType?.paxCount || step1Data.passengerCount || 0,
-              price: price,
-              travelDate: step2Data.arrivalDate, // Use arrival date as default
-              travelTime: step2Data.arrivalTime || '00:00', // Use arrival time as default
-            } as any);
-          }
-        }
-      }
-
-      // Convert ziyaraths to transport segments
-      if (step3Data.ziyaraths && step3Data.ziyaraths.length > 0) {
-        // Get all hotel bookings from step2Data (hotels are validated in step2)
-        const hotelBookingsData = step2Data.hotelBookings || [];
-        
-        // Fetch all location masters for ziyaraths and hotels
-        const ziyarathLocationIds = step3Data.ziyaraths.map((z: any) => z.ziyarathId);
-        const hotelLocationIds = hotelBookingsData.map((h: any) => h.hotelId);
-        const allLocationIds = [...ziyarathLocationIds, ...hotelLocationIds];
-        
-        const locationMasters = await tx.locationMaster.findMany({
-          where: { id: { in: allLocationIds } },
-          include: { cityMaster: true },
-        });
-
-        // Create a map of ziyarath location -> city
-        const ziyarathCityMap = new Map<string, string>();
-        step3Data.ziyaraths.forEach((ziyarath: any) => {
-          const ziyarathLoc = locationMasters.find(lm => lm.id === ziyarath.ziyarathId);
-          if (ziyarathLoc) {
-            const cityName = (ziyarathLoc.city || ziyarathLoc.cityMaster?.name || '').toLowerCase().trim();
-            ziyarathCityMap.set(ziyarath.ziyarathId, cityName);
-          }
-        });
-
-        // Find hotel for each ziyarath (hotel in same city)
-        // Use for...of loop to handle async operations
-        for (const ziyarath of step3Data.ziyaraths as any[]) {
-          const ziyarathCity = ziyarathCityMap.get(ziyarath.ziyarathId);
-          if (!ziyarathCity) continue;
-
-          // Find hotel booking in the same city
-          const hotelBooking = hotelBookingsData.find((hb: any) => {
-            const hotelLoc = locationMasters.find(lm => lm.id === hb.hotelId);
-            if (!hotelLoc) return false;
-            const hotelCity = (hotelLoc.city || hotelLoc.cityMaster?.name || '').toLowerCase().trim();
-            return hotelCity === ziyarathCity;
-          });
-
-          if (!hotelBooking) continue;
-
-          // Get city location ID (from hotel's city)
-          const hotelLoc = locationMasters.find(lm => lm.id === hotelBooking.hotelId);
-          if (!hotelLoc || !hotelLoc.cityId) continue;
-
-          // Find the LocationMaster that represents the city itself
-          // Cities are typically stored as LocationMaster entries with the same cityId
-          // Try to find any LocationMaster with the same cityId (could be OTHERS type or any type)
-          const cityLocationMaster = await tx.locationMaster.findFirst({
-            where: {
-              cityId: hotelLoc.cityId,
-              isActive: true,
-            },
-            orderBy: {
-              locationType: 'asc', // Prefer specific types first
-            },
-          });
-
-          if (!cityLocationMaster) {
-            console.warn(`[create-group-booking] City LocationMaster not found for cityId: ${hotelLoc.cityId}`);
-            continue;
-          }
-
-          // Convert ziyarath to transport segment
-          transportBookings.push({
-            fromLocationId: cityLocationMaster.id, // City LocationMaster ID
-            toLocationId: cityLocationMaster.id,   // Same city (ziyarath is within city)
-            fromHotelId: hotelBooking.hotelId, // Hotel LocationMaster ID
-            toHotelId: ziyarath.ziyarathId,    // Ziyarath LocationMaster ID
-            vehicleType: '',                   // Ziyarath doesn't require vehicle type
-            paxCount: 0,                       // Will be set based on passenger count
-            price: 0,                          // Ziyarath is typically included
-            travelDate: ziyarath.date,
-            travelTime: ziyarath.time,
-          } as any);
-        }
-      }
-
-      if (transportBookings.length > 0) {
-        // First, collect all location IDs that need to be resolved
-        const allLocationIds = new Set<string>();
-        transportBookings.forEach((transport: any) => {
-          if (transport.fromLocationId) allLocationIds.add(transport.fromLocationId);
-          if (transport.toLocationId) allLocationIds.add(transport.toLocationId);
-        });
-
-        // Check which ones are LocationMaster IDs and which might be CityMaster IDs
-        const locationIdsArray = Array.from(allLocationIds);
-        const existingLocationMasters = await tx.locationMaster.findMany({
-          where: { id: { in: locationIdsArray } },
-          select: { id: true },
-        });
-
-        const existingLocationMasterIds = new Set(existingLocationMasters.map(lm => lm.id));
-        const potentialCityMasterIds = locationIdsArray.filter(id => !existingLocationMasterIds.has(id));
-
-        // For potential CityMaster IDs, find corresponding LocationMaster entries
-        const cityToLocationMasterMap = new Map<string, string>();
-        if (potentialCityMasterIds.length > 0) {
-          // Find LocationMaster entries that have these cityIds
-          const cityLocationMasters = await tx.locationMaster.findMany({
-            where: {
-              cityId: { in: potentialCityMasterIds },
-              isActive: true,
-            },
-            select: { id: true, cityId: true },
-            orderBy: {
-              locationType: 'asc', // Prefer OTHERS type
-            },
-          });
-
-          // Group by cityId and take the first one for each city
-          const cityIdToLocationMaster = new Map<string, string>();
-          cityLocationMasters.forEach((lm) => {
-            if (!cityIdToLocationMaster.has(lm.cityId)) {
-              cityIdToLocationMaster.set(lm.cityId, lm.id);
-            }
-          });
-
-          // For each potential CityMaster ID, map to LocationMaster ID
-          potentialCityMasterIds.forEach((cityId) => {
-            const locationMasterId = cityIdToLocationMaster.get(cityId);
-            if (locationMasterId) {
-              cityToLocationMasterMap.set(cityId, locationMasterId);
-            }
-          });
-        }
-
-        await Promise.all(
-          transportBookings.map((transport: any) => {
-            // Resolve fromLocationId
-            let fromLocationId = transport.fromLocationId;
-            if (fromLocationId && !existingLocationMasterIds.has(fromLocationId)) {
-              const resolvedId = cityToLocationMasterMap.get(fromLocationId);
-              if (resolvedId) {
-                fromLocationId = resolvedId;
-              } else {
-                // If still not found, throw error
-                throw new Error(`Invalid fromLocationId: ${transport.fromLocationId}. Not found in LocationMaster or CityMaster.`);
-              }
-            }
-
-            // Resolve toLocationId
-            let toLocationId = transport.toLocationId;
-            if (toLocationId && !existingLocationMasterIds.has(toLocationId)) {
-              const resolvedId = cityToLocationMasterMap.get(toLocationId);
-              if (resolvedId) {
-                toLocationId = resolvedId;
-              } else {
-                // If still not found, throw error
-                throw new Error(`Invalid toLocationId: ${transport.toLocationId}. Not found in LocationMaster or CityMaster.`);
-              }
-            }
-
-            // Combine travel date and time into datetime before storing
-            const travelDateTime = transport.travelDate && transport.travelTime
-              ? combineDateTime(transport.travelDate, transport.travelTime)
+        // Combine arrival date and time for travelDateTime
+        const travelDateTime = step2Data.arrivalDate && step2Data.arrivalTime
+          ? combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime)
               : undefined;
 
-            return tx.umrahTransportBooking.create({
+        // Store transportMasterId and travelDateTime - all other data (route, vehicle, price) comes from TransportMaster
+        await tx.umrahTransportBooking.create({
               data: {
                 bookingId: booking.id,
-                fromLocationId: fromLocationId,
-                toLocationId: toLocationId,
-                fromSpecificLocationId: transport.fromHotelId || null,
-                toSpecificLocationId: transport.toHotelId || null,
-                vehicleType: transport.vehicleType || '',
-                paxCount: transport.paxCount || passengerCount || 1,
-                price: transport.price || 0,
+            transportMasterId: transportId, // This is the TransportMaster ID
                 travelDateTime,
               },
             });
-          })
+      }
+
+      // 6.5. Create UmrahMovementDetail entries from step3Data (transportSegments and ziyaraths)
+      const movementDetailsToCreate: Array<{
+        bookingId: string;
+        travelDateTime: Date;
+        fromCityId: string;
+        fromLocationId: string;
+        toCityId: string;
+        toLocationId: string;
+      }> = [];
+
+      // Process transportSegments
+      // Frontend sends: fromLocationId/toLocationId = City IDs, fromHotelId/toHotelId = LocationMaster IDs
+      // Database needs: fromCityId/toCityId = City IDs, fromLocationId/toLocationId = LocationMaster IDs
+      if (step3Data.transportSegments && Array.isArray(step3Data.transportSegments)) {
+        for (const segment of step3Data.transportSegments) {
+          // Map frontend data to database structure
+          let fromCityId: string;
+          let fromLocationId: string;
+          let toCityId: string;
+          let toLocationId: string;
+
+          // Handle "from" location
+          if (segment.fromHotelId) {
+            // fromHotelId is the LocationMaster ID (specific hotel/airport)
+            const fromLocation = await tx.locationMaster.findUnique({
+              where: { id: segment.fromHotelId },
+              select: { id: true, cityId: true },
+            });
+            if (!fromLocation) {
+              throw new Error(`Invalid fromHotelId in transport segment: ${segment.fromHotelId}`);
+            }
+            fromLocationId = fromLocation.id; // LocationMaster ID
+            fromCityId = fromLocation.cityId; // City ID from LocationMaster
+          } else {
+            // fromLocationId is a City ID, we need to find a LocationMaster for that city
+            fromCityId = segment.fromLocationId; // This is already a City ID
+            const cityLocation = await tx.locationMaster.findFirst({
+              where: { cityId: segment.fromLocationId },
+              select: { id: true },
+            });
+            if (!cityLocation) {
+              throw new Error(`No LocationMaster found for city ID: ${segment.fromLocationId}`);
+            }
+            fromLocationId = cityLocation.id; // Use first LocationMaster found for this city
+          }
+
+          // Handle "to" location
+          if (segment.toHotelId) {
+            // toHotelId is the LocationMaster ID (specific hotel/airport)
+            const toLocation = await tx.locationMaster.findUnique({
+              where: { id: segment.toHotelId },
+              select: { id: true, cityId: true },
+            });
+            if (!toLocation) {
+              throw new Error(`Invalid toHotelId in transport segment: ${segment.toHotelId}`);
+            }
+            toLocationId = toLocation.id; // LocationMaster ID
+            toCityId = toLocation.cityId; // City ID from LocationMaster
+          } else {
+            // toLocationId is a City ID, we need to find a LocationMaster for that city
+            toCityId = segment.toLocationId; // This is already a City ID
+            const cityLocation = await tx.locationMaster.findFirst({
+              where: { cityId: segment.toLocationId },
+              select: { id: true },
+            });
+            if (!cityLocation) {
+              throw new Error(`No LocationMaster found for city ID: ${segment.toLocationId}`);
+            }
+            toLocationId = cityLocation.id; // Use first LocationMaster found for this city
+          }
+
+          // Combine travelDate and travelTime into travelDateTime
+          // If time is missing or empty, default to 12:00 PM (noon)
+          const timeToUse = segment.travelTime && segment.travelTime.trim() !== '' 
+            ? segment.travelTime 
+            : '12:00'; // Default to noon if time is not provided
+
+          if (!segment.travelDate) {
+            throw new Error(`Missing travel date for transport segment from ${fromLocationId} to ${toLocationId}`);
+          }
+
+          const travelDateTime = combineDateTime(segment.travelDate, timeToUse);
+
+          if (!travelDateTime) {
+            throw new Error(`Invalid travel date/time for transport segment from ${fromLocationId} to ${toLocationId}. Date: ${segment.travelDate}, Time: ${timeToUse}`);
+          }
+
+          movementDetailsToCreate.push({
+            bookingId: booking.id,
+            travelDateTime,
+            fromCityId,
+            fromLocationId,
+            toCityId,
+            toLocationId,
+          });
+        }
+      }
+
+      // Process ziyaraths
+      if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths) && step3Data.ziyaraths.length > 0) {
+        // Create a combined list of all movements (transport segments + ziyaraths) for sorting
+        const transportMovements = movementDetailsToCreate.map((md, idx) => ({
+          type: 'transport' as const,
+          travelDateTime: md.travelDateTime,
+          data: md,
+          index: idx,
+        }));
+
+        const ziyarathMovements = step3Data.ziyaraths.map((z: { id: string; ziyarathId: string; date: Date | string; time: string }) => ({
+          type: 'ziyarath' as const,
+          travelDateTime: combineDateTime(
+            z.date instanceof Date ? z.date.toISOString().split('T')[0] : z.date,
+            z.time
+          ),
+          data: z,
+        }));
+
+        // Sort all movements by date/time
+        const allMovements = [...transportMovements, ...ziyarathMovements]
+          .filter((m) => m.travelDateTime !== null)
+          .sort((a, b) => {
+            const dateA = a.travelDateTime as Date;
+            const dateB = b.travelDateTime as Date;
+            return dateA.getTime() - dateB.getTime();
+          });
+
+        // Process ziyaraths in chronological order
+        // Track ziyaraths as they're processed so we can reference them
+        const processedZiyaraths: Array<{ toCityId: string; toLocationId: string }> = [];
+        
+        for (const movement of allMovements) {
+          if (movement.type === 'ziyarath') {
+            const ziyarath = movement.data as any;
+            
+            // Find previous movement's toCityId and toLocationId
+            const currentIndex = allMovements.indexOf(movement);
+            let fromCityId: string | null = null;
+            let fromLocationId: string | null = null;
+
+            // Look for the previous movement (could be transport or ziyarath)
+            for (let i = currentIndex - 1; i >= 0; i--) {
+              const prevMovement = allMovements[i];
+              if (prevMovement.type === 'transport') {
+                const prevData = prevMovement.data as any;
+                fromCityId = prevData.toCityId;
+                fromLocationId = prevData.toLocationId;
+                break;
+              } else if (prevMovement.type === 'ziyarath') {
+                // If previous is also a ziyarath, find its index in processedZiyaraths
+                // Count how many ziyaraths came before this one
+                let ziyarathIndex = 0;
+                for (let j = 0; j < i; j++) {
+                  if (allMovements[j].type === 'ziyarath') {
+                    ziyarathIndex++;
+                  }
+                }
+                if (ziyarathIndex < processedZiyaraths.length) {
+                  const prevZiyarath = processedZiyaraths[ziyarathIndex];
+                  fromCityId = prevZiyarath.toCityId;
+                  fromLocationId = prevZiyarath.toLocationId;
+                  break;
+                }
+              }
+            }
+
+            // If no previous movement found, use the last hotel booking's location
+            if (!fromCityId || !fromLocationId) {
+              const lastHotelBooking = hotelBookingsData.length > 0 
+                ? hotelBookingsData[hotelBookingsData.length - 1]
+                : null;
+              
+              if (lastHotelBooking) {
+                const hotelLocation = await tx.locationMaster.findUnique({
+                  where: { id: lastHotelBooking.hotelId },
+                  select: { cityId: true, id: true },
+                });
+                if (hotelLocation) {
+                  fromCityId = hotelLocation.cityId;
+                  fromLocationId = hotelLocation.id;
+                }
+              }
+            }
+
+            if (!fromCityId || !fromLocationId) {
+              throw new Error(`Cannot determine 'from' location for ziyarath ${ziyarath.ziyarathId}. No previous movement found.`);
+            }
+
+            // Get ziyarath's LocationMaster to find its city
+            const ziyarathLocation = await tx.locationMaster.findUnique({
+              where: { id: ziyarath.ziyarathId },
+              select: { cityId: true },
+            });
+
+            if (!ziyarathLocation) {
+              throw new Error(`Invalid ziyarath location ID: ${ziyarath.ziyarathId}`);
+            }
+
+            // travelDateTime was already calculated during sorting
+            const travelDateTime = movement.travelDateTime as Date;
+
+            const ziyarathMovement = {
+              bookingId: booking.id,
+              travelDateTime,
+              fromCityId,
+              fromLocationId,
+              toCityId: ziyarathLocation.cityId,
+              toLocationId: ziyarath.ziyarathId,
+            };
+
+            movementDetailsToCreate.push(ziyarathMovement);
+            processedZiyaraths.push({
+              toCityId: ziyarathLocation.cityId,
+              toLocationId: ziyarath.ziyarathId,
+            });
+          }
+        }
+      }
+
+      // Create all movement details
+      if (movementDetailsToCreate.length > 0) {
+        await Promise.all(
+          movementDetailsToCreate.map((movement) =>
+            tx.umrahMovementDetail.create({
+              data: movement,
+            })
+          )
         );
       }
 

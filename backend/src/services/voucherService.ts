@@ -101,3 +101,65 @@ export function formatDate(date: Date | string | null | undefined): string {
   return `${day}-${month}-${year}`;
 }
 
+/**
+ * Assign route numbers to movement details for a booking
+ * Route numbers are 5-digit, global across all bookings, sequential
+ * @param bookingId - Booking ID to assign route numbers to
+ * @returns Array of movement details with assigned route numbers
+ */
+export async function assignRouteNumbersToMovementDetails(bookingId: string): Promise<void> {
+  try {
+    // Get all movement details for this booking that don't have route numbers yet
+    const movementDetails = await prisma.umrahMovementDetail.findMany({
+      where: {
+        bookingId,
+        routeNumber: null,
+      },
+      orderBy: {
+        travelDateTime: 'asc',
+      },
+    });
+
+    if (movementDetails.length === 0) {
+      return; // No movement details to assign route numbers to
+    }
+
+    // Get the highest route number across all bookings
+    const lastMovement = await prisma.umrahMovementDetail.findFirst({
+      where: {
+        routeNumber: { not: null },
+      },
+      orderBy: {
+        routeNumber: 'desc',
+      },
+      select: {
+        routeNumber: true,
+      },
+    });
+
+    // Start from 00001 if no route numbers exist, otherwise increment from the highest
+    let nextRouteNumber = 1;
+    if (lastMovement?.routeNumber) {
+      const lastNumber = parseInt(lastMovement.routeNumber, 10);
+      if (!isNaN(lastNumber)) {
+        nextRouteNumber = lastNumber + 1;
+      }
+    }
+
+    // Assign route numbers sequentially
+    await Promise.all(
+      movementDetails.map((movement, index) =>
+        prisma.umrahMovementDetail.update({
+          where: { id: movement.id },
+          data: {
+            routeNumber: (nextRouteNumber + index).toString().padStart(5, '0'),
+          },
+        })
+      )
+    );
+  } catch (error) {
+    console.error('Error assigning route numbers to movement details:', error);
+    throw new Error('Failed to assign route numbers to movement details');
+  }
+}
+
