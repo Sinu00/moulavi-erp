@@ -131,31 +131,11 @@ export class CacheService {
   }
 
   /**
-   * Cache transport pricing
+   * Cache transport pricing - REMOVED: TransportPricing table has been removed
    */
   static async getCachedTransportPricing(routeId: string, transportType: string, paxCount: number) {
-    const key = this.generateKey('transport-pricing', routeId, transportType, paxCount);
-    let pricing = this.get(key);
-
-    if (!pricing) {
-      pricing = await prisma.transportPricing.findFirst({
-        where: {
-          routeId,
-          transportType,
-          paxCount,
-          isActive: true
-        },
-        orderBy: {
-          validFrom: 'desc'
-        }
-      });
-
-      if (pricing) {
-        this.set(key, pricing, 30 * 60 * 1000); // 30 minutes
-      }
-    }
-
-    return pricing;
+    // TransportPricing table has been removed
+    return null;
   }
 
   /**
@@ -191,9 +171,11 @@ export class CacheService {
       const where: any = { isDeleted: false };
       
       if (dateFrom || dateTo) {
-        where.arrivalDate = {};
-        if (dateFrom) where.arrivalDate.gte = dateFrom;
-        if (dateTo) where.arrivalDate.lte = dateTo;
+        where.travelDetails = {
+          arrivalDateTime: {}
+        };
+        if (dateFrom) where.travelDetails.arrivalDateTime.gte = dateFrom;
+        if (dateTo) where.travelDetails.arrivalDateTime.lte = dateTo;
       }
 
       const [
@@ -252,6 +234,7 @@ export class CacheService {
    * Invalidate transport pricing cache
    */
   static invalidateTransportPricingCache(): void {
+    // TransportPricing table has been removed - no-op
     this.invalidatePattern('^transport-pricing:');
   }
 

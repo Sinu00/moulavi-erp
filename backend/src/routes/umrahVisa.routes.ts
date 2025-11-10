@@ -26,9 +26,7 @@ router.get('/bookings', authenticate, async (req, res) => {
       });
       
       if (userParty) {
-        where.service = {
-          partyId: userParty.id,
-        };
+        where.partyId = userParty.id;
       } else {
         // If no party found for this user, return empty results
         return res.json({
@@ -44,13 +42,18 @@ router.get('/bookings', authenticate, async (req, res) => {
     }
     // If admin/staff and partyId is provided, filter by that partyId
     else if (partyId) {
-      where.service = {
-        partyId: partyId,
-      };
+      where.partyId = partyId;
     }
     
     if (status && status !== 'all') {
-      where.status = status;
+      // Handle both string and array values for status
+      if (Array.isArray(status)) {
+        // If status is an array, use Prisma's 'in' operator
+        where.status = { in: status };
+      } else {
+        // If status is a single string, use it directly
+        where.status = status;
+      }
     }
 
     const [bookings, total] = await Promise.all([
@@ -74,7 +77,13 @@ router.get('/bookings', authenticate, async (req, res) => {
               departureAirport: true,
             },
           },
-          accommodationDetails: true,
+          hotelBookings: {
+            include: {
+              hotel: true,
+              location: true,
+            },
+          },
+          sponsorIqamaDetails: true,
           passengers: {
             include: {
               documents: true,
@@ -139,16 +148,16 @@ router.get('/:bookingId', authenticate, async (req, res) => {
             departureAirport: true,
           },
         },
-        accommodationDetails: {
+        hotelBookings: {
           include: {
-            hotelBookings: {
-              include: {
-                location: true,
-                hotel: true,
-              },
-            },
+            location: true,
+            hotel: true,
+          },
+          orderBy: {
+            checkInDate: 'asc',
           },
         },
+        sponsorIqamaDetails: true,
         transportBookings: {
           include: {
             fromLocation: true,
@@ -227,29 +236,14 @@ router.get('/transport-options/:airportId', authenticate, async (req, res) => {
       });
     }
 
-    // Get available transport options FROM this airport or any location in the city
-    // Use the airport itself as the from location since transport routes are between locations
-    const transportOptions = await prisma.transportMaster.findMany({
-      where: {
-        fromLocationId: airport.id, // Use the airport itself as the from location
-        isActive: true,
-      },
-      include: {
-        fromLocation: true,
-        toLocation: true,
-        vehicleType: true,
-      },
-      orderBy: [
-        { toLocation: { name: 'asc' } },
-        { vehicleType: { vehicleName: 'asc' } },
-      ],
-    });
-
+    // TransportMaster has been removed - return empty transport options
+    // TODO: Implement alternative transport options retrieval if needed
     res.json({
       requiresTransport: true,
       airport,
       fromCity: fromCity,
-      transportOptions,
+      transportOptions: [],
+      message: 'Transport options not available - TransportMaster has been removed',
     });
   } catch (error) {
     console.error('Error fetching transport options:', error);

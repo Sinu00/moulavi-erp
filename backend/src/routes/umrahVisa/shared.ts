@@ -3,6 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { combineDateTime } from '../../utils/datetime';
 
 // Export Prisma client instance (shared across all route files)
 export const prisma = new PrismaClient();
@@ -82,25 +83,15 @@ export const findCityByName = async (cityName: string) => {
 // Common Zod schemas used by multiple route files
 
 // Step 2 schema - used by both individual and group
+// Note: Date and time are kept as separate strings for UI compatibility
+// They will be combined into datetime before storing in the database
 export const step2Schema = z.object({
-  arrivalDate: z.string().transform((str) => new Date(str)),
-  arrivalTime: z.string().transform((str) => {
-    // Convert time string to DateTime (using today's date with the time)
-    const today = new Date();
-    const [hours, minutes] = str.split(':');
-    today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    return today;
-  }),
+  arrivalDate: z.string(), // YYYY-MM-DD format
+  arrivalTime: z.string(), // HH:mm format
   arrivalAirportId: z.string().uuid(),
   arrivalFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
-  departureDate: z.string().transform((str) => new Date(str)),
-  departureTime: z.string().transform((str) => {
-    // Convert time string to DateTime (using today's date with the time)
-    const today = new Date();
-    const [hours, minutes] = str.split(':');
-    today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    return today;
-  }),
+  departureDate: z.string(), // YYYY-MM-DD format
+  departureTime: z.string(), // HH:mm format
   departureAirportId: z.string().uuid(),
   departureFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
   transportBookings: z.array(z.object({
@@ -109,14 +100,8 @@ export const step2Schema = z.object({
     vehicleType: z.string(),
     paxCount: z.number().min(1),
     price: z.number().min(0),
-    travelDate: z.string().transform((str) => new Date(str)).optional(),
-    travelTime: z.string().transform((str) => {
-      // Convert time string to DateTime (using today's date with the time)
-      const today = new Date();
-      const [hours, minutes] = str.split(':');
-      today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-      return today;
-    }).optional(),
+    travelDate: z.string().optional(), // YYYY-MM-DD format
+    travelTime: z.string().optional(), // HH:mm format
   })).optional(),
   hotelBookings: z.array(z.object({
     locationId: z.string().uuid(),
@@ -136,6 +121,7 @@ export const step3Schema = z.object({
     iqamaName: z.string().optional(),
     iqamaDob: z.string().transform((str) => new Date(str)).optional(),
     iqamaMobile: z.string().optional(),
+    iqamaNationalShortAddress: z.string().optional(),
   }).optional(),
   hotelBookings: z.array(z.object({
     locationId: z.string().uuid(),
@@ -189,13 +175,8 @@ export const groupStep3Schema = z.object({
     vehicleType: z.string().optional(), // Made optional since it's not displayed in UI
     paxCount: z.number().min(0), // Changed to allow 0 (will be updated later)
     price: z.number().min(0),
-    travelDate: z.string().transform((str) => new Date(str)).optional(),
-    travelTime: z.string().transform((str) => {
-      const today = new Date();
-      const [hours, minutes] = str.split(':');
-      today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-      return today;
-    }).optional(),
+    travelDate: z.string().optional(), // YYYY-MM-DD format
+    travelTime: z.string().optional(), // HH:mm format
   })).optional(),
   ziyaraths: z.array(z.object({
     id: z.string(),

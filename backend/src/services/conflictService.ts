@@ -161,10 +161,10 @@ export class ConflictService {
         travelDetails: {
           OR: [
             {
-              arrivalDate: {
+              arrivalDateTime: {
                 lte: new Date(departureDate)
               },
-              departureDate: {
+              departureDateTime: {
                 gte: new Date(arrivalDate)
               }
             }

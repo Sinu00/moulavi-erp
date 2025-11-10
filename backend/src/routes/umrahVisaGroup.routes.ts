@@ -10,6 +10,7 @@ import {
   groupStep3Schema,
   upload,
 } from './umrahVisa/shared';
+import { combineDateTime } from '../utils/datetime';
 
 const router = Router();
 
@@ -59,8 +60,10 @@ router.post('/group/step2', authenticate, async (req, res) => {
   try {
     const validatedData = step2Schema.parse(req.body);
 
-    // Validate date range (80 days max)
-    if (!validateDateRange(validatedData.arrivalDate, validatedData.departureDate)) {
+    // Validate date range (80 days max) - convert strings to Date objects
+    const arrivalDateObj = new Date(validatedData.arrivalDate);
+    const departureDateObj = new Date(validatedData.departureDate);
+    if (!validateDateRange(arrivalDateObj, departureDateObj)) {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
@@ -115,36 +118,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
       step3Data = JSON.parse(req.body.step3);
       step4Data = JSON.parse(req.body.step4);
       
-      // Convert date strings to Date objects for step2Data
-      if (step2Data.arrivalDate) {
-        step2Data.arrivalDate = new Date(step2Data.arrivalDate);
-      }
-      if (step2Data.departureDate) {
-        step2Data.departureDate = new Date(step2Data.departureDate);
-      }
-      // Convert time strings (HH:mm) to Date objects
-      if (step2Data.arrivalTime) {
-        if (typeof step2Data.arrivalTime === 'string' && step2Data.arrivalTime.includes(':')) {
-          // Time is in HH:mm format, combine with today's date
-          const today = new Date();
-          const [hours, minutes] = step2Data.arrivalTime.split(':');
-          today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-          step2Data.arrivalTime = today;
-        } else {
-          step2Data.arrivalTime = new Date(step2Data.arrivalTime);
-        }
-      }
-      if (step2Data.departureTime) {
-        if (typeof step2Data.departureTime === 'string' && step2Data.departureTime.includes(':')) {
-          // Time is in HH:mm format, combine with today's date
-          const today = new Date();
-          const [hours, minutes] = step2Data.departureTime.split(':');
-          today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-          step2Data.departureTime = today;
-        } else {
-          step2Data.departureTime = new Date(step2Data.departureTime);
-        }
-      }
+      // Keep date and time as strings - they will be combined before storing
+      // No conversion needed here
       
       // Convert date strings to Date objects for step3Data hotel bookings
       if (step3Data.hotelBookings && Array.isArray(step3Data.hotelBookings)) {
@@ -164,27 +139,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         }));
       }
       
-      // Convert date strings to Date objects for step3Data transport segments
-      if (step3Data.transportSegments && Array.isArray(step3Data.transportSegments)) {
-        step3Data.transportSegments = step3Data.transportSegments.map((segment: any) => {
-          const converted: any = { ...segment };
-          if (segment.travelDate) {
-            converted.travelDate = new Date(segment.travelDate);
-          }
-          if (segment.travelTime) {
-            if (typeof segment.travelTime === 'string' && segment.travelTime.includes(':')) {
-              // Time is in HH:mm format, combine with today's date
-              const today = new Date();
-              const [hours, minutes] = segment.travelTime.split(':');
-              today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-              converted.travelTime = today;
-            } else {
-              converted.travelTime = new Date(segment.travelTime);
-            }
-          }
-          return converted;
-        });
-      }
+      // Keep travel date and time as strings - they will be combined before storing
+      // No conversion needed here
       
       // Convert date strings to Date objects for step3Data ziyaraths
       if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths)) {
@@ -208,8 +164,10 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
       return res.status(400).json({ error: 'Party ID is required' });
     }
 
-    // Validate date range
-    if (!validateDateRange(step2Data.arrivalDate, step2Data.departureDate)) {
+    // Validate date range - convert strings to Date objects
+    const arrivalDateObj = new Date(step2Data.arrivalDate);
+    const departureDateObj = new Date(step2Data.departureDate);
+    if (!validateDateRange(arrivalDateObj, departureDateObj)) {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
@@ -264,30 +222,27 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         },
       });
 
-      // 3. Create UmrahTravelDetails
+      // 3. Create UmrahTravelDetails - combine date and time before storing
+      const arrivalDateTime = combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime);
+      const departureDateTime = combineDateTime(step2Data.departureDate, step2Data.departureTime);
+      
+      if (!arrivalDateTime || !departureDateTime) {
+        throw new Error('Invalid arrival or departure date/time');
+      }
+
       const travelDetails = await tx.umrahTravelDetails.create({
         data: {
           bookingId: booking.id,
-          arrivalDate: step2Data.arrivalDate,
-          arrivalTime: step2Data.arrivalTime,
+          arrivalDateTime,
           arrivalAirportId: step2Data.arrivalAirportId,
           arrivalFlightNumber: step2Data.arrivalFlightNumber,
-          departureDate: step2Data.departureDate,
-          departureTime: step2Data.departureTime,
+          departureDateTime,
           departureAirportId: step2Data.departureAirportId,
           departureFlightNumber: step2Data.departureFlightNumber,
         },
       });
 
-      // 4. Create UmrahAccommodationDetails (always hotel for group)
-      const accommodationDetails = await tx.umrahAccommodationDetails.create({
-        data: {
-          bookingId: booking.id,
-          accommodationType: 'hotel',
-        },
-      });
-
-      // 5. Create UmrahHotelBooking (from step2Data for group bookings)
+      // 4. Create UmrahHotelBooking (from step2Data for group bookings - always hotel for group)
       const hotelBookingsData = step2Data.hotelBookings || [];
       if (hotelBookingsData.length > 0) {
         // First, resolve locationId: frontend sends CityMaster ID, but we need LocationMaster ID
@@ -373,7 +328,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
             return tx.umrahHotelBooking.create({
               data: {
-                accommodationId: accommodationDetails.id,
+                bookingId: booking.id,
                 locationId: locationMasterId,
                 hotelId: hotel.hotelId,
                 checkInDate: hotel.checkInDate,
@@ -466,12 +421,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
             paxCount: 0,                       // Will be set based on passenger count
             price: 0,                          // Ziyarath is typically included
             travelDate: ziyarath.date,
-            travelTime: ziyarath.time ? (() => {
-              const today = new Date();
-              const [hours, minutes] = ziyarath.time.split(':');
-              today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-              return today;
-            })() : null,
+            travelTime: ziyarath.time,
           } as any);
         }
       }
@@ -552,37 +502,10 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
               }
             }
 
-            // Ensure travelTime is a valid Date or null
-            let travelTime: Date | null = null;
-            if (transport.travelTime) {
-              if (transport.travelTime instanceof Date) {
-                // Check if Date is valid
-                if (!isNaN(transport.travelTime.getTime())) {
-                  travelTime = transport.travelTime;
-                }
-              } else if (typeof transport.travelTime === 'string') {
-                // Try to parse as Date
-                const parsedDate = new Date(transport.travelTime);
-                if (!isNaN(parsedDate.getTime())) {
-                  travelTime = parsedDate;
-                }
-              }
-            }
-
-            // Ensure travelDate is a valid Date or null
-            let travelDate: Date | null = null;
-            if (transport.travelDate) {
-              if (transport.travelDate instanceof Date) {
-                if (!isNaN(transport.travelDate.getTime())) {
-                  travelDate = transport.travelDate;
-                }
-              } else if (typeof transport.travelDate === 'string') {
-                const parsedDate = new Date(transport.travelDate);
-                if (!isNaN(parsedDate.getTime())) {
-                  travelDate = parsedDate;
-                }
-              }
-            }
+            // Combine travel date and time into datetime before storing
+            const travelDateTime = transport.travelDate && transport.travelTime
+              ? combineDateTime(transport.travelDate, transport.travelTime)
+              : undefined;
 
             return tx.umrahTransportBooking.create({
               data: {
@@ -594,8 +517,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
                 vehicleType: transport.vehicleType || '',
                 paxCount: transport.paxCount || passengerCount || 1,
                 price: transport.price || 0,
-                travelDate: travelDate,
-                travelTime: travelTime,
+                travelDateTime,
               },
             });
           })
@@ -642,8 +564,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
           groupNumber: booking.groupNumber,
           groupName: booking.groupName,
           partyName: party?.partyName || '',
-          arrivalDate: travelDetails.arrivalDate,
-          departureDate: travelDetails.departureDate,
+          arrivalDate: travelDetails.arrivalDateTime,
+          departureDate: travelDetails.departureDateTime,
           updatedBy: user.id,
           status: 'voucher',
         },
@@ -660,7 +582,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         },
       });
 
-      return { booking, travelDetails, accommodationDetails, passengers: passengerRecords, tripInfo };
+      return { booking, travelDetails, passengers: passengerRecords, tripInfo };
     });
 
     res.status(201).json({

@@ -94,8 +94,8 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Location Master', icon: Database, path: '/dashboard/masters/location' },
     { name: 'Vehicle Type Master', icon: Car, path: '/dashboard/masters/vehicle-type' },
     { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
+    { name: 'Transport Route Master', icon: Route, path: '/dashboard/masters/transport-route' },
     { name: 'Transport Master', icon: Truck, path: '/dashboard/masters/transport' },
-    { name: 'Full Trip Master', icon: Route, path: '/dashboard/masters/fulltrip' },
     { name: 'Expense Master', icon: Receipt, path: '/dashboard/masters/expense' },
     { name: 'Income Master', icon: TrendingUp, path: '/dashboard/masters/income' },
   ];
@@ -349,6 +349,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                         if (item.path === '/dashboard/masters/user' || 
                             item.path === '/dashboard/masters/party' || 
                             item.path === '/dashboard/masters/transport' || 
+                            item.path === '/dashboard/masters/transport-route' ||
                             item.path === '/dashboard/masters/fulltrip' || 
                             item.path === '/dashboard/masters/country' || 
                             item.path === '/dashboard/masters/currency' ||

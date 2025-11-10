@@ -9,6 +9,7 @@ import {
   step4Schema,
   FLIGHT_NUMBER_REGEX,
 } from './umrahVisa/shared';
+import { combineDateTime, splitDateTime } from '../utils/datetime';
 
 const router = Router();
 
@@ -66,8 +67,10 @@ router.post('/step2', authenticate, async (req, res) => {
   try {
     const validatedData = step2Schema.parse(req.body);
 
-    // Validate date range (80 days max)
-    if (!validateDateRange(validatedData.arrivalDate, validatedData.departureDate)) {
+    // Validate date range (80 days max) - convert strings to Date objects
+    const arrivalDateObj = new Date(validatedData.arrivalDate);
+    const departureDateObj = new Date(validatedData.departureDate);
+    if (!validateDateRange(arrivalDateObj, departureDateObj)) {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
@@ -123,8 +126,10 @@ router.post('/create-booking', authenticate, async (req, res) => {
     const step3Data = validatedData.step3;
     const step4Data = validatedData.step4;
 
-    // Additional validations
-    if (!validateDateRange(step2Data.arrivalDate, step2Data.departureDate)) {
+    // Additional validations - convert date strings to Date objects for validation
+    const arrivalDateObj = new Date(step2Data.arrivalDate);
+    const departureDateObj = new Date(step2Data.departureDate);
+    if (!validateDateRange(arrivalDateObj, departureDateObj)) {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
@@ -203,40 +208,34 @@ router.post('/create-booking', authenticate, async (req, res) => {
         },
       });
 
-      // 3. Create UmrahTravelDetails
+      // 3. Create UmrahTravelDetails - combine date and time before storing
+      const arrivalDateTime = combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime);
+      const departureDateTime = combineDateTime(step2Data.departureDate, step2Data.departureTime);
+      
+      if (!arrivalDateTime || !departureDateTime) {
+        throw new Error('Invalid arrival or departure date/time');
+      }
+
       const travelDetails = await tx.umrahTravelDetails.create({
         data: {
           bookingId: booking.id,
-          arrivalDate: step2Data.arrivalDate,
-          arrivalTime: step2Data.arrivalTime,
+          arrivalDateTime,
           arrivalAirportId: step2Data.arrivalAirportId,
           arrivalFlightNumber: step2Data.arrivalFlightNumber,
-          departureDate: step2Data.departureDate,
-          departureTime: step2Data.departureTime,
+          departureDateTime,
           departureAirportId: step2Data.departureAirportId,
           departureFlightNumber: step2Data.departureFlightNumber,
         },
       });
 
-      // 4. Create UmrahAccommodationDetails
-      const accommodationDetails = await tx.umrahAccommodationDetails.create({
-        data: {
-          bookingId: booking.id,
-          accommodationType: step3Data.accommodationType,
-          iqamaNumber: step3Data.iqamaDetails?.iqamaNumber,
-          iqamaName: step3Data.iqamaDetails?.iqamaName,
-          iqamaDob: step3Data.iqamaDetails?.iqamaDob,
-          iqamaMobile: step3Data.iqamaDetails?.iqamaMobile,
-        },
-      });
-
-      // 5. Create UmrahHotelBooking (if hotel)
+      // 4. Create accommodation details based on type
       if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings) {
+        // Create hotel bookings directly linked to booking
         await Promise.all(
           step3Data.hotelBookings.map(hotel =>
             tx.umrahHotelBooking.create({
               data: {
-                accommodationId: accommodationDetails.id,
+                bookingId: booking.id,
                 locationId: hotel.locationId,
                 hotelId: hotel.hotelId,
                 checkInDate: hotel.checkInDate,
@@ -245,13 +244,29 @@ router.post('/create-booking', authenticate, async (req, res) => {
             })
           )
         );
+      } else if (step3Data.accommodationType === 'iqama' && step3Data.iqamaDetails) {
+        // Create sponsor iqama details
+        await tx.umrahSponserIqamaDetails.create({
+          data: {
+            bookingId: booking.id,
+            iqamaSponserName: step3Data.iqamaDetails.iqamaName || '',
+            iqamaNumber: step3Data.iqamaDetails.iqamaNumber || '',
+            sponserDob: step3Data.iqamaDetails.iqamaDob ? new Date(step3Data.iqamaDetails.iqamaDob) : new Date(),
+            sponserMobileNumber: step3Data.iqamaDetails.iqamaMobile || '',
+            sponserNationalShortAddress: step3Data.iqamaDetails.iqamaNationalShortAddress || '',
+          },
+        });
       }
 
-      // 6. Create UmrahTransportBooking (if provided)
+      // 6. Create UmrahTransportBooking (if provided) - combine date and time before storing
       if (step2Data.transportBookings && step2Data.transportBookings.length > 0) {
         await Promise.all(
-          step2Data.transportBookings.map(transport =>
-            tx.umrahTransportBooking.create({
+          step2Data.transportBookings.map(transport => {
+            const travelDateTime = transport.travelDate && transport.travelTime
+              ? combineDateTime(transport.travelDate, transport.travelTime)
+              : undefined;
+            
+            return tx.umrahTransportBooking.create({
               data: {
                 bookingId: booking.id,
                 fromLocationId: transport.fromLocationId,
@@ -261,11 +276,10 @@ router.post('/create-booking', authenticate, async (req, res) => {
                 vehicleType: transport.vehicleType,
                 paxCount: transport.paxCount,
                 price: transport.price,
-                travelDate: transport.travelDate,
-                travelTime: transport.travelTime,
+                travelDateTime,
               },
-            })
-          )
+            });
+          })
         );
       }
 
@@ -288,25 +302,31 @@ router.post('/create-booking', authenticate, async (req, res) => {
         select: { partyName: true },
       });
 
-      // 9. Create TripInfo
+      // 9. Get sponsor iqama details if exists
+      const sponsorIqamaDetails = await tx.umrahSponserIqamaDetails.findUnique({
+        where: { bookingId: booking.id },
+      });
+
+      // 10. Create TripInfo
       const tripInfo = await tx.tripInfo.create({
         data: {
           bookingId: booking.id,
           groupNumber: booking.groupNumber,
           groupName: booking.groupName,
           partyName: party?.partyName || '',
-          arrivalDate: travelDetails.arrivalDate,
-          departureDate: travelDetails.departureDate,
-          iqamaNumber: accommodationDetails.iqamaNumber,
-          iqamaHolderName: accommodationDetails.iqamaName,
-          iqamaHolderDob: accommodationDetails.iqamaDob,
-          iqamaHolderMobile: accommodationDetails.iqamaMobile,
+          arrivalDate: travelDetails.arrivalDateTime,
+          departureDate: travelDetails.departureDateTime,
+          iqamaNumber: sponsorIqamaDetails?.iqamaNumber || null,
+          iqamaHolderName: sponsorIqamaDetails?.iqamaSponserName || null,
+          iqamaHolderDob: sponsorIqamaDetails?.sponserDob || null,
+          iqamaHolderMobile: sponsorIqamaDetails?.sponserMobileNumber || null,
+          iqamaNationalShortAddress: sponsorIqamaDetails?.sponserNationalShortAddress || null,
           updatedBy: user.id,
           status: initialStatus,
         },
       });
 
-      // 10. Create BookingStatusHistory
+      // 11. Create BookingStatusHistory
       await tx.bookingStatusHistory.create({
         data: {
           bookingId: booking.id,
@@ -317,7 +337,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
         },
       });
 
-      return { booking, travelDetails, accommodationDetails, passengers, tripInfo };
+      return { booking, travelDetails, passengers, tripInfo };
     });
 
     res.status(201).json({
@@ -352,61 +372,51 @@ router.patch('/:bookingId/travel-details', authenticate, async (req, res) => {
       departureFlightNumber,
     } = req.body || {};
 
-    // Convert time strings (HH:mm) to Date objects if they are strings
-    let arrivalTimeDate: Date | undefined = undefined;
-    if (arrivalTime) {
-      if (typeof arrivalTime === 'string' && arrivalTime.includes(':')) {
-        // Time is in HH:mm format, combine with today's date
-        const today = new Date();
-        const [hours, minutes] = arrivalTime.split(':');
-        today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-        arrivalTimeDate = today;
-      } else if (arrivalTime instanceof Date) {
-        arrivalTimeDate = arrivalTime;
-      } else {
-        arrivalTimeDate = new Date(arrivalTime);
-      }
-    }
+    // Combine date and time into datetime before storing
+    const arrivalDateTime = arrivalDate && arrivalTime
+      ? combineDateTime(arrivalDate, arrivalTime)
+      : undefined;
+    
+    const departureDateTime = departureDate && departureTime
+      ? combineDateTime(departureDate, departureTime)
+      : undefined;
 
-    let departureTimeDate: Date | undefined = undefined;
-    if (departureTime) {
-      if (typeof departureTime === 'string' && departureTime.includes(':')) {
-        // Time is in HH:mm format, combine with today's date
-        const today = new Date();
-        const [hours, minutes] = departureTime.split(':');
-        today.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-        departureTimeDate = today;
-      } else if (departureTime instanceof Date) {
-        departureTimeDate = departureTime;
-      } else {
-        departureTimeDate = new Date(departureTime);
-      }
-    }
+    // Get existing travel details to preserve values if not provided
+    const existing = await prisma.umrahTravelDetails.findUnique({
+      where: { bookingId },
+    });
 
     const travel = await prisma.umrahTravelDetails.upsert({
       where: { bookingId },
       update: {
-        arrivalDate: arrivalDate ? new Date(arrivalDate) : undefined,
-        arrivalTime: arrivalTimeDate,
-        arrivalFlightNumber: arrivalFlightNumber ?? undefined,
-        departureDate: departureDate ? new Date(departureDate) : undefined,
-        departureTime: departureTimeDate,
-        departureFlightNumber: departureFlightNumber ?? undefined,
+        arrivalDateTime: arrivalDateTime ?? existing?.arrivalDateTime,
+        arrivalFlightNumber: arrivalFlightNumber ?? existing?.arrivalFlightNumber,
+        departureDateTime: departureDateTime ?? existing?.departureDateTime,
+        departureFlightNumber: departureFlightNumber ?? existing?.departureFlightNumber,
+        arrivalAirportId: req.body?.arrivalAirportId ?? existing?.arrivalAirportId,
+        departureAirportId: req.body?.departureAirportId ?? existing?.departureAirportId,
       },
       create: {
         bookingId,
-        arrivalDate: arrivalDate ? new Date(arrivalDate) : new Date(),
-        arrivalTime: arrivalTimeDate ?? new Date(),
+        arrivalDateTime: arrivalDateTime ?? new Date(),
         arrivalFlightNumber: arrivalFlightNumber ?? '',
-        departureDate: departureDate ? new Date(departureDate) : new Date(),
-        departureTime: departureTimeDate ?? new Date(),
+        departureDateTime: departureDateTime ?? new Date(),
         departureFlightNumber: departureFlightNumber ?? '',
-        arrivalAirportId: req.body?.arrivalAirportId ?? undefined,
-        departureAirportId: req.body?.departureAirportId ?? undefined,
+        arrivalAirportId: req.body?.arrivalAirportId,
+        departureAirportId: req.body?.departureAirportId,
       },
     });
 
-    res.json({ travelDetails: travel });
+    // Split datetime back to date and time for response (UI compatibility)
+    const response = {
+      ...travel,
+      arrivalDate: splitDateTime(travel.arrivalDateTime)?.date,
+      arrivalTime: splitDateTime(travel.arrivalDateTime)?.time,
+      departureDate: splitDateTime(travel.departureDateTime)?.date,
+      departureTime: splitDateTime(travel.departureDateTime)?.time,
+    };
+
+    res.json({ travelDetails: response });
   } catch (error) {
     console.error('Error updating travel details:', error);
     res.status(500).json({ error: 'Failed to update travel details' });
@@ -417,47 +427,66 @@ router.patch('/:bookingId/travel-details', authenticate, async (req, res) => {
 router.patch('/:bookingId/accommodation', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { accommodationType, iqamaNumber, iqamaName, iqamaDob, iqamaMobile, hotelBookings } = req.body || {};
+    const { accommodationType, iqamaSponserName, iqamaNumber, sponserDob, sponserMobileNumber, sponserNationalShortAddress, hotelBookings } = req.body || {};
 
-    const acc = await prisma.umrahAccommodationDetails.upsert({
-      where: { bookingId },
-      update: {
-        accommodationType: accommodationType ?? undefined,
-        iqamaNumber: iqamaNumber ?? undefined,
-        iqamaName: iqamaName ?? undefined,
-        iqamaDob: iqamaDob ?? undefined,
-        iqamaMobile: iqamaMobile ?? undefined,
-      },
-      create: {
-        bookingId,
-        accommodationType: accommodationType ?? 'hotel',
-        iqamaNumber: iqamaNumber ?? null,
-        iqamaName: iqamaName ?? null,
-        iqamaDob: iqamaDob ?? null,
-        iqamaMobile: iqamaMobile ?? null,
-      },
-      include: { hotelBookings: true },
+    // Get booking to check accommodation type
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      select: { accommodationType: true },
     });
 
-    if (Array.isArray(hotelBookings)) {
-      for (const h of hotelBookings) {
-        if (!h?.id) continue;
-        await prisma.umrahHotelBooking.update({
-          where: { id: h.id },
-          data: {
-            checkInDate: h.checkInDate ?? undefined,
-            checkOutDate: h.checkOutDate ?? undefined,
-          },
-        });
-      }
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
     }
 
-    const refreshed = await prisma.umrahAccommodationDetails.findUnique({
-      where: { bookingId },
-      include: { hotelBookings: { include: { hotel: true, location: true } } },
-    });
+    // Update based on accommodation type
+    if (booking.accommodationType === 'iqama') {
+      // Update or create sponsor iqama details
+      const sponsorIqama = await prisma.umrahSponserIqamaDetails.upsert({
+        where: { bookingId },
+        update: {
+          iqamaSponserName: iqamaSponserName ?? undefined,
+          iqamaNumber: iqamaNumber ?? undefined,
+          sponserDob: sponserDob ? new Date(sponserDob) : undefined,
+          sponserMobileNumber: sponserMobileNumber ?? undefined,
+          sponserNationalShortAddress: sponserNationalShortAddress ?? undefined,
+        },
+        create: {
+          bookingId,
+          iqamaSponserName: iqamaSponserName || '',
+          iqamaNumber: iqamaNumber || '',
+          sponserDob: sponserDob ? new Date(sponserDob) : new Date(),
+          sponserMobileNumber: sponserMobileNumber || '',
+          sponserNationalShortAddress: sponserNationalShortAddress || '',
+        },
+      });
 
-    res.json({ accommodationDetails: refreshed });
+      return res.json({ sponsorIqamaDetails: sponsorIqama });
+    } else if (booking.accommodationType === 'hotel') {
+      // Update hotel bookings
+      if (Array.isArray(hotelBookings)) {
+        for (const h of hotelBookings) {
+          if (!h?.id) continue;
+          await prisma.umrahHotelBooking.update({
+            where: { id: h.id },
+            data: {
+              checkInDate: h.checkInDate ? new Date(h.checkInDate) : undefined,
+              checkOutDate: h.checkOutDate ? new Date(h.checkOutDate) : undefined,
+            },
+          });
+        }
+      }
+
+      const refreshed = await prisma.umrahHotelBooking.findMany({
+        where: { bookingId },
+        include: { hotel: true, location: true },
+        orderBy: { checkInDate: 'asc' },
+      });
+
+      return res.json({ hotelBookings: refreshed });
+    }
+
+    res.json({ message: 'No accommodation details to update' });
   } catch (error) {
     console.error('Error updating accommodation:', error);
     res.status(500).json({ error: 'Failed to update accommodation' });

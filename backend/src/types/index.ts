@@ -4,7 +4,6 @@ import {
   Party, 
   Document, 
   RefreshToken,
-  TransportMaster,
   CurrencyMaster,
   CityMaster,
   LocationMaster,
@@ -23,7 +22,6 @@ export type {
   Party, 
   Document, 
   RefreshToken,
-  TransportMaster,
   CurrencyMaster,
   CityMaster,
   LocationMaster,
@@ -99,20 +97,6 @@ export interface Step4Data {
   }>;
 }
 
-// Transport Pricing Types (Updated)
-export interface TransportPricingRequest {
-  route: string;
-  vehicleType: string;
-  paxCount: number;
-}
-
-export interface TransportPricingResponse {
-  route: string;
-  vehicleType: string;
-  paxCount: number;
-  price: number;
-}
-
 export interface JWTPayload {
   id: string;
   email: string;
@@ -134,25 +118,6 @@ export interface UpdateUserRequest {
   password?: string;
   role?: UserRole;
   is_active?: boolean;
-}
-
-// Transport Master Types (Updated - paxCount instead of pax)
-export interface CreateTransportMasterRequest {
-  fromLocationId: string;
-  toLocationId: string;
-  vehicleType: string;
-  paxCount: number;
-  price: number;
-  isActive?: boolean;
-}
-
-export interface UpdateTransportMasterRequest {
-  fromLocationId?: string;
-  toLocationId?: string;
-  vehicleType?: string;
-  paxCount?: number;
-  price?: number;
-  isActive?: boolean;
 }
 
 // Currency Master Types
@@ -204,6 +169,86 @@ export interface UpdateLocationMasterRequest {
   isActive?: boolean;
 }
 
+// Transport Route Master Types
+export type RouteType = 'citytocity' | 'airporttocity' | 'citytoairport' | 'tripandtour' | 'fulltrip';
+
+export interface TransportRouteMaster {
+  id: string;
+  city1Id: string;
+  city2Id: string;
+  city3Id?: string | null;
+  city4Id?: string | null;
+  routeType: RouteType;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  city1?: {
+    id: string;
+    name: string;
+  };
+  city2?: {
+    id: string;
+    name: string;
+  };
+  city3?: {
+    id: string;
+    name: string;
+  } | null;
+  city4?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface CreateTransportRouteMasterRequest {
+  city1Id: string;
+  city2Id: string;
+  city3Id?: string | null;
+  city4Id?: string | null;
+  routeType: RouteType;
+  isActive?: boolean;
+}
+
+export interface UpdateTransportRouteMasterRequest {
+  city1Id?: string;
+  city2Id?: string;
+  city3Id?: string | null;
+  city4Id?: string | null;
+  routeType?: RouteType;
+  isActive?: boolean;
+}
+
+// Transport Master Types
+export interface TransportMaster {
+  id: string;
+  routeId: string;
+  vehicleTypeId: string;
+  price: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  route?: TransportRouteMaster;
+  vehicleType?: {
+    id: string;
+    vehicleName: string;
+    paxCount: number;
+  };
+}
+
+export interface CreateTransportMasterRequest {
+  routeId: string;
+  vehicleTypeId: string;
+  price: number;
+  isActive?: boolean;
+}
+
+export interface UpdateTransportMasterRequest {
+  routeId?: string;
+  vehicleTypeId?: string;
+  price?: number;
+  isActive?: boolean;
+}
+
 // Umrah Visa Booking Request Types
 export interface CreateUmrahVisaBookingRequest {
   partyId: string;
@@ -247,22 +292,4 @@ export interface CreateUmrahVisaBookingRequest {
     isLeadPassenger: boolean;
   }>;
 }
-
-// Full Trip Master Types
-export interface CreateFullTripMasterRequest {
-  fromCityId: string;
-  toCityIds: string[];
-  vehicleTypeId: string;
-  price: number;
-  isActive?: boolean;
-}
-
-export interface UpdateFullTripMasterRequest {
-  fromCityId?: string;
-  toCityIds?: string[];
-  vehicleTypeId?: string;
-  price?: number;
-  isActive?: boolean;
-}
-
 

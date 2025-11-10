@@ -1,63 +1,60 @@
-'use client';
-
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { transportMasterAPI } from '@/lib/api';
+import { TransportMaster, CreateTransportMasterRequest, UpdateTransportMasterRequest } from '@/types';
 import { toast } from 'sonner';
-import { transportMasterAPI, locationMasterAPI } from '@/lib/api';
-import { TransportMaster, CreateTransportMasterRequest, UpdateTransportMasterRequest, LocationMaster } from '@/types';
 
 export function useTransportMaster() {
   const [transports, setTransports] = useState<TransportMaster[]>([]);
-  const [destinations, setDestinations] = useState<LocationMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredTransports = useMemo(() => {
-    if (!searchTerm) return transports;
-    
-    const term = searchTerm.toLowerCase();
-    return transports.filter(transport =>
-      transport.vehicleType?.vehicleName?.toLowerCase().includes(term) ||
-      transport.fromLocation?.name?.toLowerCase().includes(term) ||
-      transport.toLocation?.name?.toLowerCase().includes(term) ||
-      transport.vehicleType?.paxCount.toString().includes(term) ||
-      transport.price.toString().includes(term)
-    );
-  }, [transports, searchTerm]);
-
-  const loadTransports = async () => {
+  const loadTransports = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await transportMasterAPI.getAll({ limit: 1000 });
-      setTransports(response.data.transportMasters || []);
-    } catch (error) {
+      const response = await transportMasterAPI.getAll({ limit: '1000' });
+      const transportsData = response.data?.transportMasters || [];
+      setTransports(transportsData);
+    } catch (error: any) {
       console.error('Error loading transports:', error);
-      toast.error('Failed to load transport routes');
+      toast.error('Failed to load transports');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadDestinations = async () => {
-    try {
-      // Load all location types (AIRPORT, DESTINATION, ZIYARAT)
-      const response = await locationMasterAPI.getActive();
-      setDestinations(response.data.locationMasters || []);
-    } catch (error) {
-      console.error('Error loading locations:', error);
-      toast.error('Failed to load locations');
+  useEffect(() => {
+    loadTransports();
+  }, [loadTransports]);
+
+  const filteredTransports = useMemo(() => {
+    let filtered = transports;
+
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(transport => {
+        const routeString = transport.route ? [
+          transport.route.city1?.name,
+          transport.route.city2?.name,
+          transport.route.city3?.name,
+          transport.route.city4?.name,
+        ].filter(Boolean).join(' ').toLowerCase() : '';
+        const vehicleName = transport.vehicleType?.vehicleName?.toLowerCase() || '';
+        return routeString.includes(searchLower) || vehicleName.includes(searchLower);
+      });
     }
-  };
+
+    return filtered;
+  }, [transports, searchTerm]);
 
   const createTransport = async (data: CreateTransportMasterRequest): Promise<boolean> => {
     try {
       await transportMasterAPI.create(data);
-      // Don't show success toast here - parent component will handle it
+      toast.success('Transport created successfully!');
       await loadTransports();
       return true;
     } catch (error: any) {
       console.error('Error creating transport:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to create transport route';
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.error || 'Failed to create transport');
       return false;
     }
   };
@@ -65,13 +62,12 @@ export function useTransportMaster() {
   const updateTransport = async (id: string, data: UpdateTransportMasterRequest): Promise<boolean> => {
     try {
       await transportMasterAPI.update(id, data);
-      // Don't show success toast here - parent component will handle it
+      toast.success('Transport updated successfully!');
       await loadTransports();
       return true;
     } catch (error: any) {
       console.error('Error updating transport:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to update transport route';
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.error || 'Failed to update transport');
       return false;
     }
   };
@@ -79,13 +75,12 @@ export function useTransportMaster() {
   const deleteTransport = async (id: string): Promise<boolean> => {
     try {
       await transportMasterAPI.delete(id);
-      // Don't show success toast here - parent component will handle it
+      toast.success('Transport deleted successfully!');
       await loadTransports();
       return true;
     } catch (error: any) {
       console.error('Error deleting transport:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to delete transport route';
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.error || 'Failed to delete transport');
       return false;
     }
   };
@@ -93,25 +88,18 @@ export function useTransportMaster() {
   const toggleTransportStatus = async (transport: TransportMaster): Promise<boolean> => {
     try {
       await transportMasterAPI.toggleStatus(transport.id);
-      // Don't show success toast here - parent component will handle it
+      toast.success(`Transport ${transport.isActive ? 'deactivated' : 'activated'} successfully!`);
       await loadTransports();
       return true;
     } catch (error: any) {
       console.error('Error toggling transport status:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to update transport route status';
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.error || 'Failed to toggle transport status');
       return false;
     }
   };
 
-  useEffect(() => {
-    loadTransports();
-    loadDestinations();
-  }, []);
-
   return {
     transports,
-    destinations,
     loading,
     searchTerm,
     setSearchTerm,
@@ -120,6 +108,7 @@ export function useTransportMaster() {
     updateTransport,
     deleteTransport,
     toggleTransportStatus,
-    loadTransports
+    refreshTransports: loadTransports,
   };
 }
+

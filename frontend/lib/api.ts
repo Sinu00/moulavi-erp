@@ -257,24 +257,6 @@ export const userAPI = {
   delete: (id: string) => api.delete(`/users/${id}`),
 };
 
-// Transport Master API
-export const transportMasterAPI = {
-  create: (data: any) => api.post('/transport-masters', data),
-  
-  getAll: (params?: any) => api.get('/transport-masters', { params }),
-  
-  getById: (id: string) => api.get(`/transport-masters/${id}`),
-  
-  getByLocations: (fromLocationId: string, toLocationId: string) => 
-    api.get(`/transport-masters/by-locations/${fromLocationId}/${toLocationId}`),
-  
-  update: (id: string, data: any) => api.put(`/transport-masters/${id}`, data),
-  
-  delete: (id: string) => api.delete(`/transport-masters/${id}`),
-  
-  toggleStatus: (id: string) => api.patch(`/transport-masters/${id}/toggle-status`),
-};
-
 export const countryMasterAPI = {
   create: (data: any) => api.post('/country-masters', data),
   getAll: (params?: any) => api.get('/country-masters', { params }),
@@ -343,23 +325,25 @@ export const vehicleTypeMasterAPI = {
   toggleStatus: (id: string) => api.patch(`/vehicle-type-masters/${id}/toggle-status`),
 };
 
-export const airportRouteMasterAPI = {
-  create: (data: any) => api.post('/airport-route-masters', data),
-  getAll: (params?: any) => api.get('/airport-route-masters', { params }),
-  getActive: (params?: any) => api.get('/airport-route-masters/active', { params }),
-  getById: (id: string) => api.get(`/airport-route-masters/${id}`),
-  update: (id: string, data: any) => api.put(`/airport-route-masters/${id}`, data),
-  delete: (id: string) => api.delete(`/airport-route-masters/${id}`),
-  toggleStatus: (id: string) => api.patch(`/airport-route-masters/${id}/toggle-status`),
+export const transportRouteMasterAPI = {
+  create: (data: any) => api.post('/transport-route-masters', data),
+  getAll: (params?: any) => api.get('/transport-route-masters', { params }),
+  getActive: () => api.get('/transport-route-masters/active'),
+  getById: (id: string) => api.get(`/transport-route-masters/${id}`),
+  update: (id: string, data: any) => api.put(`/transport-route-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/transport-route-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/transport-route-masters/${id}/toggle-status`),
 };
 
-export const fullTripMasterAPI = {
-  create: (data: any) => api.post('/full-trip-masters', data),
-  getAll: (params?: any) => api.get('/full-trip-masters', { params }),
-  getById: (id: string) => api.get(`/full-trip-masters/${id}`),
-  update: (id: string, data: any) => api.put(`/full-trip-masters/${id}`, data),
-  delete: (id: string) => api.delete(`/full-trip-masters/${id}`),
-  toggleStatus: (id: string) => api.patch(`/full-trip-masters/${id}/toggle-status`),
+export const transportMasterAPI = {
+  create: (data: any) => api.post('/transport-masters', data),
+  getAll: (params?: any) => api.get('/transport-masters', { params }),
+  getActive: () => api.get('/transport-masters/active'),
+  getById: (id: string) => api.get(`/transport-masters/${id}`),
+  getByRoute: (routeId: string) => api.get(`/transport-masters/by-route/${routeId}`),
+  update: (id: string, data: any) => api.put(`/transport-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/transport-masters/${id}`),
+  toggleStatus: (id: string) => api.patch(`/transport-masters/${id}/toggle-status`),
 };
 
 // Masters

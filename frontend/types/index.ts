@@ -312,12 +312,6 @@ export interface CreateUmrahPassengerRequest {
   phone_number?: string;
 }
 
-export interface TransportPricingResponse {
-  route: string;
-  transportType: string;
-  pax: number;
-  price: number;
-}
 
 // Document Types
 export interface Document {
@@ -378,79 +372,6 @@ export interface CreateVehicleTypeMasterRequest {
 export interface UpdateVehicleTypeMasterRequest {
   vehicleName?: string;
   paxCount?: number;
-  isActive?: boolean;
-}
-
-// Transport Master Types
-export interface TransportMaster {
-  id: string;
-  fromLocationId: string;
-  toLocationId: string;
-  vehicleTypeId: string;
-  price: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  fromLocation?: {
-    id: string;
-    name: string;
-    city: string;
-  };
-  toLocation?: {
-    id: string;
-    name: string;
-    city: string;
-  };
-  vehicleType?: VehicleTypeMaster;
-}
-
-export interface CreateTransportMasterRequest {
-  fromLocationId: string;
-  toLocationId: string;
-  vehicleTypeId: string;
-  price: number;
-  isActive?: boolean;
-}
-
-export interface UpdateTransportMasterRequest {
-  fromLocationId?: string;
-  toLocationId?: string;
-  vehicleTypeId?: string;
-  price?: number;
-  isActive?: boolean;
-}
-
-export interface FullTripMaster {
-  id: string;
-  fromCityId: string;
-  vehicleTypeId: string;
-  price: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  fromCity?: CityMaster;
-  vehicleType?: VehicleTypeMaster;
-  toCities?: Array<{
-    id: string;
-    cityId: string;
-    sequenceOrder: number;
-    city: CityMaster;
-  }>;
-}
-
-export interface CreateFullTripMasterRequest {
-  fromCityId: string;
-  toCityIds: string[];
-  vehicleTypeId: string;
-  price: number;
-  isActive?: boolean;
-}
-
-export interface UpdateFullTripMasterRequest {
-  fromCityId?: string;
-  toCityIds?: string[];
-  vehicleTypeId?: string;
-  price?: number;
   isActive?: boolean;
 }
 
@@ -600,55 +521,83 @@ export interface UpdateUserRoleMasterRequest {
   isActive?: boolean;
 }
 
-// Airport Route Master Types
-export interface AirportRouteMaster {
+// Transport Route Master Types
+export type RouteType = 'citytocity' | 'airporttocity' | 'citytoairport' | 'tripandtour' | 'fulltrip';
+
+export interface TransportRouteMaster {
   id: string;
-  routeCode: string;
-  routeName: string;
-  fromAirport: string;
-  toAirport: string;
-  fromDestinationId?: string;
-  toDestinationId?: string;
-  fromDestination?: {
-    id: string;
-    name: string;
-    city: string;
-    country?: {
-      countryName: string;
-    };
-  };
-  toDestination?: {
-    id: string;
-    name: string;
-    city: string;
-    country?: {
-      countryName: string;
-    };
-  };
-  description?: string;
+  city1Id: string;
+  city2Id: string;
+  city3Id?: string | null;
+  city4Id?: string | null;
+  routeType: RouteType;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  city1?: {
+    id: string;
+    name: string;
+  };
+  city2?: {
+    id: string;
+    name: string;
+  };
+  city3?: {
+    id: string;
+    name: string;
+  } | null;
+  city4?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
-export interface CreateAirportRouteMasterRequest {
-  routeCode: string;
-  routeName: string;
-  fromAirport: string;
-  toAirport: string;
-  fromDestinationId?: string;
-  toDestinationId?: string;
-  description?: string;
+export interface CreateTransportRouteMasterRequest {
+  city1Id: string;
+  city2Id: string;
+  city3Id?: string | null;
+  city4Id?: string | null;
+  routeType: RouteType;
+  isActive?: boolean;
 }
 
-export interface UpdateAirportRouteMasterRequest {
-  routeCode?: string;
-  routeName?: string;
-  fromAirport?: string;
-  toAirport?: string;
-  fromDestinationId?: string;
-  toDestinationId?: string;
-  description?: string;
+export interface UpdateTransportRouteMasterRequest {
+  city1Id?: string;
+  city2Id?: string;
+  city3Id?: string | null;
+  city4Id?: string | null;
+  routeType?: RouteType;
+  isActive?: boolean;
+}
+
+// Transport Master Types
+export interface TransportMaster {
+  id: string;
+  routeId: string;
+  vehicleTypeId: string;
+  price: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  route?: TransportRouteMaster;
+  vehicleType?: {
+    id: string;
+    vehicleName: string;
+    paxCount: number;
+  };
+}
+
+export interface CreateTransportMasterRequest {
+  routeId: string;
+  vehicleTypeId: string;
+  price: number;
+  isActive?: boolean;
+}
+
+export interface UpdateTransportMasterRequest {
+  routeId?: string;
+  vehicleTypeId?: string;
+  price?: number;
   isActive?: boolean;
 }
 

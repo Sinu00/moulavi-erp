@@ -83,7 +83,7 @@ export class CancellationService {
           isDeleted: true,
           travelDetails: {
             select: {
-              arrivalDate: true
+              arrivalDateTime: true
             }
           },
           transportBookings: {
@@ -128,7 +128,7 @@ export class CancellationService {
       }
 
       // Get applicable policy
-      const arrivalDate = booking.travelDetails?.arrivalDate;
+      const arrivalDate = booking.travelDetails?.arrivalDateTime;
       if (!arrivalDate) {
         return {
           canCancel: false,

@@ -301,19 +301,16 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
             departureAirport: true,
           },
         },
-        accommodationDetails: {
+        hotelBookings: {
           include: {
-            hotelBookings: {
-              include: {
-                hotel: true,
-                location: true,
-              },
-              orderBy: {
-                checkInDate: 'asc',
-              },
-            },
+            hotel: true,
+            location: true,
+          },
+          orderBy: {
+            checkInDate: 'asc',
           },
         },
+        sponsorIqamaDetails: true,
         transportBookings: {
           include: {
             fromLocation: true,
@@ -322,7 +319,7 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
             toSpecificLocation: true,
           },
           orderBy: {
-            travelDate: 'asc',
+            travelDateTime: 'asc',
           },
         },
         passengers: {
@@ -383,7 +380,7 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         whatsappNumber: booking.umrahVisaProvider.whatsappNumber || '',
         email: booking.umrahVisaProvider.email || '',
       } : null,
-      hotelSchedules: booking.accommodationDetails?.hotelBookings.map((hb: any, idx: number) => ({
+      hotelSchedules: booking.hotelBookings?.map((hb: any, idx: number) => ({
         number: idx + 1,
         location: hb.location.name,
         hotelName: hb.hotel.name,
@@ -401,8 +398,8 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         return {
           sr: idx + 1,
           route: routeNumber, // Sequential route number continuing from previous bookings
-          date: tb.travelDate ? formatDate(tb.travelDate) : '', // DD-MM-YYYY format
-          time: tb.travelTime ? formatTime(tb.travelTime) : '', // HH:MM format
+          date: tb.travelDateTime ? formatDate(tb.travelDateTime) : '', // DD-MM-YYYY format
+          time: tb.travelDateTime ? formatTime(tb.travelDateTime) : '', // HH:MM format
           from: tb.fromLocation?.name || '', // City name from LocationMaster
           fromLocation: tb.fromSpecificLocation?.name || '', // Specific location name (Airport, Hotel, Ziyarat)
           fromLocationId: tb.fromLocationId,
@@ -419,22 +416,22 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       flightDetails: booking.travelDetails ? [
         {
           type: 'AA', // Arrival
-          date: booking.travelDetails.arrivalDate ? formatDate(booking.travelDetails.arrivalDate) : '',
+          date: booking.travelDetails.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : '',
           carrier: booking.travelDetails.arrivalFlightNumber?.split('-')[0] || '',
           number: booking.travelDetails.arrivalFlightNumber?.split('-')[1] || '',
           from: booking.travelDetails.arrivalAirport.code,
           to: 'JED',
           etd: '',
-          eta: booking.travelDetails.arrivalTime ? formatTime(booking.travelDetails.arrivalTime) : '',
+          eta: booking.travelDetails.arrivalDateTime ? formatTime(booking.travelDetails.arrivalDateTime) : '',
         },
         {
           type: 'AD', // Departure
-          date: booking.travelDetails.departureDate ? formatDate(booking.travelDetails.departureDate) : '',
+          date: booking.travelDetails.departureDateTime ? formatDate(booking.travelDetails.departureDateTime) : '',
           carrier: booking.travelDetails.departureFlightNumber?.split('-')[0] || '',
           number: booking.travelDetails.departureFlightNumber?.split('-')[1] || '',
           from: 'JED',
           to: booking.travelDetails.departureAirport.code,
-          etd: booking.travelDetails.departureTime ? formatTime(booking.travelDetails.departureTime) : '',
+          etd: booking.travelDetails.departureDateTime ? formatTime(booking.travelDetails.departureDateTime) : '',
           eta: '',
         },
       ] : [],
@@ -753,11 +750,16 @@ router.patch('/:bookingId/transport-bookings', authenticate, async (req, res) =>
     if (Array.isArray(transportBookings)) {
       for (const t of transportBookings) {
         if (!t?.id) continue;
+        
+        // Parse travelDateTime if provided
+        const travelDateTime = t.travelDateTime 
+          ? (t.travelDateTime instanceof Date ? t.travelDateTime : new Date(t.travelDateTime))
+          : undefined;
+        
         await prisma.umrahTransportBooking.update({
           where: { id: t.id },
           data: {
-            travelDate: t.travelDate ?? undefined,
-            travelTime: t.travelTime ? (typeof t.travelTime === 'string' ? new Date(`2000-01-01T${t.travelTime}`) : t.travelTime) : undefined,
+            travelDateTime,
             vehicleType: t.vehicleType ?? undefined,
             paxCount: t.paxCount ?? undefined,
             price: t.price ?? undefined,
@@ -781,7 +783,13 @@ router.patch('/:bookingId/transport-bookings', authenticate, async (req, res) =>
 router.post('/:bookingId/transport-bookings', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { fromLocationId, toLocationId, vehicleType, paxCount, price, travelDate } = req.body || {};
+    const { fromLocationId, toLocationId, vehicleType, paxCount, price, travelDateTime } = req.body || {};
+    
+    // Parse travelDateTime if provided
+    const parsedDateTime = travelDateTime 
+      ? (travelDateTime instanceof Date ? travelDateTime : new Date(travelDateTime))
+      : undefined;
+    
     const created = await prisma.umrahTransportBooking.create({
       data: {
         bookingId,
@@ -790,7 +798,7 @@ router.post('/:bookingId/transport-bookings', authenticate, async (req, res) => 
         vehicleType,
         paxCount,
         price,
-        travelDate,
+        travelDateTime: parsedDateTime,
       },
       include: { fromLocation: true, toLocation: true },
     });
@@ -818,16 +826,28 @@ router.post('/:bookingId/hotel-bookings', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
     const { locationId, hotelId, checkInDate, checkOutDate } = req.body || {};
-    const acc = await prisma.umrahAccommodationDetails.findUnique({ where: { bookingId } });
-    if (!acc) return res.status(400).json({ error: 'Accommodation not initialized for this booking' });
+    
+    // Verify booking exists and has hotel accommodation type
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      select: { accommodationType: true },
+    });
+    
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    
+    if (booking.accommodationType !== 'hotel') {
+      return res.status(400).json({ error: 'Booking accommodation type is not hotel' });
+    }
 
     const created = await prisma.umrahHotelBooking.create({
       data: {
-        accommodationId: acc.id,
+        bookingId,
         locationId,
         hotelId,
-        checkInDate,
-        checkOutDate,
+        checkInDate: checkInDate ? new Date(checkInDate) : new Date(),
+        checkOutDate: checkOutDate ? new Date(checkOutDate) : new Date(),
       },
       include: { hotel: true, location: true },
     });

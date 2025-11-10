@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { transportMasterAPI } from '@/lib/api';
 import { TransportBooking } from '@/lib/umrah/types';
 
 interface UseTransportOptionsParams {
@@ -13,20 +12,14 @@ export const useTransportOptions = ({
 
   const loadOptionsForRow = useCallback(
     async (index: number, fromId?: string, toId?: string) => {
+      // TransportMaster has been removed - return empty options
+      // TODO: Implement alternative transport options retrieval if needed
       const fromLocationId =
         fromId ?? transportSegments?.[index]?.fromLocationId;
       const toLocationId = toId ?? transportSegments?.[index]?.toLocationId;
       if (!fromLocationId || !toLocationId) return;
-      try {
-        const response = await transportMasterAPI.getByLocations(
-          fromLocationId,
-          toLocationId
-        );
-        const list = response.data.transportMasters || response.data || [];
-        setRowOptions((prev) => ({ ...prev, [index]: list }));
-      } catch (e) {
-        // ignore
-      }
+      // Return empty array since TransportMaster is removed
+      setRowOptions((prev) => ({ ...prev, [index]: [] }));
     },
     [transportSegments]
   );

@@ -3,10 +3,21 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Route, Check } from 'lucide-react';
-import { FullTripMaster } from '@/types';
+
+// FullTripMaster has been removed - using a minimal interface for compatibility
+interface FullTrip {
+  id: string;
+  fromCityId: string;
+  vehicleTypeId: string;
+  price: number;
+  isActive: boolean;
+  fromCity?: { name: string };
+  vehicleType?: { vehicleName: string; paxCount: number };
+  toCities?: Array<{ cityId: string; sequenceOrder: number; city?: { name: string } }>;
+}
 
 interface FullTripSelectionProps {
-  fullTrips: FullTripMaster[];
+  fullTrips: FullTrip[];
   selectedTripId?: string;
   onSelect: (tripId: string) => void;
   disabled?: boolean;
@@ -18,7 +29,7 @@ export const FullTripSelection: React.FC<FullTripSelectionProps> = ({
   onSelect,
   disabled = false,
 }) => {
-  const getRouteString = (trip: FullTripMaster) => {
+  const getRouteString = (trip: FullTrip) => {
     const fromCity = trip.fromCity?.name || 'Unknown';
     const toCities = (trip.toCities || [])
       .sort((a, b) => a.sequenceOrder - b.sequenceOrder)

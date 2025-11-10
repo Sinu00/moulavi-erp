@@ -1,323 +1,600 @@
 import { Router, Response } from 'express';
-import { body, query } from 'express-validator';
+import { body, query, param, validationResult } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
-import { AuthRequest } from '../types';
 import { prisma } from '../config/database';
+import { AuthRequest, CreateTransportMasterRequest, UpdateTransportMasterRequest } from '../types';
 
 const router = Router();
 
 const createTransportMasterValidation = [
-  body('fromLocationId').isUUID().notEmpty(),
-  body('toLocationId').isUUID().notEmpty(),
+  body('routeId').isUUID().notEmpty(),
   body('vehicleTypeId').isUUID().notEmpty(),
-  body('price').isDecimal({ decimal_digits: '0,2' }),
+  body('price').isFloat({ min: 0 }),
   body('isActive').isBoolean().optional(),
 ];
 
 const updateTransportMasterValidation = [
-  body('fromLocationId').optional().isUUID(),
-  body('toLocationId').optional().isUUID(),
-  body('vehicleTypeId').optional().isUUID(),
-  body('price').optional().isDecimal({ decimal_digits: '0,2' }),
-  body('isActive').optional().isBoolean(),
+  body('routeId').isUUID().optional(),
+  body('vehicleTypeId').isUUID().optional(),
+  body('price').isFloat({ min: 0 }).optional(),
+  body('isActive').isBoolean().optional(),
 ];
 
-// Create transport master
+// Create Transport Master
 router.post(
   '/',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'staff'),
   createTransportMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { fromLocationId, toLocationId, vehicleTypeId, price, isActive } = req.body;
-    
-    // Check if combination already exists
-    const existingTransport = await prisma.transportMaster.findUnique({
-      where: {
-        fromLocationId_toLocationId_vehicleTypeId: {
-          fromLocationId,
-          toLocationId,
-          vehicleTypeId
-        }
-      }
-    });
-    
-    if (existingTransport) {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
       return res.status(400).json({ 
-        error: 'Transport combination already exists',
-        details: 'A transport with this route and vehicle type already exists'
+        error: 'Validation failed', 
+        details: errors.array() 
       });
     }
-    
+
+    const { routeId, vehicleTypeId, price, isActive } = req.body as CreateTransportMasterRequest;
+
+    // Check if transport with same route and vehicle type already exists
+    const existingTransport = await prisma.transportMaster.findUnique({
+      where: {
+        routeId_vehicleTypeId: {
+          routeId,
+          vehicleTypeId,
+        },
+      },
+    });
+
+    if (existingTransport) {
+      return res.status(400).json({ 
+        error: 'Transport with this route and vehicle type already exists' 
+      });
+    }
+
+    // Verify route exists
+    const route = await prisma.transportRouteMaster.findUnique({
+      where: { id: routeId },
+    });
+
+    if (!route) {
+      return res.status(400).json({ error: 'Invalid route ID' });
+    }
+
+    // Verify vehicle type exists
+    const vehicleType = await prisma.vehicleTypeMaster.findUnique({
+      where: { id: vehicleTypeId },
+    });
+
+    if (!vehicleType) {
+      return res.status(400).json({ error: 'Invalid vehicle type ID' });
+    }
+
     const transportMaster = await prisma.transportMaster.create({
       data: {
-        fromLocationId,
-        toLocationId,
+        routeId,
         vehicleTypeId,
-        price: parseFloat(price),
-        isActive: isActive ?? true
+        price,
+        isActive: isActive ?? true,
       },
       include: {
-        fromLocation: true,
-        toLocation: true,
-        vehicleType: true
-      }
+        route: {
+          include: {
+            city1: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city2: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city3: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city4: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        vehicleType: {
+          select: {
+            id: true,
+            vehicleName: true,
+            paxCount: true,
+          },
+        },
+      },
     });
-    
+
     res.status(201).json({ transportMaster });
   })
 );
 
-// Get all transport masters
+// Get all Transport Masters with pagination and filters
 router.get(
   '/',
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { page = '1', limit = '10', search, fromLocationId, toLocationId, vehicleTypeId, isActive } = req.query;
-    
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
-    
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = req.query.search as string || '';
+    const routeId = req.query.routeId as string;
+    const vehicleTypeId = req.query.vehicleTypeId as string;
+    const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
+
+    const skip = (page - 1) * limit;
+
     const where: any = {};
-    
+
     if (search) {
       where.OR = [
+        { route: { city1: { name: { contains: search, mode: 'insensitive' } } } },
+        { route: { city2: { name: { contains: search, mode: 'insensitive' } } } },
         { vehicleType: { vehicleName: { contains: search, mode: 'insensitive' } } },
-        { fromLocation: { name: { contains: search, mode: 'insensitive' } } },
-        { toLocation: { name: { contains: search, mode: 'insensitive' } } }
       ];
     }
-    
-    if (fromLocationId) {
-      where.fromLocationId = fromLocationId;
+
+    if (routeId) {
+      where.routeId = routeId;
     }
-    
-    if (toLocationId) {
-      where.toLocationId = toLocationId;
-    }
-    
+
     if (vehicleTypeId) {
       where.vehicleTypeId = vehicleTypeId;
     }
-    
+
     if (isActive !== undefined) {
-      where.isActive = isActive === 'true';
+      where.isActive = isActive;
     }
-    
+
     const [transportMasters, total] = await Promise.all([
       prisma.transportMaster.findMany({
         where,
         skip,
-        take: limitNum,
-        orderBy: [
-          { fromLocation: { name: 'asc' } },
-          { toLocation: { name: 'asc' } },
-          { vehicleType: { vehicleName: 'asc' } }
-        ],
+        take: limit,
         include: {
-          fromLocation: true,
-          toLocation: true,
-          vehicleType: true
-        }
+          route: {
+            include: {
+              city1: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              city2: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              city3: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              city4: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+          vehicleType: {
+            select: {
+              id: true,
+              vehicleName: true,
+              paxCount: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
       }),
-      prisma.transportMaster.count({ where })
+      prisma.transportMaster.count({ where }),
     ]);
-    
+
     res.json({
       transportMasters,
       pagination: {
-        page: pageNum,
-        limit: limitNum,
+        page,
+        limit,
         total,
-        totalPages: Math.ceil(total / limitNum),
+        totalPages: Math.ceil(total / limit),
       },
     });
   })
 );
 
-// Get transport masters by location route
+// Get active Transport Masters only
 router.get(
-  '/by-locations/:fromLocationId/:toLocationId',
+  '/active',
   authenticate,
-  authorize('admin', 'staff', 'party'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { fromLocationId, toLocationId } = req.params;
-    
     const transportMasters = await prisma.transportMaster.findMany({
       where: {
-        fromLocationId,
-        toLocationId,
-        isActive: true
+        isActive: true,
       },
       include: {
-        fromLocation: true,
-        toLocation: true,
-        vehicleType: true
+        route: {
+          include: {
+            city1: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city2: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city3: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city4: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        vehicleType: {
+          select: {
+            id: true,
+            vehicleName: true,
+            paxCount: true,
+          },
+        },
       },
-      orderBy: [
-        { vehicleType: { vehicleName: 'asc' } }
-      ]
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
-    
+
     res.json({ transportMasters });
   })
 );
 
-// Get transport pricing
+// Get Transport Masters by Route ID
 router.get(
-  '/pricing',
+  '/by-route/:routeId',
   authenticate,
-  authorize('admin', 'staff', 'party'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { route, vehicleType, pax } = req.query;
-    
-    if (!route || !vehicleType || !pax) {
-      return res.status(400).json({ 
-        error: 'Missing required parameters',
-        details: 'route, vehicleType, and pax are required'
-      });
-    }
-    
-    // This endpoint is deprecated due to schema changes
-    return res.status(400).json({
-      error: 'Endpoint deprecated',
-      message: 'Please use /by-locations/:fromLocationId/:toLocationId endpoint instead',
-      details: 'The transport system now uses location-based routing'
+    const { routeId } = req.params;
+
+    const transportMasters = await prisma.transportMaster.findMany({
+      where: {
+        routeId,
+        isActive: true,
+      },
+      include: {
+        route: {
+          include: {
+            city1: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city2: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city3: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city4: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        vehicleType: {
+          select: {
+            id: true,
+            vehicleName: true,
+            paxCount: true,
+          },
+        },
+      },
+      orderBy: {
+        vehicleType: {
+          vehicleName: 'asc',
+        },
+      },
     });
+
+    res.json({ transportMasters });
   })
 );
 
-// Get transport master by ID
+// Get Transport Master by ID
 router.get(
   '/:id',
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    
+
     const transportMaster = await prisma.transportMaster.findUnique({
       where: { id },
       include: {
-        fromLocation: true,
-        toLocation: true,
-        vehicleType: true
-      }
+        route: {
+          include: {
+            city1: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city2: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city3: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city4: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        vehicleType: {
+          select: {
+            id: true,
+            vehicleName: true,
+            paxCount: true,
+          },
+        },
+      },
     });
-    
+
     if (!transportMaster) {
       return res.status(404).json({ error: 'Transport master not found' });
     }
-    
+
     res.json({ transportMaster });
   })
 );
 
-// Update transport master
+// Update Transport Master
 router.put(
   '/:id',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'staff'),
   updateTransportMasterValidation,
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
+    }
+
     const { id } = req.params;
-    const updateData = req.body;
-    
-    // Check if transport master exists
+    const updateData = req.body as UpdateTransportMasterRequest;
+
     const existingTransport = await prisma.transportMaster.findUnique({
-      where: { id }
+      where: { id },
     });
-    
+
     if (!existingTransport) {
       return res.status(404).json({ error: 'Transport master not found' });
     }
-    
-    // If updating unique combination, check for conflicts
-    if (updateData.fromLocationId || updateData.toLocationId || updateData.vehicleTypeId) {
-      const fromLocationId = updateData.fromLocationId || existingTransport.fromLocationId;
-      const toLocationId = updateData.toLocationId || existingTransport.toLocationId;
-      const vehicleTypeId = updateData.vehicleTypeId || existingTransport.vehicleTypeId;
-      
-      const conflictingTransport = await prisma.transportMaster.findFirst({
+
+    // Check for unique constraint violation if routeId or vehicleTypeId is being updated
+    if (updateData.routeId || updateData.vehicleTypeId) {
+      const newRouteId = updateData.routeId || existingTransport.routeId;
+      const newVehicleTypeId = updateData.vehicleTypeId || existingTransport.vehicleTypeId;
+
+      const conflictingTransport = await prisma.transportMaster.findUnique({
         where: {
-          fromLocationId,
-          toLocationId,
-          vehicleTypeId,
-          id: { not: id }
-        }
+          routeId_vehicleTypeId: {
+            routeId: newRouteId,
+            vehicleTypeId: newVehicleTypeId,
+          },
+        },
       });
-      
-      if (conflictingTransport) {
+
+      if (conflictingTransport && conflictingTransport.id !== id) {
         return res.status(400).json({ 
-          error: 'Transport combination already exists',
-          details: 'A transport with this route and vehicle type already exists'
+          error: 'Transport with this route and vehicle type already exists' 
         });
       }
     }
-    
-    // Convert price to decimal if provided
-    if (updateData.price) {
-      updateData.price = parseFloat(updateData.price);
+
+    // Verify route exists if provided
+    if (updateData.routeId) {
+      const route = await prisma.transportRouteMaster.findUnique({
+        where: { id: updateData.routeId },
+      });
+      if (!route) {
+        return res.status(400).json({ error: 'Invalid route ID' });
+      }
     }
-    
+
+    // Verify vehicle type exists if provided
+    if (updateData.vehicleTypeId) {
+      const vehicleType = await prisma.vehicleTypeMaster.findUnique({
+        where: { id: updateData.vehicleTypeId },
+      });
+      if (!vehicleType) {
+        return res.status(400).json({ error: 'Invalid vehicle type ID' });
+      }
+    }
+
     const transportMaster = await prisma.transportMaster.update({
       where: { id },
-      data: updateData
+      data: {
+        ...(updateData.routeId && { routeId: updateData.routeId }),
+        ...(updateData.vehicleTypeId && { vehicleTypeId: updateData.vehicleTypeId }),
+        ...(updateData.price !== undefined && { price: updateData.price }),
+        ...(updateData.isActive !== undefined && { isActive: updateData.isActive }),
+      },
+      include: {
+        route: {
+          include: {
+            city1: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city2: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city3: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city4: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        vehicleType: {
+          select: {
+            id: true,
+            vehicleName: true,
+            paxCount: true,
+          },
+        },
+      },
     });
-    
+
     res.json({ transportMaster });
   })
 );
 
-// Delete transport master
+// Delete Transport Master
 router.delete(
   '/:id',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    
+
     const transportMaster = await prisma.transportMaster.findUnique({
-      where: { id }
+      where: { id },
     });
-    
+
     if (!transportMaster) {
       return res.status(404).json({ error: 'Transport master not found' });
     }
-    
+
     await prisma.transportMaster.delete({
-      where: { id }
+      where: { id },
     });
-    
+
     res.json({ message: 'Transport master deleted successfully' });
   })
 );
 
-// Toggle transport master status
+// Toggle Transport Master status
 router.patch(
   '/:id/toggle-status',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    
+
     const transportMaster = await prisma.transportMaster.findUnique({
-      where: { id }
+      where: { id },
     });
-    
+
     if (!transportMaster) {
       return res.status(404).json({ error: 'Transport master not found' });
     }
-    
+
     const updatedTransportMaster = await prisma.transportMaster.update({
       where: { id },
-      data: { isActive: !transportMaster.isActive }
+      data: { isActive: !transportMaster.isActive },
+      include: {
+        route: {
+          include: {
+            city1: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city2: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city3: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            city4: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        vehicleType: {
+          select: {
+            id: true,
+            vehicleName: true,
+            paxCount: true,
+          },
+        },
+      },
     });
-    
+
     res.json({ transportMaster: updatedTransportMaster });
   })
 );
 
 export default router;
+

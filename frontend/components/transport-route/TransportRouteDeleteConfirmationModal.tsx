@@ -10,30 +10,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { TransportMaster } from '@/types';
+import { TransportRouteMaster } from '@/types';
 
-interface TransportDeleteConfirmationModalProps {
-  transport: TransportMaster | null;
+interface TransportRouteDeleteConfirmationModalProps {
+  route: TransportRouteMaster | null;
   open: boolean;
   loading: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export default function TransportDeleteConfirmationModal({
-  transport,
+export default function TransportRouteDeleteConfirmationModal({
+  route,
   open,
   loading,
   onConfirm,
   onCancel,
-}: TransportDeleteConfirmationModalProps) {
+}: TransportRouteDeleteConfirmationModalProps) {
   const getRouteString = () => {
-    if (!transport?.route) return 'N/A';
+    if (!route) return '';
     const cities = [
-      transport.route.city1?.name,
-      transport.route.city2?.name,
-      transport.route.city3?.name,
-      transport.route.city4?.name,
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
     ].filter(Boolean);
     return cities.join(' → ');
   };
@@ -42,14 +42,12 @@ export default function TransportDeleteConfirmationModal({
     <AlertDialog open={open} onOpenChange={onCancel}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Transport</AlertDialogTitle>
+          <AlertDialogTitle>Delete Transport Route</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete this transport? This action cannot be undone.
-            {transport && (
+            Are you sure you want to delete the route <strong>{getRouteString()}</strong>? This action cannot be undone.
+            {route && (
               <div className="mt-2 text-sm text-gray-600">
-                <p>Route: {getRouteString()}</p>
-                <p>Vehicle: {transport.vehicleType?.vehicleName} ({transport.vehicleType?.paxCount} PAX)</p>
-                <p>Price: ₹{Number(transport.price).toLocaleString()}</p>
+                <p>Route Type: {route.routeType}</p>
               </div>
             )}
           </AlertDialogDescription>
