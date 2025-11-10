@@ -36,6 +36,9 @@ function generateVoucherHTML(data: VoucherPdfData): string {
   const contactNumber = data.umrahVisaProvider?.contactNumber || data.umrahVisaProvider?.whatsappNumber || '+966 538634100';
   const email = data.umrahVisaProvider?.email || 'info@test.com.sa';
 
+  // Primary red color from dashboard (#dc2626 - Tailwind red-600)
+  const primaryRed = '#dc2626';
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -43,6 +46,9 @@ function generateVoucherHTML(data: VoucherPdfData): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Travel Voucher - ${data.voucherNumber}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -56,10 +62,10 @@ function generateVoucherHTML(data: VoucherPdfData): string {
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: #ffffff;
-      color: #1e293b;
-      line-height: 1.6;
+      color: #1f2937;
+      line-height: 1.5;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -68,15 +74,13 @@ function generateVoucherHTML(data: VoucherPdfData): string {
       width: 210mm;
       min-height: 297mm;
       background: #ffffff;
-      position: relative;
     }
 
-    /* Header Section */
+    /* Header Section - Gradient Red with Overlays */
     .header {
-      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
-      color: #ffffff;
-      padding: 30px 20px;
-      text-align: center;
+      background: linear-gradient(135deg, #c62828 0%, #e53935 100%);
+      color: white;
+      padding: 40px 50px;
       position: relative;
       overflow: hidden;
     }
@@ -84,124 +88,136 @@ function generateVoucherHTML(data: VoucherPdfData): string {
     .header::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: #3b82f6;
+      top: -50%;
+      right: -10%;
+      width: 300px;
+      height: 300px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
     }
 
-    .header h1 {
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: -30%;
+      left: -5%;
+      width: 200px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
+    }
+
+    .header-content {
+      position: relative;
+      z-index: 1;
+      text-align: left;
+    }
+
+    .header-content h1 {
       font-size: 32px;
       font-weight: 700;
-      margin-bottom: 10px;
-      letter-spacing: 1px;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
       text-transform: uppercase;
     }
 
-    .header .address {
+    .header-content .address {
       font-size: 13px;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
       opacity: 0.95;
+      font-weight: 400;
+      text-transform: uppercase;
     }
 
-    .header .contact {
+    .header-content .contact {
       font-size: 11px;
       display: flex;
-      justify-content: center;
       align-items: center;
-      gap: 15px;
+      gap: 20px;
       flex-wrap: wrap;
-      margin-top: 10px;
+      opacity: 0.9;
     }
 
-    .header .contact span {
+    .header-content .contact span {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
     }
 
-    /* Reservation Details Card */
-    .reservation-card {
-      margin: 20px;
+    /* Travel Voucher Banner */
+    .voucher-banner {
       background: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e2e8f0;
-      overflow: hidden;
+      margin: -20px auto 0;
+      padding: 10px 30px;
+      width: fit-content;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      position: relative;
+      z-index: 10;
+    }
+
+    .voucher-banner h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: ${primaryRed};
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 0;
+    }
+
+    /* Details Section with Red Left Border */
+    .details-section {
+      margin: 15px 0 0 0;
+      background: #ffffff;
+      border-left: 8px solid ${primaryRed};
+      padding: 25px 30px;
       position: relative;
     }
 
-    .reservation-card::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 5px;
-      background: #3b82f6;
-    }
-
-    .card-header {
-      padding: 15px 20px;
-      border-bottom: 1px solid #e2e8f0;
-      background: #f8fafc;
-    }
-
-    .card-header h2 {
-      font-size: 16px;
-      font-weight: 700;
-      color: #0f172a;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .card-content {
-      padding: 20px;
+    .details-content {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px 50px;
     }
 
     .info-item {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 2px;
     }
 
     .info-label {
-      font-size: 9px;
+      font-size: 7px;
       font-weight: 600;
-      color: #64748b;
+      color: #9ca3af;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .info-value {
-      font-size: 11px;
-      font-weight: 500;
-      color: #1e293b;
+      font-size: 10px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
     }
 
     /* Section Title */
     .section-title {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: 700;
-      color: #0f172a;
-      margin: 25px 20px 15px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      color: #111827;
+      margin: 20px 20px 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid ${primaryRed};
     }
 
     /* Tables */
     .table-container {
-      margin: 0 20px 25px;
+      margin: 0 20px 18px;
+      border: 1px solid #e5e7eb;
       overflow: hidden;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
     table {
@@ -211,51 +227,61 @@ function generateVoucherHTML(data: VoucherPdfData): string {
     }
 
     thead {
-      background: #0f172a;
+      background: ${primaryRed};
       color: #ffffff;
     }
 
     thead th {
-      padding: 12px 10px;
+      padding: 8px 6px;
       text-align: left;
-      font-size: 10px;
+      font-size: 8px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     tbody tr {
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e5e7eb;
     }
 
     tbody tr:nth-child(even) {
-      background: #f8fafc;
+      background: #f9fafb;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
     }
 
     tbody td {
-      padding: 10px;
-      font-size: 9px;
-      color: #1e293b;
+      padding: 7px 6px;
+      font-size: 8px;
+      color: #374151;
     }
 
     tbody td:first-child {
       text-align: center;
       font-weight: 600;
+      color: #111827;
     }
 
     /* Footer */
     .footer {
-      margin-top: 30px;
-      padding: 20px;
-      background: #f8fafc;
-      border-top: 1px solid #e2e8f0;
+      margin-top: 20px;
+      padding: 12px 20px;
+      border-top: 1px solid #e5e7eb;
       text-align: center;
+      background: #f9fafb;
     }
 
     .footer p {
-      font-size: 9px;
-      color: #64748b;
-      margin: 3px 0;
+      font-size: 7px;
+      color: #6b7280;
+      margin: 1px 0;
+    }
+
+    .footer p strong {
+      color: #374151;
+      font-weight: 600;
     }
 
     /* Print Styles */
@@ -285,54 +311,54 @@ function generateVoucherHTML(data: VoucherPdfData): string {
   <div class="voucher-container">
     <!-- Header -->
     <div class="header">
-      <h1>${providerName.toUpperCase()}</h1>
-      <div class="address">📍 ${address.toUpperCase()}</div>
-      <div class="contact">
-        <span>📞 ${contactNumber}</span>
-        <span style="opacity: 0.5;">•</span>
-        <span>✉ ${email}</span>
+      <div class="header-content">
+        <h1>${providerName.toUpperCase()}</h1>
+        <div class="address">${address.toUpperCase()}</div>
+        <div class="contact">
+          <span>${contactNumber}</span>
+          <span>${email}</span>
+        </div>
       </div>
     </div>
 
-    <!-- Reservation Details -->
-    <div class="reservation-card">
-      <div class="card-header">
-        <h2>📋 RESERVATION DETAILS</h2>
-      </div>
-      <div class="card-content">
+    <!-- Travel Voucher Banner -->
+    <div class="voucher-banner">
+      <h2>TRAVEL VOUCHER</h2>
+    </div>
+
+    <!-- Details Section -->
+    <div class="details-section">
+      <div class="details-content">
         <div class="info-item">
-          <div class="info-label">Reservation Number</div>
+          <div class="info-label">RESERVATION NUMBER</div>
           <div class="info-value">${data.reservationNumber || data.voucherNumber || 'N/A'}</div>
         </div>
         <div class="info-item">
-          <div class="info-label">Number of Passengers</div>
-          <div class="info-value">ADT: ${data.paxCount} | CHD: 0 | INF: 0 = ${data.paxCount}</div>
-        </div>
-        <div class="info-item">
-          <div class="info-label">Reservation Date</div>
+          <div class="info-label">RESERVATION DATE</div>
           <div class="info-value">${formatDate(data.reservationDate)}</div>
         </div>
         <div class="info-item">
-          <div class="info-label">Guest Name</div>
+          <div class="info-label">GROUP CODE</div>
+          <div class="info-value">${data.groupCode || 'N/A'}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">GUEST NAME</div>
           <div class="info-value">${data.guestName || 'N/A'}</div>
         </div>
-        <div class="info-item"></div>
         <div class="info-item">
-          <div class="info-label">Guest Mobile</div>
+          <div class="info-label">GUEST MOBILE</div>
           <div class="info-value">${data.guestMobile || 'N/A'}</div>
         </div>
-        <div class="info-item"></div>
-        <div class="info-item"></div>
         <div class="info-item">
-          <div class="info-label">Group Code</div>
-          <div class="info-value">${data.groupCode || 'N/A'}</div>
+          <div class="info-label">TOTAL PASSENGERS</div>
+          <div class="info-value">ADT: ${data.paxCount} | CHD: 0 | INF: 0 = ${data.paxCount}</div>
         </div>
       </div>
     </div>
 
     ${data.hotelSchedules && data.hotelSchedules.length > 0 ? `
     <!-- Hotel Schedules -->
-    <div class="section-title">🏨 HOTEL SCHEDULES</div>
+    <div class="section-title">HOTEL SCHEDULES</div>
     <div class="table-container">
       <table>
         <thead>
@@ -363,7 +389,7 @@ function generateVoucherHTML(data: VoucherPdfData): string {
 
     ${data.movementDetails && data.movementDetails.length > 0 ? `
     <!-- Movement Details -->
-    <div class="section-title">🚌 MOVEMENT DETAILS</div>
+    <div class="section-title">MOVEMENT DETAILS</div>
     <div class="table-container">
       <table>
         <thead>
@@ -394,7 +420,7 @@ function generateVoucherHTML(data: VoucherPdfData): string {
 
     ${data.flightDetails && data.flightDetails.length > 0 ? `
     <!-- Flight Details -->
-    <div class="section-title">✈️ FLIGHT DETAILS</div>
+    <div class="section-title">FLIGHT DETAILS</div>
     <div class="table-container">
       <table>
         <thead>

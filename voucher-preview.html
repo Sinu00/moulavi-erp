@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travel Voucher Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    body {
+      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+      line-height: 1.5;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .preview-wrapper {
+      background: white;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+    }
+
+    .voucher-container {
+      width: 210mm;
+      min-height: 297mm;
+      background: #ffffff;
+      margin: 0 auto;
+    }
+
+    /* Header Section - Gradient Red with Overlays */
+    .header {
+      background: linear-gradient(135deg, #c62828 0%, #e53935 100%);
+      color: white;
+      padding: 40px 50px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -10%;
+      width: 300px;
+      height: 300px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
+    }
+
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: -30%;
+      left: -5%;
+      width: 200px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
+    }
+
+    .header-content {
+      position: relative;
+      z-index: 1;
+      text-align: left;
+    }
+
+    .header-content h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .header-content .address {
+      font-size: 13px;
+      margin-bottom: 12px;
+      opacity: 0.95;
+      font-weight: 400;
+      text-transform: uppercase;
+    }
+
+    .header-content .contact {
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      opacity: 0.9;
+    }
+
+    .header-content .contact span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Travel Voucher Banner */
+    .voucher-banner {
+      background: #ffffff;
+      margin: -20px auto 0;
+      padding: 10px 30px;
+      width: fit-content;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      position: relative;
+      z-index: 10;
+    }
+
+    .voucher-banner h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #dc2626;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 0;
+    }
+
+    /* Details Section with Red Left Border */
+    .details-section {
+      margin: 15px 0 0 0;
+      background: #ffffff;
+      border-left: 8px solid #dc2626;
+      padding: 25px 30px;
+      position: relative;
+    }
+
+    .details-content {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px 50px;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .info-label {
+      font-size: 7px;
+      font-weight: 600;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-value {
+      font-size: 10px;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.3;
+    }
+
+    /* Section Title */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #111827;
+      margin: 20px 20px 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #dc2626;
+    }
+
+    /* Tables */
+    .table-container {
+      margin: 0 20px 18px;
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+    }
+
+    thead {
+      background: #dc2626;
+      color: #ffffff;
+    }
+
+    thead th {
+      padding: 8px 6px;
+      text-align: left;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody td {
+      padding: 7px 6px;
+      font-size: 8px;
+      color: #374151;
+    }
+
+    tbody td:first-child {
+      text-align: center;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 20px;
+      padding: 12px 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      background: #f9fafb;
+    }
+
+    .footer p {
+      font-size: 7px;
+      color: #6b7280;
+      margin: 1px 0;
+    }
+
+    .footer p strong {
+      color: #374151;
+      font-weight: 600;
+    }
+
+    /* Print Styles */
+    @media print {
+      body {
+        margin: 0;
+        padding: 0;
+        background: white;
+      }
+
+      .preview-wrapper {
+        padding: 0;
+        box-shadow: none;
+        border-radius: 0;
+      }
+
+      .voucher-container {
+        width: 210mm;
+        min-height: 297mm;
+      }
+
+      .header {
+        page-break-after: avoid;
+      }
+
+      .reservation-card,
+      .table-container {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-wrapper">
+    <div class="voucher-container">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-content">
+          <h1>FATHIMA TRAVELS</h1>
+          <div class="address">JEDDAH - SAUDI ARABIA</div>
+          <div class="contact">
+            <span>457357357357</span>
+            <span>fathima@gmail.com</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Travel Voucher Banner -->
+      <div class="voucher-banner">
+        <h2>TRAVEL VOUCHER</h2>
+      </div>
+
+      <!-- Details Section -->
+      <div class="details-section">
+        <div class="details-content">
+          <div class="info-item">
+            <div class="info-label">RESERVATION NUMBER</div>
+            <div class="info-value">008</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">RESERVATION DATE</div>
+            <div class="info-value">10-11-2025</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">GROUP CODE</div>
+            <div class="info-value">23230</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">GUEST NAME</div>
+            <div class="info-value">Fathima Travels</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">GUEST MOBILE</div>
+            <div class="info-value">457357357357</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">TOTAL PASSENGERS</div>
+            <div class="info-value">ADT: 19 | CHD: 0 | INF: 0 = 19</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hotel Schedules -->
+      <div class="section-title">HOTEL SCHEDULES</div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Location</th>
+              <th>Hotel Name</th>
+              <th>Days</th>
+              <th>Check In</th>
+              <th>Check Out</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Makkah City Center</td>
+              <td>Raffles Makkah Palace</td>
+              <td>5</td>
+              <td>18-11-2025</td>
+              <td>23-11-2025</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Madinah City Center</td>
+              <td>Crowne Plaza Madinah</td>
+              <td>7</td>
+              <td>23-11-2025</td>
+              <td>30-11-2025</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Movement Details -->
+      <div class="section-title">MOVEMENT DETAILS</div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Sr</th>
+              <th>Route</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>From Location</th>
+              <th>To Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>00021</td>
+              <td>18-11-2025</td>
+              <td>09:00</td>
+              <td>Jeddah, King Abdulaziz International Airport</td>
+              <td>Makkah, Raffles Makkah Palace</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>00022</td>
+              <td>20-11-2025</td>
+              <td>08:00</td>
+              <td>Makkah, Raffles Makkah Palace</td>
+              <td>Makkah, Makkah Ziarah</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>00023</td>
+              <td>23-11-2025</td>
+              <td>12:00</td>
+              <td>Makkah, Raffles Makkah Palace</td>
+              <td>Madinah, Crowne Plaza Madinah</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>00024</td>
+              <td>25-11-2025</td>
+              <td>14:00</td>
+              <td>Madinah, Crowne Plaza Madinah</td>
+              <td>Madinah, Madinah Ziyarath</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>00025</td>
+              <td>30-11-2025</td>
+              <td>06:00</td>
+              <td>Madinah, Crowne Plaza Madinah</td>
+              <td>Jeddah, King Abdulaziz International Airport</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Flight Details -->
+      <div class="section-title">FLIGHT DETAILS</div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Date</th>
+              <th>Carrier</th>
+              <th>Number</th>
+              <th>From</th>
+              <th>To</th>
+              <th>ETD</th>
+              <th>ETA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>AA</td>
+              <td>18-11-2025</td>
+              <td>AS</td>
+              <td>2342</td>
+              <td>JED</td>
+              <td>JED</td>
+              <td>N/A</td>
+              <td>09:00</td>
+            </tr>
+            <tr>
+              <td>AD</td>
+              <td>30-11-2025</td>
+              <td>SD</td>
+              <td>2153</td>
+              <td>JID</td>
+              <td>JID</td>
+              <td>06:00</td>
+              <td>N/A</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p><strong>Generated by Moulavi ERP</strong></p>
+        <p>This document is system generated. Terms and conditions apply.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
