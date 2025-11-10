@@ -3,6 +3,8 @@ import { authenticate } from '../middleware/auth';
 import { prisma } from './umrahVisa/shared';
 import { ensureTripInfoExists, syncBookingAndTripInfoStatus, syncBookingAndTripInfoStatusInTx } from '../services/statusSyncService';
 import { generateVoucherNumber, generateRouteNumbers, formatTime, formatDate, assignRouteNumbersToMovementDetails } from '../services/voucherService';
+import { generateVoucherPDF } from '../services/pdfService';
+import { VoucherPdfData } from '../types/voucher';
 
 const router = Router();
 
@@ -607,6 +609,36 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error generating voucher:', error);
     res.status(500).json({ error: 'Failed to generate voucher' });
+  }
+});
+
+// POST /api/umrah-visa/generate-pdf - Generate PDF from voucher data
+router.post('/generate-pdf', authenticate, async (req, res) => {
+  try {
+    const voucherData: VoucherPdfData = req.body;
+
+    // Validate required fields
+    if (!voucherData.voucherNumber || !voucherData.reservationDate || !voucherData.guestName) {
+      return res.status(400).json({ error: 'Missing required voucher data' });
+    }
+
+    // Generate PDF
+    const pdfBuffer = await generateVoucherPDF(voucherData);
+
+    // Set response headers
+    const fileName = `Voucher_${voucherData.voucherNumber}_${voucherData.guestName
+      .replace(/\s+/g, '_')
+      .slice(0, 20)}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+
+    // Send PDF
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    res.status(500).json({ error: 'Failed to generate PDF' });
   }
 });
 
