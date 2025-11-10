@@ -36,6 +36,15 @@ export interface Step3Data {
 }
 
 export interface Step4Data {
+  selectedTransport?: {
+    routeId: string;
+    transportId: string;
+    vehicleTypeId: string;
+    price: number;
+  };
+}
+
+export interface Step5Data {
   passengers: Passenger[];
   panCardZipFile?: File | null; // ZIP file containing all PAN cards for group bookings
 }
@@ -121,6 +130,7 @@ export interface BookingState {
   step2Data: Step2Data;
   step3Data: Step3Data;
   step4Data: Step4Data;
+  step5Data: Step5Data;
 }
 
 export interface ZiyarahBooking {

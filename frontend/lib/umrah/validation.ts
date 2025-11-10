@@ -1,7 +1,7 @@
 // Umrah Visa Booking Validation Utilities
 
 import { BOOKING_LIMITS, FLIGHT_NUMBER_REGEX } from './constants';
-import { Step1Data, Step2Data, Step3Data, Step4Data, Passenger } from './types';
+import { Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Passenger } from './types';
 
 export const formatFlightNumber = (value: string): string => {
   let cleaned = value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
@@ -202,11 +202,24 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
   return null;
 };
 
-export const validateStep4 = (data: Step4Data, step1Data: Step1Data, step3Data: Step3Data, isGroupVisa: boolean = false): string | null => {
+export const validateStep4 = (data: Step4Data): string | null => {
+  // Step 4: Transport Vehicle Selection
+  if (!data.selectedTransport) {
+    return 'Please select a transport vehicle for your route';
+  }
+  
+  if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
+    return 'Invalid transport selection. Please select again.';
+  }
+  
+  return null;
+};
+
+export const validateStep5 = (data: Step5Data, step1Data: Step1Data, step3Data: Step3Data, isGroupVisa: boolean = false): string | null => {
   // For group visa bookings (visaType: 'group_visa'), ONLY ZIP file is required
   // Note: Individual bookings can also have group numbers, so we check visaType, not hasGroupNumber
   if (isGroupVisa) {
-    const zipFile = (data as any).panCardZipFile;
+    const zipFile = data.panCardZipFile;
     if (!zipFile) {
       return 'Please upload a ZIP file containing all PAN cards for the group';
     }

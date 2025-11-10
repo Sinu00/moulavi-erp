@@ -243,12 +243,136 @@ router.get(
   })
 );
 
+// Match routes by cities (for booking flow)
+// IMPORTANT: This route MUST come before /:id route to avoid route matching conflicts
+// This endpoint is accessible to all authenticated users (admin, staff, party)
+router.get(
+  '/match-by-cities',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Log for debugging - if you see this log, the route is being reached
+    console.log('[match-by-cities] ✅ Route handler reached! User:', req.user?.role, req.user?.id, 'CityIds:', req.query.cityIds);
+    
+    const cityIdsParam = req.query.cityIds as string;
+    
+    if (!cityIdsParam) {
+      return res.status(400).json({ error: 'cityIds parameter is required' });
+    }
+
+    // Parse city IDs (can be comma-separated or array)
+    let cityIds: string[] = [];
+    try {
+      if (cityIdsParam.startsWith('[')) {
+        cityIds = JSON.parse(cityIdsParam);
+      } else {
+        cityIds = cityIdsParam.split(',').map(id => id.trim());
+      }
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid cityIds format. Use comma-separated or JSON array' });
+    }
+
+    if (cityIds.length < 2) {
+      return res.status(400).json({ error: 'At least 2 city IDs are required' });
+    }
+
+    // Find routes that match the exact sequence
+    const routes = await prisma.transportRouteMaster.findMany({
+      where: {
+        isActive: true,
+        city1Id: cityIds[0],
+        city2Id: cityIds[1],
+        ...(cityIds.length >= 3 && { city3Id: cityIds[2] }),
+        ...(cityIds.length >= 4 && { city4Id: cityIds[3] }),
+        ...(cityIds.length === 2 && {
+          OR: [
+            { city3Id: null },
+            { city3Id: { not: null } } // Also match routes with optional city3
+          ]
+        }),
+        ...(cityIds.length === 3 && { city4Id: null }),
+      },
+      include: {
+        city1: { select: { id: true, name: true } },
+        city2: { select: { id: true, name: true } },
+        city3: { select: { id: true, name: true } },
+        city4: { select: { id: true, name: true } },
+        transports: {
+          where: { isActive: true },
+          include: {
+            vehicleType: {
+              select: {
+                id: true,
+                vehicleName: true,
+                paxCount: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter to exact matches (all cities in order)
+    const exactMatches = routes.filter(route => {
+      const routeCities = [
+        route.city1Id,
+        route.city2Id,
+        route.city3Id,
+        route.city4Id,
+      ].filter(Boolean);
+
+      if (routeCities.length !== cityIds.length) return false;
+
+      return routeCities.every((cityId, index) => cityId === cityIds[index]);
+    });
+
+    // Also get other routes that might be useful (partial matches, different route types)
+    const otherRoutes = await prisma.transportRouteMaster.findMany({
+      where: {
+        isActive: true,
+        id: { notIn: exactMatches.map(r => r.id) },
+        OR: [
+          { city1Id: { in: cityIds } },
+          { city2Id: { in: cityIds } },
+          { city3Id: { in: cityIds } },
+          { city4Id: { in: cityIds } },
+        ],
+      },
+      include: {
+        city1: { select: { id: true, name: true } },
+        city2: { select: { id: true, name: true } },
+        city3: { select: { id: true, name: true } },
+        city4: { select: { id: true, name: true } },
+        transports: {
+          where: { isActive: true },
+          include: {
+            vehicleType: {
+              select: {
+                id: true,
+                vehicleName: true,
+                paxCount: true,
+              },
+            },
+          },
+        },
+      },
+      take: 20, // Limit other routes
+    });
+
+    res.json({
+      exactMatches,
+      otherRoutes,
+    });
+  })
+);
+
 // Get Transport Route Master by ID
+// IMPORTANT: This route MUST come AFTER /match-by-cities to avoid route matching conflicts
 router.get(
   '/:id',
   authenticate,
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
+    console.log('[GET /:id] Route handler reached for id:', req.params.id, 'User:', req.user?.role);
     const { id } = req.params;
 
     const transportRouteMaster = await prisma.transportRouteMaster.findUnique({

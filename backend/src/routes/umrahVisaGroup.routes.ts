@@ -201,7 +201,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
     // Calculate hasTransportation
     const hasTransportation = (step3Data.transportSegments && step3Data.transportSegments.length > 0) ||
-                              (step2Data.transportBookings && step2Data.transportBookings.length > 0);
+                              (step2Data.transportBookings && step2Data.transportBookings.length > 0) ||
+                              (step4Data.selectedTransport !== undefined && step4Data.selectedTransport !== null);
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -342,11 +343,68 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         );
       }
 
-      // 6. Create UmrahTransportBooking (from step3 transportSegments or step2 transportBookings)
+      // 6. Create UmrahTransportBooking (from step3 transportSegments, step2 transportBookings, or step4 selectedTransport)
       const transportBookings = [
         ...(step3Data.transportSegments || []),
         ...(step2Data.transportBookings || []),
       ];
+
+      // Handle selected transport from step4 (new transport vehicle selection step)
+      if (step4Data.selectedTransport) {
+        const { routeId, transportId, vehicleTypeId, price } = step4Data.selectedTransport;
+        
+        // Get the route to determine from/to locations
+        const route = await tx.transportRouteMaster.findUnique({
+          where: { id: routeId },
+          include: {
+            city1: { select: { id: true, name: true } },
+            city2: { select: { id: true, name: true } },
+            city3: { select: { id: true, name: true } },
+            city4: { select: { id: true, name: true } },
+          },
+        });
+
+        if (route) {
+          // Get LocationMaster IDs for first and last cities in the route
+          const firstCityId = route.city1.id;
+          const lastCityId = route.city4?.id || route.city3?.id || route.city2.id;
+
+          // Find LocationMaster entries for these cities
+          const firstCityLocation = await tx.locationMaster.findFirst({
+            where: {
+              cityId: firstCityId,
+              isActive: true,
+            },
+            orderBy: { locationType: 'asc' },
+          });
+
+          const lastCityLocation = await tx.locationMaster.findFirst({
+            where: {
+              cityId: lastCityId,
+              isActive: true,
+            },
+            orderBy: { locationType: 'asc' },
+          });
+
+          if (firstCityLocation && lastCityLocation) {
+            // Get vehicle type for paxCount and vehicleName
+            const vehicleType = await tx.vehicleTypeMaster.findUnique({
+              where: { id: vehicleTypeId },
+              select: { paxCount: true, vehicleName: true },
+            });
+
+            transportBookings.push({
+              fromLocationId: firstCityLocation.id,
+              toLocationId: lastCityLocation.id,
+              vehicleType: vehicleType?.vehicleName || vehicleTypeId, // Use vehicle name or fallback to ID
+              paxCount: vehicleType?.paxCount || step1Data.passengerCount || 0,
+              price: price,
+              travelDate: step2Data.arrivalDate, // Use arrival date as default
+              travelTime: step2Data.arrivalTime || '00:00', // Use arrival time as default
+            } as any);
+          }
+        }
+      }
 
       // Convert ziyaraths to transport segments
       if (step3Data.ziyaraths && step3Data.ziyaraths.length > 0) {

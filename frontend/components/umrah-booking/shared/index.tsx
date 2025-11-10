@@ -1,13 +1,14 @@
 // Shared UI Components for Umrah Booking
 
 import React from 'react';
-import { Check, Users, Plane, Home, User } from 'lucide-react';
+import { Check, Users, Plane, Home, User, Truck } from 'lucide-react';
 import { STEPS } from '@/lib/umrah/constants';
 
 const iconMap = {
   Users,
   Plane,
   Home,
+  Truck,
   User,
 };
 
@@ -31,7 +32,7 @@ export const StepProgress: React.FC<StepProgressProps> = ({
 }) => {
   return (
     <div className="mb-8">
-      <div className="grid grid-cols-4 gap-4">
+      <div className={`grid gap-4 ${steps.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
         {steps.map((step, index) => {
           const Icon = iconMap[step.icon as keyof typeof iconMap];
           const isCompleted = completedSteps.includes(step.id);

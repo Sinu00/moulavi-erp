@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { PartyLayout } from '@/components/layouts/PartyLayout';
-import { ArrowLeft, ChevronRight, ChevronLeft, Plane, Users, Home, User } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ChevronLeft, Plane, Users, Home, User, Truck } from 'lucide-react';
 
 // Import our new components and hooks
 import { useGroupUmrahBooking } from '@/hooks/useGroupUmrahBooking';
@@ -15,8 +15,9 @@ import { StepProgress, LoadingSpinner } from '@/components/umrah-booking/shared'
 import { GroupDetailsStep } from '@/components/umrah-booking/steps/GroupDetailsStep';
 import { TravelDetailsStep } from '@/components/umrah-booking/steps/TravelDetailsStep';
 import { MovementDetailsStep } from '@/components/umrah-booking/steps/MovementDetailsStep';
+import { TransportVehicleSelectionStep } from '@/components/umrah-booking/steps/TransportVehicleSelectionStep';
 import { GroupDocumentsStep } from '@/components/umrah-booking/steps/GroupDocumentsStep';
-import { validateStep1, validateStep2, validateStep3, validateStep4 } from '@/lib/umrah/validation';
+import { validateStep1, validateStep2, validateStep3, validateStep4, validateStep5 } from '@/lib/umrah/validation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -34,6 +35,7 @@ export default function GroupUmrahVisaPage() {
     updateStep2Data,
     updateStep3Data,
     updateStep4Data,
+    updateStep5Data,
     setCurrentStep,
     loadPartyData,
     submitStep,
@@ -72,6 +74,12 @@ export default function GroupUmrahVisaPage() {
     },
     {
       id: 4,
+      title: 'Transport Vehicle Selection',
+      description: 'Select transport vehicle for your route',
+      icon: 'Truck',
+    },
+    {
+      id: 5,
       title: 'PAN Cards Upload',
       description: 'Upload ZIP file with PAN cards',
       icon: 'User',
@@ -103,7 +111,9 @@ export default function GroupUmrahVisaPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data, true); // true = isGroupVisa
+        return validateStep4(bookingState.step4Data);
+      case 5:
+        return validateStep5(bookingState.step5Data, bookingState.step1Data, bookingState.step3Data, true); // true = isGroupVisa
       default:
         return null;
     }
@@ -117,7 +127,7 @@ export default function GroupUmrahVisaPage() {
     }
 
     const success = await submitStep(bookingState.currentStep);
-    if (success && bookingState.currentStep === 4) {
+    if (success && bookingState.currentStep === 5) {
       router.push('/party/dashboard');
     }
   };
@@ -202,11 +212,23 @@ export default function GroupUmrahVisaPage() {
 
       case 4:
         return (
-          <GroupDocumentsStep
+          <TransportVehicleSelectionStep
             data={bookingState.step4Data}
             step1Data={bookingState.step1Data}
-            step3Data={bookingState.step3Data}
+            step2Data={bookingState.step2Data}
+            locationMasters={masterData.locationMasters}
             onChange={updateStep4Data}
+            disabled={isLoading}
+          />
+        );
+
+      case 5:
+        return (
+          <GroupDocumentsStep
+            data={bookingState.step5Data}
+            step1Data={bookingState.step1Data}
+            step3Data={bookingState.step3Data}
+            onChange={updateStep5Data}
             onStep1DataChange={updateStep1Data}
             onAddPassenger={addPassenger}
             onRemovePassenger={removePassenger}
@@ -248,7 +270,7 @@ export default function GroupUmrahVisaPage() {
               <div className="flex items-center space-x-3 mb-6">
                 <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
                   {(() => {
-                    const map:any = { Users, Plane, Home, User };
+                    const map:any = { Users, Plane, Home, Truck, User };
                     const Icon = map[steps[bookingState.currentStep - 1].icon];
                     return <Icon className="h-5 w-5 text-red-600" />;
                   })()}
@@ -300,11 +322,11 @@ export default function GroupUmrahVisaPage() {
                     disabled={isLoading}
                     className="bg-red-600 hover:bg-red-700 text-white"
                   >
-                    {isLoading ? 'Processing...' : bookingState.currentStep < 4 ? 'Next' : 'Submit Application'}
-                    {bookingState.currentStep < 4 && <ChevronRight className="h-4 w-4 ml-2" />}
+                    {isLoading ? 'Processing...' : bookingState.currentStep < 5 ? 'Next' : 'Submit Application'}
+                    {bookingState.currentStep < 5 && <ChevronRight className="h-4 w-4 ml-2" />}
                   </Button>
-                  {/* Show indicator if step has unsaved changes (only for steps 1-3, not step 4) */}
-                  {bookingState.currentStep < 4 && bookingState.completedSteps.includes(bookingState.currentStep) && hasStepDataChanged(bookingState.currentStep) && (
+                  {/* Show indicator if step has unsaved changes (only for steps 1-4, not step 5) */}
+                  {bookingState.currentStep < 5 && bookingState.completedSteps.includes(bookingState.currentStep) && hasStepDataChanged(bookingState.currentStep) && (
                     <div className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
                       <span>•</span>
                       <span className="ml-1">Unsaved changes</span>

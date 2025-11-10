@@ -333,6 +333,9 @@ export const transportRouteMasterAPI = {
   update: (id: string, data: any) => api.put(`/transport-route-masters/${id}`, data),
   delete: (id: string) => api.delete(`/transport-route-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/transport-route-masters/${id}/toggle-status`),
+  matchByCities: (cityIds: string[]) => api.get('/transport-route-masters/match-by-cities', { 
+    params: { cityIds: cityIds.join(',') } 
+  }),
 };
 
 export const transportMasterAPI = {

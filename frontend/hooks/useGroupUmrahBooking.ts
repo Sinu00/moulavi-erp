@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { partyAPI } from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/umrah/constants';
-import { BookingState, MasterData, Step1Data, Step2Data, Step3Data, Step4Data } from '@/lib/umrah/types';
+import { BookingState, MasterData, Step1Data, Step2Data, Step3Data, Step4Data, Step5Data } from '@/lib/umrah/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -34,6 +34,9 @@ export const useGroupUmrahBooking = () => {
       ziyaraths: [],
     },
     step4Data: {
+      selectedTransport: undefined,
+    },
+    step5Data: {
       passengers: [{
         fullName: '',
         isLeadPassenger: true,
@@ -70,6 +73,9 @@ export const useGroupUmrahBooking = () => {
         break;
       case 4:
         dataToHash = JSON.stringify(bookingState.step4Data);
+        break;
+      case 5:
+        dataToHash = JSON.stringify(bookingState.step5Data);
         break;
     }
     return btoa(dataToHash).slice(0, 16);
@@ -123,6 +129,13 @@ export const useGroupUmrahBooking = () => {
     setBookingState(prev => ({
       ...prev,
       step4Data: { ...prev.step4Data, ...data }
+    }));
+  }, []);
+
+  const updateStep5Data = useCallback((data: Partial<Step5Data>) => {
+    setBookingState(prev => ({
+      ...prev,
+      step5Data: { ...prev.step5Data, ...data }
     }));
   }, []);
 
@@ -258,6 +271,33 @@ export const useGroupUmrahBooking = () => {
   };
 
   const submitStep4 = async () => {
+    // Step 4: Transport Vehicle Selection - just validate and move to next step
+    setIsLoading(true);
+    try {
+      // Validate that transport is selected
+      if (!bookingState.step4Data.selectedTransport) {
+        toast.error('Please select a transport vehicle');
+        return false;
+      }
+
+      setBookingState(prev => ({
+        ...prev,
+        completedSteps: [...prev.completedSteps, 4],
+        currentStep: 5,
+      }));
+      setStepDataHashes(prev => ({ ...prev, 4: generateStepDataHash(4) }));
+      toast.success('Transport vehicle selected');
+      return true;
+    } catch (error) {
+      console.error('Error validating step 4:', error);
+      toast.error('Failed to validate transport selection');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitStep5 = async () => {
     if (!partyId) return false;
 
     setIsLoading(true);
@@ -273,7 +313,7 @@ export const useGroupUmrahBooking = () => {
       const formData = new FormData();
       
       // Add ZIP file if present
-      const zipFile = (bookingState.step4Data as any).panCardZipFile;
+      const zipFile = bookingState.step5Data.panCardZipFile;
       if (zipFile) {
         formData.append('panCardZipFile', zipFile);
       }
@@ -284,6 +324,7 @@ export const useGroupUmrahBooking = () => {
       formData.append('step2', JSON.stringify(bookingState.step2Data));
       formData.append('step3', JSON.stringify(step3DataWithHotels));
       formData.append('step4', JSON.stringify({
+        selectedTransport: bookingState.step4Data.selectedTransport,
         passengerCount: bookingState.step1Data.passengerCount, // Use from step1 (user specified)
         // No passengers array needed - backend will create from passengerCount
       }));
@@ -303,7 +344,7 @@ export const useGroupUmrahBooking = () => {
         setBookingState(prev => ({
           ...prev,
           bookingId: data.data.bookingId,
-          completedSteps: [...prev.completedSteps, 4],
+          completedSteps: [...prev.completedSteps, 5],
         }));
         toast.success('Group Umrah visa booking completed successfully!');
         return true;
@@ -333,12 +374,14 @@ export const useGroupUmrahBooking = () => {
           return await submitStep3();
         case 4:
           return await submitStep4();
+        case 5:
+          return await submitStep5();
         default:
           return false;
       }
     } else {
       // Step already completed and data hasn't changed, just move to next step
-      setCurrentStep(Math.min(stepNumber + 1, 4));
+      setCurrentStep(Math.min(stepNumber + 1, 5));
       return true;
     }
   };
@@ -346,9 +389,9 @@ export const useGroupUmrahBooking = () => {
   const addPassenger = useCallback(() => {
     setBookingState(prev => ({
       ...prev,
-      step4Data: {
-        ...prev.step4Data,
-        passengers: [...prev.step4Data.passengers, {
+      step5Data: {
+        ...prev.step5Data,
+        passengers: [...prev.step5Data.passengers, {
           fullName: '',
           isLeadPassenger: false,
           panCardPhoto: null,
@@ -363,16 +406,18 @@ export const useGroupUmrahBooking = () => {
   }, []);
 
   const removePassenger = useCallback((index: number) => {
-    if (bookingState.step4Data.passengers.length <= 1) return;
-    
-    setBookingState(prev => ({
-      ...prev,
-      step4Data: {
-        ...prev.step4Data,
-        passengers: prev.step4Data.passengers.filter((_, i) => i !== index)
-      }
-    }));
-  }, [bookingState.step4Data.passengers.length]);
+    setBookingState(prev => {
+      if (prev.step5Data.passengers.length <= 1) return prev;
+      
+      return {
+        ...prev,
+        step5Data: {
+          ...prev.step5Data,
+          passengers: prev.step5Data.passengers.filter((_, i) => i !== index)
+        }
+      };
+    });
+  }, []);
 
   const addHotelBooking = useCallback(() => {
     // Add hotel booking to step2Data for group bookings
@@ -437,6 +482,7 @@ export const useGroupUmrahBooking = () => {
     updateStep2Data,
     updateStep3Data,
     updateStep4Data,
+    updateStep5Data,
     setCurrentStep,
     loadPartyData,
     submitStep,
