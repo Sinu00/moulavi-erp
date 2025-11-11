@@ -441,8 +441,110 @@ async function seedAll() {
     // 8. Seed Transport Master
     console.log('8️⃣ Seeding Transport Master...');
     
-    // TransportMaster seeding can be added here if needed
-    console.log('   ⚠️  TransportMaster seeding not implemented yet - skipping...\n');
+    // First, get all routes and vehicle types for reference
+    const allRoutes = await prisma.transportRouteMaster.findMany({
+      include: {
+        city1: true,
+        city2: true,
+        city3: true,
+        city4: true,
+      },
+    });
+
+    const allVehicleTypes = await prisma.vehicleTypeMaster.findMany();
+    const vehicleTypeMapByName = {};
+    allVehicleTypes.forEach(vt => {
+      vehicleTypeMapByName[vt.vehicleName] = vt;
+    });
+
+    // Transport master data from database
+    const transportMasters = [
+      // Jeddah Airport to City (airporttocity)
+      { city1: 'Jeddah', city2: 'Jeddah', city3: null, city4: null, routeType: 'airporttocity', vehicleName: 'GMC', price: 7200.00 },
+      { city1: 'Jeddah', city2: 'Jeddah', city3: null, city4: null, routeType: 'airporttocity', vehicleName: 'Hiace', price: 6000.00 },
+      { city1: 'Jeddah', city2: 'Jeddah', city3: null, city4: null, routeType: 'airporttocity', vehicleName: 'Lexus ES 250', price: 4800.00 },
+      { city1: 'Jeddah', city2: 'Jeddah', city3: null, city4: null, routeType: 'airporttocity', vehicleName: 'Staria', price: 6000.00 },
+      
+      // Jeddah City to Airport (citytoairport)
+      { city1: 'Jeddah', city2: 'Jeddah', city3: null, city4: null, routeType: 'citytoairport', vehicleName: 'Lexus ES 250', price: 4800.00 },
+      
+      // Full Trip: Jeddah → Makkah → Madinah → Jeddah
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Jeddah', routeType: 'fulltrip', vehicleName: 'Coach Bus Vip', price: 109200.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Jeddah', routeType: 'fulltrip', vehicleName: 'GMC', price: 51600.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Jeddah', routeType: 'fulltrip', vehicleName: 'Hiace', price: 46800.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Jeddah', routeType: 'fulltrip', vehicleName: 'Lexus ES 250', price: 37200.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Jeddah', routeType: 'fulltrip', vehicleName: 'Staria', price: 44400.00 },
+      
+      // Full Trip: Jeddah → Makkah → Madinah → Madinah
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Madinah', routeType: 'fulltrip', vehicleName: 'Coach Bus Vip', price: 97200.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Madinah', routeType: 'fulltrip', vehicleName: 'GMC', price: 34800.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Madinah', routeType: 'fulltrip', vehicleName: 'Hiace', price: 31200.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Madinah', routeType: 'fulltrip', vehicleName: 'Lexus ES 250', price: 24000.00 },
+      { city1: 'Jeddah', city2: 'Makkah', city3: 'Madinah', city4: 'Madinah', routeType: 'fulltrip', vehicleName: 'Staria', price: 29760.00 },
+    ];
+
+    let transportMasterCount = 0;
+    for (const tm of transportMasters) {
+      // Find the route
+      const route = allRoutes.find(r => {
+        const city1Match = r.city1.name === tm.city1;
+        const city2Match = r.city2.name === tm.city2;
+        const city3Match = (tm.city3 === null && r.city3 === null) || (r.city3 && r.city3.name === tm.city3);
+        const city4Match = (tm.city4 === null && r.city4 === null) || (r.city4 && r.city4.name === tm.city4);
+        const routeTypeMatch = r.routeType === tm.routeType;
+        
+        return city1Match && city2Match && city3Match && city4Match && routeTypeMatch;
+      });
+
+      if (!route) {
+        console.warn(`   ⚠️  Route not found: ${tm.city1} → ${tm.city2} → ${tm.city3 || ''} → ${tm.city4 || ''} (${tm.routeType}), skipping transport master`);
+        continue;
+      }
+
+      // Find the vehicle type
+      const vehicleType = vehicleTypeMapByName[tm.vehicleName];
+      if (!vehicleType) {
+        console.warn(`   ⚠️  Vehicle type not found: ${tm.vehicleName}, skipping transport master`);
+        continue;
+      }
+
+      // Check if transport master already exists
+      const existing = await prisma.transportMaster.findUnique({
+        where: {
+          routeId_vehicleTypeId: {
+            routeId: route.id,
+            vehicleTypeId: vehicleType.id,
+          },
+        },
+      });
+
+      if (existing) {
+        // Update price if different
+        if (parseFloat(existing.price.toString()) !== tm.price) {
+          await prisma.transportMaster.update({
+            where: { id: existing.id },
+            data: { price: tm.price, isActive: true },
+          });
+          console.log(`   🔄 Updated transport master: ${tm.city1} → ${tm.city2} (${tm.vehicleName}) - Price: ${tm.price}`);
+        } else {
+          console.log(`   ⏭️  Transport master already exists: ${tm.city1} → ${tm.city2} (${tm.vehicleName})`);
+        }
+        transportMasterCount++;
+        continue;
+      }
+
+      // Create transport master
+      await prisma.transportMaster.create({
+        data: {
+          routeId: route.id,
+          vehicleTypeId: vehicleType.id,
+          price: tm.price,
+          isActive: true,
+        },
+      });
+      transportMasterCount++;
+    }
+    console.log(`✅ Created/Updated ${transportMasterCount} transport masters\n`);
 
     console.log('🎉 All master data seeded successfully!\n');
     console.log('📊 Summary:');
@@ -455,6 +557,7 @@ async function seedAll() {
     console.log(`   - ${cityCenterCount} City Center Locations`);
     console.log(`   - ${vehicleTypes.length} Vehicle Types`);
     console.log(`   - ${routeCount} Transport Routes`);
+    console.log(`   - ${transportMasterCount} Transport Masters`);
 
   } catch (error) {
     console.error('❌ Error seeding data:', error);
