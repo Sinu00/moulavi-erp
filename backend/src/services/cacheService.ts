@@ -117,8 +117,7 @@ export class CacheService {
           partyName: true,
           email: true,
           customerType: true,
-          accountCurrency: true,
-          limits: true
+          accountCurrency: true
         }
       });
 
