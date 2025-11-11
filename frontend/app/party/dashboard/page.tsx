@@ -52,24 +52,21 @@ interface UmrahPassenger {
 
 interface UmrahVisaBooking {
   id: string;
-  bookingId: string;
+  bookingId?: string;
   groupNumber?: string;
   groupName?: string;
   passengerCount: number;
-  status: 'group_processing' | 'group_assigned' | 'documents_downloaded' | 'booking_success' | 'cancelled';
+  status: 'pending' | 'documents_downloaded' | 'group_assigned' | 'voucher' | 'bill' | 'booking_success' | 'cancelled';
   visaType?: 'individual_visa' | 'group_visa';
   createdAt: string;
   updatedAt: string;
-  passengers: UmrahPassenger[];
-  service: {
+  passengers?: UmrahPassenger[];
+  party?: {
     id: string;
-    party: {
-      id: string;
-      partyName: string;
-      email: string;
-      contactNumber?: string;
-      whatsappNumber?: string;
-    };
+    partyName: string;
+    email: string;
+    contactNumber?: string;
+    whatsappNumber?: string;
   };
 }
 
@@ -108,7 +105,8 @@ export default function PartyDashboardPage() {
       filtered = filtered.filter(booking => 
         booking.party?.partyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         booking.groupNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.groupName?.toLowerCase().includes(searchTerm.toLowerCase())
+        booking.groupName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        booking.id?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -147,7 +145,7 @@ export default function PartyDashboardPage() {
       setStats({
         total: bookingsData.length,
         pending: bookingsData.filter((b: UmrahVisaBooking) => 
-          ['group_processing', 'group_assigned', 'documents_downloaded'].includes(b.status)
+          ['pending', 'documents_downloaded', 'group_assigned', 'voucher', 'bill'].includes(b.status)
         ).length,
         completed: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'booking_success').length,
       });
@@ -177,14 +175,16 @@ export default function PartyDashboardPage() {
     }
 
     const statusConfig = {
-      group_processing: { color: 'bg-gray-100 text-gray-800', icon: Clock, label: 'Processing' },
-      group_assigned: { color: 'bg-blue-100 text-blue-800', icon: Users, label: 'Assigned' },
-      documents_downloaded: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Downloaded' },
-      booking_success: { color: 'bg-red-100 text-red-800', icon: CheckCircle, label: 'Success' },
+      pending: { color: 'bg-gray-100 text-gray-800', icon: Clock, label: 'Pending' },
+      documents_downloaded: { color: 'bg-yellow-100 text-yellow-800', icon: FileText, label: 'Documents Downloaded' },
+      group_assigned: { color: 'bg-blue-100 text-blue-800', icon: Users, label: 'Group Assigned' },
+      voucher: { color: 'bg-purple-100 text-purple-800', icon: FileText, label: 'Voucher' },
+      bill: { color: 'bg-orange-100 text-orange-800', icon: FileText, label: 'Bill' },
+      booking_success: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Completed' },
       cancelled: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Cancelled' },
     };
 
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.group_processing;
+    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
     const Icon = config.icon;
 
     return (
@@ -202,18 +202,22 @@ export default function PartyDashboardPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'group_processing':
+      case 'pending':
         return <Clock className="h-4 w-4 text-gray-600" />;
+      case 'documents_downloaded':
+        return <FileText className="h-4 w-4 text-yellow-600" />;
       case 'group_assigned':
         return <Users className="h-4 w-4 text-blue-600" />;
-      case 'documents_downloaded':
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'voucher':
+        return <FileText className="h-4 w-4 text-purple-600" />;
+      case 'bill':
+        return <FileText className="h-4 w-4 text-orange-600" />;
       case 'booking_success':
-        return <CheckCircle className="h-4 w-4 text-red-600" />;
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'cancelled':
         return <XCircle className="h-4 w-4 text-red-600" />;
       default:
-        return <FileText className="h-4 w-4" />;
+        return <Clock className="h-4 w-4 text-gray-600" />;
     }
   };
 
@@ -325,10 +329,10 @@ export default function PartyDashboardPage() {
                       </div>
                       <div>
                         <h3 className="font-medium text-gray-900">
-                          {booking.groupName || 'Umrah Application'}
+                          {booking.groupName || booking.party?.partyName || 'Umrah Application'}
                         </h3>
                         <p className="text-sm text-gray-500">
-                          {booking.groupNumber || 'No group'} • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
+                          {booking.groupNumber ? `${booking.groupNumber} • ` : ''}{booking.passengerCount || 0} pax • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
                         </p>
                       </div>
                     </div>
