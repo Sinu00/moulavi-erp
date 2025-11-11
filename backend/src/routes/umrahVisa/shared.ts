@@ -94,7 +94,7 @@ export const step2Schema = z.object({
   departureTime: z.string(), // HH:mm format
   departureAirportId: z.string().uuid(),
   departureFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
-  passengerCount: z.number().min(1).max(50).optional(), // Number of passengers (for individual bookings)
+  passengerCount: z.number().min(1).max(50).optional(), // Number of passengers (for both individual and group bookings - now in Step 2)
   transportBookings: z.array(z.object({
     fromLocationId: z.string().uuid(),
     toLocationId: z.string().uuid(),
@@ -186,7 +186,6 @@ export const step5Schema = z.object({
 export const groupStep1Schema = z.object({
   groupNumber: z.string().min(1, 'Group number is required'),
   groupName: z.string().min(1, 'Group name is required'),
-  passengerCount: z.number().min(1, 'Passenger count must be at least 1').max(50, 'Passenger count cannot exceed 50'),
   umrahVisaProviderId: z.string().uuid('Valid umrah visa provider ID is required').optional(),
 });
 

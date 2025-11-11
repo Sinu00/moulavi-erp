@@ -68,19 +68,6 @@ export const GroupDetailsStep: React.FC<GroupDetailsStepProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="passengerCount">No. of Passengers (Pax) *</Label>
-            <Input
-              id="passengerCount"
-              type="number"
-              min="1"
-              placeholder="Enter number of passengers"
-              value={data.passengerCount || ''}
-              onChange={(e) => onChange({ passengerCount: parseInt(e.target.value) || undefined })}
-              disabled={disabled}
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="umrahVisaProviderId">Umrah Visa Providing Company *</Label>
             <Select
               value={data.umrahVisaProviderId || ''}

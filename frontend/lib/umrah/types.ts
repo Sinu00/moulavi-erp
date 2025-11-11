@@ -4,7 +4,6 @@ export interface Step1Data {
   bookingMode: 'group_number' | 'travel_details';
   groupNumber?: string;
   groupName?: string;
-  passengerCount?: number;
   umrahVisaProviderId?: string;
 }
 
@@ -17,7 +16,7 @@ export interface Step2Data {
   departureTime: string;
   departureAirportId: string;
   departureFlightNumber: string;
-  passengerCount?: number; // Number of passengers (for individual bookings)
+  passengerCount?: number; // Number of passengers (for both individual and group bookings)
   transportBookings?: TransportBooking[];
   hotelBookings?: HotelBooking[]; // For group bookings, hotels are in Step 2
 }

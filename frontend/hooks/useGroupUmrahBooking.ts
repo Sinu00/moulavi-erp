@@ -15,7 +15,6 @@ export const useGroupUmrahBooking = () => {
       bookingMode: 'group_number',
       groupNumber: '',
       groupName: '',
-      passengerCount: undefined,
       umrahVisaProviderId: undefined,
     },
     step2Data: {
@@ -27,6 +26,7 @@ export const useGroupUmrahBooking = () => {
       departureTime: '',
       departureAirportId: '',
       departureFlightNumber: '',
+      passengerCount: undefined, // Moved from step1Data to match individual bookings
       hotelBookings: [], // Moved from step3Data for group bookings
     },
     step3Data: {
@@ -220,8 +220,8 @@ export const useGroupUmrahBooking = () => {
   const submitStep3 = async () => {
     setIsLoading(true);
     try {
-      // Use passengerCount from step1Data for paxCount in transport segments
-      const passengerCount = bookingState.step1Data.passengerCount || 1;
+      // Use passengerCount from step2Data for paxCount in transport segments
+      const passengerCount = bookingState.step2Data.passengerCount || 1;
       
       const step3Payload = {
         ...bookingState.step3Data,
@@ -322,7 +322,7 @@ export const useGroupUmrahBooking = () => {
       formData.append('step3', JSON.stringify(step3DataWithHotels));
       formData.append('step4', JSON.stringify({
         selectedTransport: bookingState.step4Data.selectedTransport,
-        passengerCount: bookingState.step1Data.passengerCount, // Use from step1 (user specified)
+        // passengerCount removed - backend reads from step2Data
         // No passengers array needed - backend will create from passengerCount
       }));
 

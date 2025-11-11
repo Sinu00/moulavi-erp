@@ -101,11 +101,9 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
     return 'Please fill in all required departure details';
   }
 
-  // If booking mode is 'group_number', passenger count is required in Step 2
-  if (step1Data?.bookingMode === 'group_number') {
-    if (!data.passengerCount || data.passengerCount < 1) {
-      return 'Number of passengers (pax) is required and must be at least 1';
-    }
+  // Passenger count is required in Step 2 for both individual and group bookings
+  if (!data.passengerCount || data.passengerCount < 1) {
+    return 'Number of passengers (pax) is required and must be at least 1';
   }
 
   if (!FLIGHT_NUMBER_REGEX.test(data.arrivalFlightNumber)) {

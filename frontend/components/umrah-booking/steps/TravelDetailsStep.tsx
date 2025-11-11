@@ -106,6 +106,23 @@ export const TravelDetailsStep: React.FC<TravelDetailsStepProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Passenger Count (Both Individual and Group Bookings) - Before Flight Details */}
+      <div className="space-y-2">
+        <Label htmlFor="passengerCount">No. of Passengers (Pax) *</Label>
+        <Input
+          id="passengerCount"
+          type="number"
+          min="1"
+          placeholder="Enter number of passengers"
+          value={data.passengerCount || ''}
+          onChange={(e) => onChange({ passengerCount: parseInt(e.target.value) || undefined })}
+          disabled={disabled}
+        />
+        <p className="text-xs text-gray-500">
+          Enter the total number of passengers for this booking
+        </p>
+      </div>
+
       {/* Travel Details Table */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -131,28 +148,6 @@ export const TravelDetailsStep: React.FC<TravelDetailsStepProps> = ({
           onAirportChange={handleAirportChange}
         />
       </div>
-
-      {/* Passenger Count (Individual Bookings Only) */}
-      {!isGroupBooking && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="passengerCount">No. of Passengers (Pax) *</Label>
-            <Input
-              id="passengerCount"
-              type="number"
-              min="1"
-              placeholder="Enter number of passengers"
-              value={data.passengerCount || ''}
-              onChange={(e) => onChange({ passengerCount: parseInt(e.target.value) || undefined })}
-              disabled={disabled}
-              className="max-w-xs"
-            />
-            <p className="text-xs text-gray-500">
-              Enter the total number of passengers for this booking
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Hotel Booking Section (Group Bookings Only) */}
       {isGroupBooking && (

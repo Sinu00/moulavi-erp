@@ -21,7 +21,7 @@ const completeGroupBookingSchema = z.object({
   step2: step2Schema,
   step3: groupStep3Schema,
   step4: z.object({
-    passengerCount: z.number().min(1).max(50).optional(), // Made optional since it's now in step1
+    // passengerCount removed - now in step2Data
     passengers: z.array(z.object({
       fullName: z.string().min(1).max(255).optional(), // Made optional - not required for group bookings with ZIP
       isLeadPassenger: z.boolean().default(false),
@@ -171,8 +171,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
-    // Validate passenger count (use from step1Data if available, otherwise from step4Data)
-    const passengerCount = step1Data.passengerCount || step4Data.passengerCount;
+    // Validate passenger count (now from step2Data to match individual bookings)
+    const passengerCount = step2Data.passengerCount;
     if (!passengerCount || passengerCount < 1 || passengerCount > 50) {
       return res.status(400).json({ error: 'Passenger count must be between 1 and 50' });
     }
@@ -212,7 +212,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
           hasGroupNumber: true,
-          passengerCount: step1Data.passengerCount,
+          passengerCount: step2Data.passengerCount,
           umrahVisaProviderId: step1Data.umrahVisaProviderId || null,
           status: 'group_assigned',
           visaType: 'group_visa',
