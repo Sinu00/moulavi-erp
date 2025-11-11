@@ -49,9 +49,6 @@ export const useGroupUmrahBooking = () => {
       }],
       panCardZipFile: null, // ZIP file for group bookings
     },
-    showDurationDialog: false,
-    remainingDays: 0,
-    uncoveredDates: [],
   });
 
   const [isLoading, setIsLoading] = useState(false);

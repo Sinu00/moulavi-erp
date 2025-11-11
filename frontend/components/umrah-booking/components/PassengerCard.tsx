@@ -52,21 +52,21 @@ export const PassengerCard: React.FC<PassengerCardProps> = ({
             <DocumentUpload
               label="PAN Card *"
               required
-              file={passenger.panCardPhoto}
+              file={passenger.panCardPhoto || null}
               onChange={(file) => onUpdate('panCardPhoto', file)}
               disabled={disabled}
             />
             <DocumentUpload
               label="Ticket Copy *"
               required
-              file={passenger.ticketCopy}
+              file={passenger.ticketCopy || null}
               onChange={(file) => onUpdate('ticketCopy', file)}
               disabled={disabled}
             />
             <DocumentUpload
               label="Hotel Copy *"
               required
-              file={passenger.hotelBooking}
+              file={passenger.hotelBooking || null}
               onChange={(file) => onUpdate('hotelBooking', file)}
               disabled={disabled}
             />
@@ -79,14 +79,14 @@ export const PassengerCard: React.FC<PassengerCardProps> = ({
             <DocumentUpload
               label="PAN Card *"
               required
-              file={passenger.panCardPhoto}
+              file={passenger.panCardPhoto || null}
               onChange={(file) => onUpdate('panCardPhoto', file)}
               disabled={disabled}
             />
             <DocumentUpload
               label="Iqama Copy *"
               required
-              file={passenger.iqamaPhoto}
+              file={passenger.iqamaPhoto || null}
               onChange={(file) => onUpdate('iqamaPhoto', file)}
               disabled={disabled}
             />
@@ -100,14 +100,14 @@ export const PassengerCard: React.FC<PassengerCardProps> = ({
           <DocumentUpload
             label="Passport Front *"
             required
-            file={passenger.passportFront}
+            file={passenger.passportFront || null}
             onChange={(file) => onUpdate('passportFront', file)}
             disabled={disabled}
           />
           <DocumentUpload
             label="Passport Back *"
             required
-            file={passenger.passportBack}
+            file={passenger.passportBack || null}
             onChange={(file) => onUpdate('passportBack', file)}
             disabled={disabled}
           />
@@ -115,7 +115,7 @@ export const PassengerCard: React.FC<PassengerCardProps> = ({
             <DocumentUpload
               label="PAN Card *"
               required
-              file={passenger.panCardPhoto}
+              file={passenger.panCardPhoto || null}
               onChange={(file) => onUpdate('panCardPhoto', file)}
               disabled={disabled}
             />

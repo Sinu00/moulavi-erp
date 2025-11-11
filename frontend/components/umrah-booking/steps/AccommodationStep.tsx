@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Hotel } from 'lucide-react';
-import { Step3Data, Location, Hotel as HotelType } from '@/lib/umrah/types';
+import { Step3Data, Location, Hotel as HotelType, HotelBooking } from '@/lib/umrah/types';
 import { useHotelCoverage } from '../hooks/useHotelCoverage';
 import { HotelBookingTable } from '../components/HotelBookingTable';
 import { HotelCoverageIndicator } from '../components/HotelCoverageIndicator';
@@ -80,16 +80,16 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
   );
 
   const updateHotelBooking = React.useCallback(
-    (index: number, field: string, value: string) => {
+    (index: number, field: keyof HotelBooking, value: string | string[]) => {
       const updatedBookings = [...(data.hotelBookings || [])];
       updatedBookings[index] = { ...updatedBookings[index], [field]: value };
 
-      if (field === 'locationId') {
+      if (field === 'locationId' && typeof value === 'string') {
         updatedBookings[index].hotelId = '';
         onLoadHotels(value);
       }
 
-      if (field === 'checkOutDate' && updatedBookings[index + 1]) {
+      if (field === 'checkOutDate' && updatedBookings[index + 1] && typeof value === 'string') {
         updatedBookings[index + 1].checkInDate = value;
       }
 

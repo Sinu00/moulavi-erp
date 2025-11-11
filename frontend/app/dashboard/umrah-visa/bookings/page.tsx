@@ -241,7 +241,9 @@ export default function UmrahVisaPage() {
             size="sm"
             onClick={async () => {
               try {
-                await umrahVisaAPI.generateVoucher(booking.id);
+                // First get voucher data, then generate voucher
+                const voucherDataResponse = await umrahVisaAPI.getVoucherData(booking.id!);
+                await umrahVisaAPI.generateVoucher(booking.id!, voucherDataResponse.data);
                 toast.success('Voucher generated');
                 fetchBookings();
               } catch (error: any) {

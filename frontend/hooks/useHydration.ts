@@ -28,9 +28,9 @@ export function SuppressHydrationWarning({
 }: { 
   children: React.ReactNode;
   [key: string]: any;
-}) {
+}): React.JSX.Element {
   return (
-    <div suppressHydrationWarning {...props}>
+    <div suppressHydrationWarning {...(props as any)}>
       {children}
     </div>
   );

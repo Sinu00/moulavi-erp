@@ -117,14 +117,12 @@ export default function UmrahVisaNewPage() {
 
       case 2:
         return (
-          <TravelDetailsStep
-            data={bookingState.step2Data}
-            onChange={updateStep2Data}
-            airports={masterData.airports}
-            transportOptions={masterData.transportOptions}
-            onLoadTransportOptions={loadTransportOptions}
-            disabled={isLoading}
-          />
+                <TravelDetailsStep
+                  data={bookingState.step2Data}
+                  onChange={updateStep2Data}
+                  airports={masterData.airports}
+                  disabled={isLoading}
+                />
         );
 
       case 3:

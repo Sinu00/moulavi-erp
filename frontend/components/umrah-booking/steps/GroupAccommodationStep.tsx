@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Step3Data, TransportBooking } from '@/lib/umrah/types';
+import { Step3Data, TransportBooking, HotelBooking } from '@/lib/umrah/types';
 import { Hotel, Plus } from 'lucide-react';
 import { useHotelCoverage } from '../hooks/useHotelCoverage';
 import { useTransportOptions } from '../hooks/useTransportOptions';
@@ -102,16 +102,16 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
 
   // Update hotel booking handler
   const updateHotelBooking = React.useCallback(
-    (index: number, field: keyof NonNullable<typeof data.hotelBookings>[0], value: string) => {
+    (index: number, field: keyof HotelBooking, value: string | string[]) => {
       const updatedBookings = [...(data.hotelBookings || [])];
       updatedBookings[index] = { ...updatedBookings[index], [field]: value };
 
-      if (field === 'locationId') {
+      if (field === 'locationId' && typeof value === 'string') {
         updatedBookings[index].hotelId = '';
         onLoadHotels(value);
       }
 
-      if (field === 'checkOutDate' && updatedBookings[index + 1]) {
+      if (field === 'checkOutDate' && updatedBookings[index + 1] && typeof value === 'string') {
         updatedBookings[index + 1].checkInDate = value;
       }
 

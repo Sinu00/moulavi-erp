@@ -193,6 +193,7 @@ export interface UmrahVisaBooking {
   groupNumber?: string;
   groupName?: string;
   hasGroupNumber?: boolean;
+  umrahVisaProviderId?: string;
   flightNumber: string;
   arrivalDate: string;
   departureDate: string;
@@ -232,6 +233,47 @@ export interface UmrahVisaBooking {
     name: string;
     email: string;
   };
+  travelDetails?: {
+    arrivalDateTime?: string;
+    departureDateTime?: string;
+    arrivalAirport?: {
+      id: string;
+      name: string;
+      code: string;
+    };
+    departureAirport?: {
+      id: string;
+      name: string;
+      code: string;
+    };
+  };
+  sponsorIqamaDetails?: {
+    iqamaNumber?: string;
+    iqamaSponserName?: string;
+    sponserDob?: string;
+    sponserMobileNumber?: string;
+    iqamaNationalShortAddress?: string;
+  };
+  hotelBookings?: Array<{
+    id: string;
+    hotelId: string;
+    locationId: string;
+    checkIn: string;
+    checkOut: string;
+    hotel?: {
+      id: string;
+      hotelName: string;
+    };
+    location?: {
+      id: string;
+      locationName: string;
+    };
+  }>;
+  umrahVisaProvider?: {
+    id: string;
+    partyName: string;
+    email?: string;
+  };
 }
 
 
@@ -250,7 +292,7 @@ export interface AvailableActionsResponse {
   bookingId: string;
   currentStatus: UmrahVisaStatus;
   availableActions: AvailableAction[];
-  tripInfo: TripInfo;
+  tripInfo?: any; // TripInfo was removed, keeping for backward compatibility
 }
 
 export interface CreateUmrahVisaBookingRequest {

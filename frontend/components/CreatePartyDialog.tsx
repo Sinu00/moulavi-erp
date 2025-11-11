@@ -675,7 +675,7 @@ export default function CreatePartyDialog({
                 checked={formData.login_required}
                 onChange={(e) => handleInputChange('login_required', e.target.checked)}
                 className="rounded"
-                disabled={editingParty && !!editingParty.userId}
+                disabled={!!(editingParty && editingParty.userId)}
               />
               <Label 
                 htmlFor="login_required" 

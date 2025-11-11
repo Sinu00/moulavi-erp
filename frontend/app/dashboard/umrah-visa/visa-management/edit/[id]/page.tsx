@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { umrahVisaAPI } from '@/lib/api';
+import { umrahVisaAPI, umrahVisaMasterAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -88,8 +88,8 @@ export default function EditUmrahVisaBookingPage() {
       setHotelBookings(b.accommodationDetails?.hotelBookings || []);
       // masters
       const [air, dest] = await Promise.all([
-        umrahVisaAPI.getAirports(),
-        umrahVisaAPI.getDestinations(),
+        umrahVisaMasterAPI.getAirports(),
+        umrahVisaMasterAPI.getDestinations(),
       ]);
       setAirports(air.data.airports || []);
       setDestinations(dest.data.destinations || []);

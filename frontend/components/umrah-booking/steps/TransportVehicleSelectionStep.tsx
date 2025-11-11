@@ -66,8 +66,6 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     );
     if (arrivalAirport?.cityMaster?.id) {
       cityIds.push(arrivalAirport.cityMaster.id);
-    } else if (arrivalAirport?.cityId) {
-      cityIds.push(arrivalAirport.cityId);
     }
 
     // Get hotel cities - check both step2Data (group bookings) and step3Data (individual bookings)
@@ -77,15 +75,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
       const hotel = locationMasters.find((lm) => lm.id === booking.hotelId && lm.locationType === 'HOTEL');
       if (hotel?.cityMaster?.id) {
         hotelCities.add(hotel.cityMaster.id);
-      } else if (hotel?.cityId) {
-        hotelCities.add(hotel.cityId);
       }
     });
 
     // Add hotel cities in order (preserve order from hotel bookings)
     hotelBookings.forEach((booking) => {
       const hotel = locationMasters.find((lm) => lm.id === booking.hotelId && lm.locationType === 'HOTEL');
-      const cityId = hotel?.cityMaster?.id || hotel?.cityId;
+      const cityId = hotel?.cityMaster?.id;
       if (cityId && !cityIds.includes(cityId)) {
         cityIds.push(cityId);
       }
@@ -98,8 +94,6 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     );
     if (departureAirport?.cityMaster?.id) {
       cityIds.push(departureAirport.cityMaster.id);
-    } else if (departureAirport?.cityId) {
-      cityIds.push(departureAirport.cityId);
     }
 
     return cityIds;
@@ -249,7 +243,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   }
 
   const routeDisplay = determinedRoute.map((cityId, idx) => {
-    const city = locationMasters.find(lm => (lm.cityMaster?.id || lm.cityId) === cityId);
+    const city = locationMasters.find(lm => lm.cityMaster?.id === cityId);
     return city?.cityMaster?.name || city?.city || `City ${idx + 1}`;
   }).join(' → ');
 
@@ -370,7 +364,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                   transport={transport}
                   isSelected={selectedTransportId === transport.id}
                   isSuggested={true}
-                  passengerCount={step2Data.passengerCount}
+                  passengerCount={step2Data.passengerCount || 0}
                   onSelect={() => handleSelectTransport(transport)}
                   getRouteString={getRouteString}
                   getRouteTypeLabel={getRouteTypeLabel}
@@ -406,7 +400,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                 transport={transport}
                 isSelected={selectedTransportId === transport.id}
                 isSuggested={exactMatches.some(m => m.id === transport.id)}
-                passengerCount={step1Data.passengerCount}
+                passengerCount={step2Data.passengerCount || 0}
                 onSelect={() => handleSelectTransport(transport)}
                 getRouteString={getRouteString}
                 getRouteTypeLabel={getRouteTypeLabel}
