@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Step4Data, Step2Data, Step1Data, LocationMaster } from '@/lib/umrah/types';
+import { Step4Data, Step2Data, Step1Data, Step3Data, LocationMaster } from '@/lib/umrah/types';
 import { transportRouteMasterAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { Truck, CheckCircle2, Loader2, Route, Users, MapPin, Sparkles, Info, AlertCircle } from 'lucide-react';
@@ -13,6 +13,7 @@ interface TransportVehicleSelectionStepProps {
   data: Step4Data;
   step1Data: Step1Data;
   step2Data: Step2Data;
+  step3Data?: Step3Data; // Optional: for individual bookings where hotels are in step3
   locationMasters?: LocationMaster[];
   onChange: (data: Partial<Step4Data>) => void;
   disabled?: boolean;
@@ -42,6 +43,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   data,
   step1Data,
   step2Data,
+  step3Data,
   locationMasters = [],
   onChange,
   disabled = false,
@@ -68,9 +70,10 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
       cityIds.push(arrivalAirport.cityId);
     }
 
-    // Get hotel cities
+    // Get hotel cities - check both step2Data (group bookings) and step3Data (individual bookings)
+    const hotelBookings = step2Data.hotelBookings || step3Data?.hotelBookings || [];
     const hotelCities = new Set<string>();
-    step2Data.hotelBookings?.forEach((booking) => {
+    hotelBookings.forEach((booking) => {
       const hotel = locationMasters.find((lm) => lm.id === booking.hotelId && lm.locationType === 'HOTEL');
       if (hotel?.cityMaster?.id) {
         hotelCities.add(hotel.cityMaster.id);
@@ -80,7 +83,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     });
 
     // Add hotel cities in order (preserve order from hotel bookings)
-    step2Data.hotelBookings?.forEach((booking) => {
+    hotelBookings.forEach((booking) => {
       const hotel = locationMasters.find((lm) => lm.id === booking.hotelId && lm.locationType === 'HOTEL');
       const cityId = hotel?.cityMaster?.id || hotel?.cityId;
       if (cityId && !cityIds.includes(cityId)) {
@@ -100,7 +103,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     }
 
     return cityIds;
-  }, [step2Data.arrivalAirportId, step2Data.departureAirportId, step2Data.hotelBookings, locationMasters]);
+  }, [step2Data.arrivalAirportId, step2Data.departureAirportId, step2Data.hotelBookings, step3Data?.hotelBookings, locationMasters]);
 
   // Load transport options
   useEffect(() => {

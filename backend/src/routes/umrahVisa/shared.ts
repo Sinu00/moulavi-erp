@@ -140,8 +140,32 @@ export const step3Schema = z.object({
   path: ["passengerCount"]
 });
 
-// Step 4 schema - used by individual only
+// Step 4 schema - used by individual only (transport selection)
 export const step4Schema = z.object({
+  selectedTransport: z.object({
+    routeId: z.string().uuid(),
+    transportId: z.string().uuid(),
+    vehicleTypeId: z.string().uuid(),
+    price: z.number(),
+  }).optional(),
+  // Backward compatibility: support old format with passengers
+  passengerCount: z.number().min(1).max(50).optional(),
+  passengers: z.array(z.object({
+    fullName: z.string().min(1).max(255),
+    isLeadPassenger: z.boolean().default(false),
+    documents: z.object({
+      panCardPhoto: z.any().optional(),
+      passportFront: z.any().optional(),
+      passportBack: z.any().optional(),
+      iqamaPhoto: z.any().optional(),
+      hotelBooking: z.any().optional(),
+      ticketCopy: z.any().optional(),
+    }).optional(),
+  })).optional(),
+});
+
+// Step 5 schema - used by individual only (passengers and documents)
+export const step5Schema = z.object({
   passengerCount: z.number().min(1).max(50),
   passengers: z.array(z.object({
     fullName: z.string().min(1).max(255),

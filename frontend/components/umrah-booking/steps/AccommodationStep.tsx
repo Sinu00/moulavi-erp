@@ -19,6 +19,7 @@ interface AccommodationStepProps {
   departureDate: string;
   onLoadHotels: (locationId: string) => void;
   getHotelsForLocation: (locationId: string) => HotelType[];
+  passengerCount?: number; // Add passenger count from step 1
   disabled?: boolean;
 }
 
@@ -31,8 +32,11 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
   departureDate,
   onLoadHotels,
   getHotelsForLocation,
+  passengerCount,
   disabled = false,
 }) => {
+  const MAX_PASSENGERS_IQAMA = 5;
+  const canSelectIqama = !passengerCount || passengerCount <= MAX_PASSENGERS_IQAMA;
   const addHotelBooking = React.useCallback(() => {
     const existingBookings = data.hotelBookings || [];
     let checkInDate = '';
@@ -111,7 +115,16 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
                 ? 'border-red-500 bg-red-50'
                 : 'border-gray-200 hover:border-gray-300'
             }`}
-            onClick={() => !disabled && onChange({ accommodationType: 'hotel' })}
+            onClick={() => {
+              if (!disabled) {
+                // Clear iqama data when switching to hotel
+                onChange({ 
+                  accommodationType: 'hotel',
+                  iqamaDetails: undefined,
+                  hotelBookings: data.hotelBookings || []
+                });
+              }
+            }}
           >
             <div className="flex items-center space-x-3">
               <div
@@ -132,9 +145,20 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
             className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
               data.accommodationType === 'iqama'
                 ? 'border-red-500 bg-red-50'
-                : 'border-gray-200 hover:border-gray-300'
+                : canSelectIqama
+                ? 'border-gray-200 hover:border-gray-300'
+                : 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
             }`}
-            onClick={() => !disabled && onChange({ accommodationType: 'iqama' })}
+            onClick={() => {
+              if (!disabled && canSelectIqama) {
+                // Clear hotel data when switching to iqama
+                onChange({ 
+                  accommodationType: 'iqama',
+                  hotelBookings: undefined,
+                  iqamaDetails: data.iqamaDetails || {}
+                });
+              }
+            }}
           >
             <div className="flex items-center space-x-3">
               <div
@@ -146,9 +170,16 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
               />
               <div>
                 <h3 className="font-medium">Iqama Sponsor</h3>
-                <p className="text-sm text-gray-500">Stay with sponsor</p>
+                <p className="text-sm text-gray-500">
+                  {canSelectIqama ? 'Stay with sponsor' : `Maximum ${MAX_PASSENGERS_IQAMA} passengers allowed`}
+                </p>
               </div>
             </div>
+            {!canSelectIqama && passengerCount && (
+              <div className="mt-2 text-xs text-red-600">
+                ⚠️ Cannot select iqama: {passengerCount} passengers exceeds limit of {MAX_PASSENGERS_IQAMA}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -250,8 +281,24 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
               disabled={disabled}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="iqamaNationalShortAddress">National Short Address *</Label>
+            <Input
+              id="iqamaNationalShortAddress"
+              placeholder="Enter national short address"
+              value={data.iqamaDetails?.iqamaNationalShortAddress || ''}
+              onChange={(e) =>
+                onChange({
+                  iqamaDetails: { ...data.iqamaDetails, iqamaNationalShortAddress: e.target.value },
+                })
+              }
+              disabled={disabled}
+            />
+          </div>
         </div>
       )}
     </div>
   );
 };
+

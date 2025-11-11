@@ -14,8 +14,9 @@ import { StepProgress, LoadingSpinner } from '@/components/umrah-booking/shared'
 import { BookingModeStep } from '@/components/umrah-booking/steps/BookingModeStep';
 import { TravelDetailsStep } from '@/components/umrah-booking/steps/TravelDetailsStep';
 import { AccommodationStep } from '@/components/umrah-booking/steps/AccommodationStep';
+import { TransportVehicleSelectionStep } from '@/components/umrah-booking/steps/TransportVehicleSelectionStep';
 import { DocumentsStep } from '@/components/umrah-booking/steps/DocumentsStep';
-import { validateStep1, validateStep2, validateStep3, validateStep4 } from '@/lib/umrah/validation';
+import { validateStep1, validateStep2, validateStep3, validateStep4, validateStep5 } from '@/lib/umrah/validation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -33,6 +34,7 @@ export default function UmrahVisaNewPage() {
     updateStep2Data,
     updateStep3Data,
     updateStep4Data,
+    updateStep5Data,
     setCurrentStep,
     loadPartyData,
     submitStep,
@@ -69,9 +71,11 @@ export default function UmrahVisaNewPage() {
       case 2:
         return validateStep2(bookingState.step2Data, masterData.airports);
       case 3:
-        return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
+        return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step1Data);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step3Data);
+        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, masterData.locationMasters);
+      case 5:
+        return validateStep5(bookingState.step5Data, bookingState.step1Data, bookingState.step3Data, false);
       default:
         return null;
     }
@@ -85,7 +89,7 @@ export default function UmrahVisaNewPage() {
     }
 
     const success = await submitStep(bookingState.currentStep);
-    if (success && bookingState.currentStep === 4) {
+    if (success && bookingState.currentStep === 5) {
       router.push('/party/dashboard');
     }
   };
@@ -134,17 +138,31 @@ export default function UmrahVisaNewPage() {
             departureDate={bookingState.step2Data.departureDate}
             onLoadHotels={loadHotels}
             getHotelsForLocation={getHotelsForLocation}
+            passengerCount={bookingState.step1Data.passengerCount}
             disabled={isLoading}
           />
         );
 
       case 4:
         return (
-          <DocumentsStep
+          <TransportVehicleSelectionStep
             data={bookingState.step4Data}
             step1Data={bookingState.step1Data}
+            step2Data={bookingState.step2Data}
             step3Data={bookingState.step3Data}
+            locationMasters={masterData.locationMasters}
             onChange={updateStep4Data}
+            disabled={isLoading}
+          />
+        );
+
+      case 5:
+        return (
+          <DocumentsStep
+            data={bookingState.step5Data}
+            step1Data={bookingState.step1Data}
+            step3Data={bookingState.step3Data}
+            onChange={updateStep5Data}
             disabled={isLoading}
           />
         );
@@ -191,7 +209,8 @@ export default function UmrahVisaNewPage() {
                     {bookingState.currentStep === 1 && 'Choose your booking type'}
                     {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
                     {bookingState.currentStep === 3 && 'Select accommodation type and details'}
-                    {bookingState.currentStep === 4 && 'Upload required documents'}
+                    {bookingState.currentStep === 4 && 'Select transport vehicle (optional)'}
+                    {bookingState.currentStep === 5 && 'Upload required documents'}
                   </p>
                 </div>
               </div>
@@ -235,8 +254,8 @@ export default function UmrahVisaNewPage() {
               disabled={isLoading}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              {isLoading ? 'Processing...' : bookingState.currentStep < 4 ? 'Next' : 'Submit Application'}
-              {bookingState.currentStep < 4 && <ChevronRight className="h-4 w-4 ml-2" />}
+              {isLoading ? 'Processing...' : bookingState.currentStep < 5 ? 'Next' : 'Submit Application'}
+              {bookingState.currentStep < 5 && <ChevronRight className="h-4 w-4 ml-2" />}
             </Button>
           </div>
         </div>

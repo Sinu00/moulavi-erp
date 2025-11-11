@@ -141,59 +141,77 @@ export const validateStep2 = (data: Step2Data, airports: any[]): string | null =
   return null;
 };
 
-export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDate: string): string | null => {
+export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDate: string, step1Data?: { passengerCount?: number }): string | null => {
+  // Check if this is an individual booking (has accommodationType) or group booking (has transportSegments)
+  const isIndividualBooking = !!data.accommodationType;
+  const isGroupBooking = !isIndividualBooking && data.transportSegments !== undefined;
+
   // For group bookings: Step 3 is movement details only
-  // Validate transport segments (manual movement)
-  if (!data.transportSegments || data.transportSegments.length === 0) {
-    return 'Please add movement segments';
-  }
+  if (isGroupBooking) {
+    // Validate transport segments (manual movement)
+    if (!data.transportSegments || data.transportSegments.length === 0) {
+      return 'Please add movement segments';
+    }
 
-  // Validate transport segments
-  for (const segment of data.transportSegments) {
-    if (!segment.fromLocationId || !segment.toLocationId) {
-      return 'Please fill in from and to locations for all movement segments';
-    }
-    if (!segment.travelDate) {
-      return 'Travel date is required for all movement segments';
-    }
-  }
-
-  // Legacy validation for individual bookings (iqama/hotel in step 3)
-  if (data.accommodationType === 'iqama') {
-    if (!data.iqamaDetails?.iqamaNumber || !data.iqamaDetails?.iqamaName) {
-      return 'Please fill in all required iqama details';
-    }
-  } else if (data.hotelBookings && data.hotelBookings.length > 0) {
-    // Individual booking with hotels in step 3 (backward compatibility)
-    for (const booking of data.hotelBookings) {
-      if (!booking.locationId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
-        return 'Please fill in all hotel booking details';
+    // Validate transport segments
+    for (const segment of data.transportSegments) {
+      if (!segment.fromLocationId || !segment.toLocationId) {
+        return 'Please fill in from and to locations for all movement segments';
       }
-      
-      const checkIn = new Date(booking.checkInDate);
-      const checkOut = new Date(booking.checkOutDate);
-      
-      if (checkOut <= checkIn) {
-        return 'Check-out date must be after check-in date';
+      if (!segment.travelDate) {
+        return 'Travel date is required for all movement segments';
       }
     }
+    return null; // Group booking validation complete
+  }
 
-    const coverage = calculateHotelCoverage(arrivalDate, departureDate, data.hotelBookings);
-    if (coverage.remainingDays > 0) {
-      return `You have ${coverage.remainingDays} day${coverage.remainingDays > 1 ? 's' : ''} without accommodation coverage`;
-    }
-
-    // Ziyarah basic validations
-    if (data.ziyarah && data.ziyarah.length) {
-      for (const z of data.ziyarah) {
-        if (!z.date) continue;
-        const d = new Date(z.date + 'T00:00:00');
-        // 5 = Friday when using getUTCDay with date-only baseline
-        if (d.getUTCDay() === 5) {
-          return `${z.city} Ziyarah cannot be scheduled on Friday. Please adjust the date.`;
+  // For individual bookings: Step 3 is accommodation details only (no movement segments needed)
+  if (isIndividualBooking) {
+    if (data.accommodationType === 'iqama') {
+      // Validate passenger count for iqama (max 5)
+      const passengerCount = step1Data?.passengerCount;
+      if (passengerCount && passengerCount > 5) {
+        return `Iqama accommodation is only allowed for up to 5 passengers. You have ${passengerCount} passengers.`;
+      }
+      
+      if (!data.iqamaDetails?.iqamaNumber || !data.iqamaDetails?.iqamaName) {
+        return 'Please fill in all required iqama details';
+      }
+      if (!data.iqamaDetails?.iqamaNationalShortAddress?.trim()) {
+        return 'National short address is required for iqama accommodation';
+      }
+    } else if (data.hotelBookings && data.hotelBookings.length > 0) {
+      // Individual booking with hotels in step 3 (backward compatibility)
+      for (const booking of data.hotelBookings) {
+        if (!booking.locationId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
+          return 'Please fill in all hotel booking details';
         }
-        if (departureDate && z.date === departureDate) {
-          return `${z.city} Ziyarah collides with departure date. Please choose another day.`;
+        
+        const checkIn = new Date(booking.checkInDate);
+        const checkOut = new Date(booking.checkOutDate);
+        
+        if (checkOut <= checkIn) {
+          return 'Check-out date must be after check-in date';
+        }
+      }
+
+      const coverage = calculateHotelCoverage(arrivalDate, departureDate, data.hotelBookings);
+      if (coverage.remainingDays > 0) {
+        return `You have ${coverage.remainingDays} day${coverage.remainingDays > 1 ? 's' : ''} without accommodation coverage`;
+      }
+
+      // Ziyarah basic validations
+      if (data.ziyarah && data.ziyarah.length) {
+        for (const z of data.ziyarah) {
+          if (!z.date) continue;
+          const d = new Date(z.date + 'T00:00:00');
+          // 5 = Friday when using getUTCDay with date-only baseline
+          if (d.getUTCDay() === 5) {
+            return `${z.city} Ziyarah cannot be scheduled on Friday. Please adjust the date.`;
+          }
+          if (departureDate && z.date === departureDate) {
+            return `${z.city} Ziyarah collides with departure date. Please choose another day.`;
+          }
         }
       }
     }
@@ -202,14 +220,51 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
   return null;
 };
 
-export const validateStep4 = (data: Step4Data): string | null => {
+export const validateStep4 = (
+  data: Step4Data, 
+  step1Data?: Step1Data, 
+  step2Data?: Step2Data, 
+  step3Data?: Step3Data,
+  locationMasters?: any[]
+): string | null => {
   // Step 4: Transport Vehicle Selection
-  if (!data.selectedTransport) {
-    return 'Please select a transport vehicle for your route';
+  // Transport is optional unless: arrivalAirport is Jeddah AND accommodationType is hotel
+  
+  // Check if transport is required
+  const isTransportRequired = (() => {
+    if (!step2Data?.arrivalAirportId || !step3Data?.accommodationType) {
+      return false;
+    }
+    
+    // Check if arrival airport is Jeddah
+    const arrivalAirport = locationMasters?.find(
+      (lm) => lm.id === step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
+    );
+    
+    const isJeddah = arrivalAirport && (
+      arrivalAirport.code === 'JED' || 
+      arrivalAirport.name?.toLowerCase().includes('jeddah')
+    );
+    
+    return isJeddah && step3Data.accommodationType === 'hotel';
+  })();
+  
+  // If transport is required, validate it
+  if (isTransportRequired) {
+    if (!data.selectedTransport) {
+      return 'Please select a transport vehicle for your route (required for Jeddah arrival with hotel accommodation)';
+    }
+    
+    if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
+      return 'Invalid transport selection. Please select again.';
+    }
   }
   
-  if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
-    return 'Invalid transport selection. Please select again.';
+  // If transport is provided (even when optional), validate it
+  if (data.selectedTransport) {
+    if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
+      return 'Invalid transport selection. Please select again.';
+    }
   }
   
   return null;
@@ -263,27 +318,22 @@ export const validateStep5 = (data: Step5Data, step1Data: Step1Data, step3Data: 
     }
   }
 
-  // Individual booking WITHOUT group number: All passengers need passport, lead needs PAN
-  for (const passenger of data.passengers) {
-    if (!passenger.passportFront) {
-      return `Passport front is required for ${passenger.fullName || 'passenger'}`;
-    }
-    if (!passenger.passportBack) {
-      return `Passport back is required for ${passenger.fullName || 'passenger'}`;
-    }
+  // Determine if booking has group number
+  const hasGroupNumber = !!(step1Data.groupNumber && step1Data.groupName);
 
-    if (passenger.isLeadPassenger && !passenger.panCardPhoto) {
-      return 'Lead passenger PAN card is required';
-    }
-  }
-
-  // Individual booking WITH group number (legacy): Check accommodation type
-  if (step1Data.groupNumber && step3Data.accommodationType) {
+  // Individual booking WITH group number: Only lead passenger needs documents (no passport)
+  if (hasGroupNumber && step3Data.accommodationType) {
     const leadPassenger = data.passengers.find(p => p.isLeadPassenger);
     if (!leadPassenger) {
       return 'Lead passenger not found';
     }
 
+    // Lead passenger must have PAN card
+    if (!leadPassenger.panCardPhoto) {
+      return 'Lead passenger PAN card is required';
+    }
+
+    // Check accommodation-specific documents
     if (step3Data.accommodationType === 'hotel') {
       if (!leadPassenger.ticketCopy) {
         return 'Ticket copy is required for lead passenger';
@@ -295,6 +345,23 @@ export const validateStep5 = (data: Step5Data, step1Data: Step1Data, step3Data: 
       if (!leadPassenger.iqamaPhoto) {
         return 'Iqama copy is required for lead passenger';
       }
+    }
+
+    // For group number bookings, other passengers don't need any documents
+    return null;
+  }
+
+  // Individual booking WITHOUT group number: All passengers need passport, lead needs PAN
+  for (const passenger of data.passengers) {
+    if (!passenger.passportFront) {
+      return `Passport front is required for ${passenger.fullName || 'passenger'}`;
+    }
+    if (!passenger.passportBack) {
+      return `Passport back is required for ${passenger.fullName || 'passenger'}`;
+    }
+
+    if (passenger.isLeadPassenger && !passenger.panCardPhoto) {
+      return 'Lead passenger PAN card is required';
     }
   }
 

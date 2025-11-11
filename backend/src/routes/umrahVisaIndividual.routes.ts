@@ -7,6 +7,7 @@ import {
   step2Schema,
   step3Schema,
   step4Schema,
+  step5Schema,
   FLIGHT_NUMBER_REGEX,
 } from './umrahVisa/shared';
 import { combineDateTime, splitDateTime } from '../utils/datetime';
@@ -18,13 +19,23 @@ const step1Schema = z.object({
   bookingMode: z.enum(['group_number', 'travel_details']),
   groupNumber: z.string().optional(),
   groupName: z.string().optional(),
+  passengerCount: z.number().min(1).max(50).optional(),
+  umrahVisaProviderId: z.string().uuid().optional(),
 }).refine((data) => {
   if (data.bookingMode === 'group_number') {
-    return data.groupNumber && data.groupName;
+    if (!data.groupNumber || !data.groupName) {
+      return false;
+    }
+    if (!data.passengerCount || data.passengerCount < 1) {
+      return false;
+    }
+    if (!data.umrahVisaProviderId) {
+      return false;
+    }
   }
   return true;
 }, {
-  message: "Group number and group name are required when booking mode is 'group_number'",
+  message: "Group number, group name, passenger count, and umrah visa provider are required when booking mode is 'group_number'",
   path: ["groupNumber"]
 });
 
@@ -34,7 +45,14 @@ const completeBookingSchema = z.object({
   step1: step1Schema,
   step2: step2Schema,
   step3: step3Schema,
-  step4: step4Schema,
+  step4: step4Schema.optional(), // Transport selection (optional)
+  step5: step5Schema.optional(), // Passengers and documents (new structure)
+}).refine((data) => {
+  // Either step5 (new structure) or step4 with passengers (old structure) must be provided
+  return !!(data.step5 || (data.step4 && data.step4.passengers && data.step4.passengerCount));
+}, {
+  message: "Either step5 (passengers) or step4 with passengers (backward compatibility) must be provided",
+  path: ["step5"]
 });
 
 // POST /api/umrah-visa/step1 - Step 1: Validation Only (No DB writes)
@@ -124,7 +142,11 @@ router.post('/create-booking', authenticate, async (req, res) => {
     const step1Data = validatedData.step1;
     const step2Data = validatedData.step2;
     const step3Data = validatedData.step3;
-    const step4Data = validatedData.step4;
+    const step4Data = validatedData.step4; // Transport (optional)
+    const step5Data = validatedData.step5; // Passengers (new structure)
+    
+    // Support backward compatibility: if step4 has passengers, use that; otherwise use step5
+    const passengersData = step5Data || (step4Data?.passengers && step4Data?.passengerCount ? step4Data : null);
 
     // Additional validations - convert date strings to Date objects for validation
     const arrivalDateObj = new Date(step2Data.arrivalDate);
@@ -133,7 +155,20 @@ router.post('/create-booking', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
-    if (step3Data.accommodationType === 'iqama' && step4Data.passengerCount > 5) {
+    // Type guard: ensure passengersData has required fields
+    if (!passengersData) {
+      return res.status(400).json({ error: 'Passenger data is required' });
+    }
+    
+    if (!passengersData.passengerCount || !passengersData.passengers || passengersData.passengers.length === 0) {
+      return res.status(400).json({ error: 'Passenger data is incomplete' });
+    }
+    
+    // TypeScript type narrowing: at this point, we know passengersData has passengerCount and passengers
+    const finalPassengerCount = passengersData.passengerCount;
+    const finalPassengers = passengersData.passengers;
+
+    if (step3Data.accommodationType === 'iqama' && finalPassengerCount > 5) {
       return res.status(400).json({ error: 'Maximum 5 passengers allowed for iqama accommodation' });
     }
 
@@ -143,7 +178,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
 
     // Validate documents based on booking mode
     if (hasGroupNumber && accommodationType) {
-      const leadPassenger = step4Data.passengers.find(p => p.isLeadPassenger);
+      const leadPassenger = finalPassengers.find(p => p.isLeadPassenger);
       if (!leadPassenger) {
         return res.status(400).json({ error: 'Lead passenger is required for bookings with group number' });
       }
@@ -159,7 +194,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
       }
     } else {
       // Regular booking validation
-      const leadPassenger = step4Data.passengers.find(p => p.isLeadPassenger);
+      const leadPassenger = finalPassengers.find(p => p.isLeadPassenger);
       if (!leadPassenger) {
         return res.status(400).json({ error: 'Lead passenger is required' });
       }
@@ -168,7 +203,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
         return res.status(400).json({ error: 'Lead passenger requires PAN card, passport front, and passport back' });
       }
 
-      for (const passenger of step4Data.passengers.filter(p => !p.isLeadPassenger)) {
+      for (const passenger of finalPassengers.filter(p => !p.isLeadPassenger)) {
         if (!passenger.documents?.passportFront || !passenger.documents?.passportBack) {
           return res.status(400).json({ error: `Passport front and back required for ${passenger.fullName || 'passenger'}` });
         }
@@ -188,7 +223,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
     }
 
     // Calculate hasTransportation
-    const hasTransportation = step2Data.transportBookings && step2Data.transportBookings.length > 0;
+    const hasTransportation = !!(step4Data?.selectedTransport?.transportId || (step2Data.transportBookings && step2Data.transportBookings.length > 0));
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -200,7 +235,8 @@ router.post('/create-booking', authenticate, async (req, res) => {
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
           hasGroupNumber,
-          passengerCount: step4Data.passengerCount,
+          passengerCount: step1Data.passengerCount || finalPassengerCount,
+          umrahVisaProviderId: step1Data.umrahVisaProviderId || null,
           status: initialStatus,
           visaType: 'individual_visa',
           accommodationType: step3Data.accommodationType,
@@ -232,17 +268,47 @@ router.post('/create-booking', authenticate, async (req, res) => {
       if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings) {
         // Create hotel bookings directly linked to booking
         await Promise.all(
-          step3Data.hotelBookings.map(hotel =>
-            tx.umrahHotelBooking.create({
+          step3Data.hotelBookings.map(async (hotel) => {
+            // Check if hotel.locationId is a valid LocationMaster ID
+            let locationMasterId = hotel.locationId;
+            
+            const testLocationMaster = await tx.locationMaster.findUnique({
+              where: { id: hotel.locationId },
+            });
+            
+            if (!testLocationMaster) {
+              // If not a LocationMaster ID, get the hotel's city and find a LocationMaster for that city
+              const hotelLocation = await tx.locationMaster.findUnique({
+                where: { id: hotel.hotelId },
+                select: { cityId: true },
+              });
+              
+              if (hotelLocation?.cityId) {
+                const anyLocationInCity = await tx.locationMaster.findFirst({
+                  where: { cityId: hotelLocation.cityId },
+                  select: { id: true },
+                });
+                
+                if (anyLocationInCity) {
+                  locationMasterId = anyLocationInCity.id;
+                } else {
+                  throw new Error(`No LocationMaster found for city. Hotel booking requires a LocationMaster entry for the city.`);
+                }
+              } else {
+                throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel not found or missing cityId`);
+              }
+            }
+            
+            return tx.umrahHotelBooking.create({
               data: {
                 bookingId: booking.id,
-                locationId: hotel.locationId,
+                locationId: locationMasterId,
                 hotelId: hotel.hotelId,
                 checkInDate: hotel.checkInDate,
                 checkOutDate: hotel.checkOutDate,
               },
-            })
-          )
+            });
+          })
         );
       } else if (step3Data.accommodationType === 'iqama' && step3Data.iqamaDetails) {
         // Create sponsor iqama details
@@ -259,13 +325,136 @@ router.post('/create-booking', authenticate, async (req, res) => {
       }
 
       // 6. Create UmrahTransportBooking (if provided) - using new format with transportMasterId
-      // Note: Individual bookings should use step4Data.selectedTransport similar to group bookings
-      // This code is kept for backward compatibility but should be migrated to use transportMasterId
-      // For now, individual bookings without transportMasterId will not create transport bookings
+      if (step4Data?.selectedTransport?.transportId) {
+        await tx.umrahTransportBooking.create({
+          data: {
+            bookingId: booking.id,
+            transportMasterId: step4Data.selectedTransport.transportId,
+            travelDateTime: null, // Can be set later if needed
+          },
+        });
+      }
+
+      // 6.5. Create UmrahMovementDetail entries (only if transport is selected - hasTransportation = true)
+      if (hasTransportation && step3Data.accommodationType === 'hotel' && step3Data.hotelBookings && step3Data.hotelBookings.length > 0) {
+        const movementDetailsToCreate: Array<{
+          bookingId: string;
+          travelDateTime: Date;
+          fromCityId: string;
+          fromLocationId: string;
+          toCityId: string;
+          toLocationId: string;
+        }> = [];
+
+        // Get arrival airport location
+        const arrivalAirport = await tx.locationMaster.findUnique({
+          where: { id: step2Data.arrivalAirportId },
+          select: { id: true, cityId: true },
+        });
+
+        // Get departure airport location
+        const departureAirport = await tx.locationMaster.findUnique({
+          where: { id: step2Data.departureAirportId },
+          select: { id: true, cityId: true },
+        });
+
+        if (!arrivalAirport || !departureAirport) {
+          throw new Error('Invalid airport IDs');
+        }
+
+        // 1. Arrival Airport → First Hotel
+        const firstHotel = step3Data.hotelBookings[0];
+        const firstHotelLocation = await tx.locationMaster.findUnique({
+          where: { id: firstHotel.hotelId },
+          select: { id: true, cityId: true },
+        });
+
+        if (firstHotelLocation && arrivalAirport.cityId && firstHotelLocation.cityId) {
+          const arrivalDateTime = combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime);
+          if (arrivalDateTime) {
+            movementDetailsToCreate.push({
+              bookingId: booking.id,
+              travelDateTime: arrivalDateTime,
+              fromCityId: arrivalAirport.cityId,
+              fromLocationId: arrivalAirport.id,
+              toCityId: firstHotelLocation.cityId,
+              toLocationId: firstHotelLocation.id,
+            });
+          }
+        }
+
+        // 2. Inter-hotel movements (Hotel 1 → Hotel 2, Hotel 2 → Hotel 3, etc.)
+        for (let i = 1; i < step3Data.hotelBookings.length; i++) {
+          const prevHotel = step3Data.hotelBookings[i - 1];
+          const currHotel = step3Data.hotelBookings[i];
+
+          const prevHotelLocation = await tx.locationMaster.findUnique({
+            where: { id: prevHotel.hotelId },
+            select: { id: true, cityId: true },
+          });
+
+          const currHotelLocation = await tx.locationMaster.findUnique({
+            where: { id: currHotel.hotelId },
+            select: { id: true, cityId: true },
+          });
+
+          if (prevHotelLocation && currHotelLocation && 
+              prevHotelLocation.cityId && currHotelLocation.cityId &&
+              prevHotelLocation.cityId !== currHotelLocation.cityId) {
+            // Only create movement if hotels are in different cities
+            const travelDate = currHotel.checkInDate;
+            const travelDateTime = new Date(travelDate);
+            travelDateTime.setHours(12, 0, 0, 0); // Default to noon
+
+            movementDetailsToCreate.push({
+              bookingId: booking.id,
+              travelDateTime,
+              fromCityId: prevHotelLocation.cityId,
+              fromLocationId: prevHotelLocation.id,
+              toCityId: currHotelLocation.cityId,
+              toLocationId: currHotelLocation.id,
+            });
+          }
+        }
+
+        // 3. Last Hotel → Departure Airport
+        const lastHotel = step3Data.hotelBookings[step3Data.hotelBookings.length - 1];
+        const lastHotelLocation = await tx.locationMaster.findUnique({
+          where: { id: lastHotel.hotelId },
+          select: { id: true, cityId: true },
+        });
+
+        if (lastHotelLocation && lastHotelLocation.cityId && departureAirport.cityId &&
+            lastHotelLocation.cityId !== departureAirport.cityId) {
+          // Only create movement if last hotel is in different city than departure airport
+          const departureDateTime = combineDateTime(step2Data.departureDate, step2Data.departureTime);
+          if (departureDateTime) {
+            movementDetailsToCreate.push({
+              bookingId: booking.id,
+              travelDateTime: departureDateTime,
+              fromCityId: lastHotelLocation.cityId,
+              fromLocationId: lastHotelLocation.id,
+              toCityId: departureAirport.cityId,
+              toLocationId: departureAirport.id,
+            });
+          }
+        }
+
+        // Create all movement details
+        if (movementDetailsToCreate.length > 0) {
+          await Promise.all(
+            movementDetailsToCreate.map((movement) =>
+              tx.umrahMovementDetail.create({
+                data: movement,
+              })
+            )
+          );
+        }
+      }
 
       // 7. Create UmrahPassenger (all passengers)
       const passengers = await Promise.all(
-        step4Data.passengers.map(passenger =>
+        finalPassengers.map(passenger =>
           tx.umrahPassenger.create({
             data: {
               bookingId: booking.id,
@@ -324,7 +513,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
       message: 'Booking completed successfully',
       data: {
         bookingId: result.booking.id,
-        passengerCount: step4Data.passengerCount,
+        passengerCount: finalPassengerCount,
         passengers: result.passengers,
         tripInfo: result.tripInfo,
         status: initialStatus,

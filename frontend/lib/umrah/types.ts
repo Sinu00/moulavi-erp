@@ -74,6 +74,7 @@ export interface IqamaDetails {
   iqamaName?: string;
   iqamaDob?: string;
   iqamaMobile?: string;
+  iqamaNationalShortAddress?: string;
 }
 
 export interface Passenger {

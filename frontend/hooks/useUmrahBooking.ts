@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { partyAPI } from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/umrah/constants';
-import { BookingState, MasterData, Step1Data, Step2Data, Step3Data, Step4Data } from '@/lib/umrah/types';
+import { BookingState, MasterData, Step1Data, Step2Data, Step3Data, Step4Data, Step5Data } from '@/lib/umrah/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -26,6 +26,9 @@ export const useUmrahBooking = () => {
     },
     step3Data: { accommodationType: 'hotel' },
     step4Data: {
+      selectedTransport: undefined,
+    },
+    step5Data: {
       passengers: [{ 
         fullName: '', 
         isLeadPassenger: true, 
@@ -70,6 +73,13 @@ export const useUmrahBooking = () => {
     }));
   }, []);
 
+  const updateStep5Data = useCallback((data: Partial<Step5Data>) => {
+    setBookingState(prev => ({
+      ...prev,
+      step5Data: { ...prev.step5Data, ...data }
+    }));
+  }, []);
+
   const setCurrentStep = useCallback((step: number) => {
     setBookingState(prev => ({ ...prev, currentStep: step }));
   }, []);
@@ -98,8 +108,8 @@ export const useUmrahBooking = () => {
 
     setIsLoading(true);
     try {
-      // Steps 1-3: Only validate (no DB writes)
-      if (stepNumber < 4) {
+      // Steps 1-4: Only validate (no DB writes)
+      if (stepNumber < 5) {
         const endpoint = `${API_URL}${API_ENDPOINTS[`STEP${stepNumber}` as keyof typeof API_ENDPOINTS]}`;
         let payload: any;
         
@@ -113,43 +123,58 @@ export const useUmrahBooking = () => {
           case 3:
             payload = bookingState.step3Data;
             break;
+          case 4:
+            // Step 4 is transport - validate only, no API call needed
+            // Transport validation is done in the component
+            setBookingState(prev => ({
+              ...prev,
+              completedSteps: [...prev.completedSteps, stepNumber],
+              currentStep: stepNumber + 1
+            }));
+            toast.success(`Step ${stepNumber} completed successfully`);
+            return true;
         }
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-          },
-          body: JSON.stringify(payload),
-        });
+        if (stepNumber < 4) {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            },
+            body: JSON.stringify(payload),
+          });
 
-        const data = await response.json();
-        
-        if (response.ok) {
-          setBookingState(prev => ({
-            ...prev,
-            completedSteps: [...prev.completedSteps, stepNumber],
-            currentStep: stepNumber + 1
-          }));
+          const data = await response.json();
           
-          toast.success(`Step ${stepNumber} validated successfully`);
-          return true;
-        } else {
-          toast.error(data.error || `Failed to validate step ${stepNumber}`);
-          return false;
+          if (response.ok) {
+            setBookingState(prev => ({
+              ...prev,
+              completedSteps: [...prev.completedSteps, stepNumber],
+              currentStep: stepNumber + 1
+            }));
+            
+            toast.success(`Step ${stepNumber} validated successfully`);
+            return true;
+          } else {
+            toast.error(data.error || `Failed to validate step ${stepNumber}`);
+            return false;
+          }
         }
       } 
-      // Step 4: Send ALL data to create-booking endpoint
-      else if (stepNumber === 4) {
+      // Step 5: Send ALL data to create-booking endpoint
+      else if (stepNumber === 5) {
         const payload = {
           partyId,
           step1: bookingState.step1Data,
           step2: bookingState.step2Data,
           step3: bookingState.step3Data,
-          step4: {
-            passengerCount: bookingState.step4Data.passengers.length,
-            passengers: bookingState.step4Data.passengers.map(p => ({
+          step4: bookingState.step4Data.selectedTransport ? {
+            selectedTransport: bookingState.step4Data.selectedTransport
+          } : undefined,
+          step5: {
+            passengerCount: bookingState.step5Data.passengers.length,
+            passengers: bookingState.step5Data.passengers.map(p => ({
               fullName: p.fullName,
               isLeadPassenger: p.isLeadPassenger,
               documents: {
@@ -179,7 +204,7 @@ export const useUmrahBooking = () => {
           setBookingState(prev => ({
             ...prev,
             bookingId: data.data.bookingId,
-            completedSteps: [...prev.completedSteps, 4],
+            completedSteps: [...prev.completedSteps, 5],
           }));
           
           toast.success('Booking completed successfully!');
@@ -208,6 +233,7 @@ export const useUmrahBooking = () => {
     updateStep2Data,
     updateStep3Data,
     updateStep4Data,
+    updateStep5Data,
     setCurrentStep,
     loadPartyData,
     submitStep,

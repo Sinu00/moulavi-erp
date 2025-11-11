@@ -1,17 +1,17 @@
-// Step 4: Documents Component
+// Step 5: Documents Component
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Users } from 'lucide-react';
-import { Step4Data, Step1Data, Step3Data, Passenger } from '@/lib/umrah/types';
+import { Step5Data, Step1Data, Step3Data, Passenger } from '@/lib/umrah/types';
 import { BOOKING_LIMITS } from '@/lib/umrah/constants';
 import { PassengerCard } from '../components/PassengerCard';
 
 interface DocumentsStepProps {
-  data: Step4Data;
+  data: Step5Data;
   step1Data: Step1Data;
   step3Data: Step3Data;
-  onChange: (data: Partial<Step4Data>) => void;
+  onChange: (data: Partial<Step5Data>) => void;
   onStep1DataChange?: (data: Partial<Step1Data>) => void;
   disabled?: boolean;
 }

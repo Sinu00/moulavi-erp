@@ -1,9 +1,12 @@
 // Step 1: Booking Mode Component
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Step1Data } from '@/lib/umrah/types';
+import { partyAPI } from '@/lib/api';
+import { Party } from '@/types';
 
 interface BookingModeStepProps {
   data: Step1Data;
@@ -16,6 +19,31 @@ export const BookingModeStep: React.FC<BookingModeStepProps> = ({
   onChange,
   disabled = false,
 }) => {
+  const [umrahVisaProviders, setUmrahVisaProviders] = useState<Party[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+
+  useEffect(() => {
+    const loadUmrahVisaProviders = async () => {
+      setLoadingProviders(true);
+      try {
+        const response = await partyAPI.getAll({ 
+          supplier_service_type: 'umrah_service',
+          limit: 1000 
+        });
+        setUmrahVisaProviders(response.data.parties || []);
+      } catch (error) {
+        console.error('Error loading umrah visa providers:', error);
+        setUmrahVisaProviders([]);
+      } finally {
+        setLoadingProviders(false);
+      }
+    };
+
+    if (data.bookingMode === 'group_number') {
+      loadUmrahVisaProviders();
+    }
+  }, [data.bookingMode]);
+
   return (
     <div className="space-y-6">
       <div className="space-y-4">
@@ -83,6 +111,39 @@ export const BookingModeStep: React.FC<BookingModeStepProps> = ({
                   onChange={(e) => onChange({ groupName: e.target.value })}
                   disabled={disabled}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="passengerCount">No. of Passengers (Pax) *</Label>
+                <Input
+                  id="passengerCount"
+                  type="number"
+                  min="1"
+                  placeholder="Enter number of passengers"
+                  value={data.passengerCount || ''}
+                  onChange={(e) => onChange({ passengerCount: parseInt(e.target.value) || undefined })}
+                  disabled={disabled}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="umrahVisaProviderId">Umrah Visa Providing Company *</Label>
+                <Select
+                  value={data.umrahVisaProviderId || ''}
+                  onValueChange={(value) => onChange({ umrahVisaProviderId: value })}
+                  disabled={disabled || loadingProviders}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingProviders ? "Loading..." : "Select umrah visa provider"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {umrahVisaProviders.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.partyName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
