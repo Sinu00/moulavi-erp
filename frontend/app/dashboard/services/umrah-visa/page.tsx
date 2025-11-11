@@ -86,7 +86,14 @@ interface UmrahVisaBooking {
   createdAt: string;
   updatedAt: string;
   passengers: UmrahPassenger[];
-  service: {
+  party?: {
+    id: string;
+    partyName: string;
+    email: string;
+    contactNumber?: string;
+    whatsappNumber?: string;
+  };
+  service?: {
     id: string;
     status: string;
     submittedAt: string;
