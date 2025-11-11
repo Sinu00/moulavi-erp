@@ -19,11 +19,14 @@ router.post('/:bookingId/add-group-data', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Only admin/staff can add group data' });
     }
 
-    const { groupNumber, groupName } = req.body;
+    const { groupNumber, groupName, umrahVisaProviderId } = req.body;
 
     if (!groupNumber || !groupName) {
       return res.status(400).json({ error: 'Group number and group name are required' });
     }
+
+    // Log for debugging (can be removed later)
+    console.log('Add group data - received umrahVisaProviderId:', umrahVisaProviderId);
 
     // Check if booking exists
     const booking = await prisma.umrahVisaBooking.findUnique({
@@ -38,26 +41,32 @@ router.post('/:bookingId/add-group-data', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Group data can only be added when status is documents_downloaded' });
     }
 
-    // Determine next status based on accommodation type
-    let nextStatus: 'group_assigned' | 'voucher';
-    if (booking.accommodationType === 'iqama') {
-      nextStatus = 'group_assigned';
-    } else if (booking.accommodationType === 'hotel') {
-      nextStatus = 'voucher';
-    } else {
+    // Always set status to group_assigned after adding group data
+    // For hotel bookings, admin will use "Done" button to transition to voucher
+    // For iqama bookings, admin will upload confirmation to transition to voucher/bill
+    const nextStatus = 'group_assigned';
+    
+    if (!booking.accommodationType) {
       return res.status(400).json({ error: 'Accommodation type not set for this booking' });
     }
 
     // Update booking - use sync function to ensure status consistency
     await prisma.$transaction(async (tx) => {
+      const updateData: any = {
+        groupNumber,
+        groupName,
+        hasGroupNumber: true,
+        lastUpdatedBy: user.id,
+      };
+
+      // Only update umrahVisaProviderId if it's provided (not undefined)
+      if (umrahVisaProviderId !== undefined) {
+        updateData.umrahVisaProviderId = umrahVisaProviderId || null;
+      }
+
       await tx.umrahVisaBooking.update({
         where: { id: bookingId },
-        data: {
-          groupNumber,
-          groupName,
-          hasGroupNumber: true,
-          lastUpdatedBy: user.id,
-        },
+        data: updateData,
       });
 
       // Sync status separately (handles booking status + history)
@@ -255,6 +264,67 @@ router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) =>
   } catch (error) {
     console.error('Error uploading confirmation:', error);
     res.status(500).json({ error: 'Failed to upload confirmation' });
+  }
+});
+
+// POST /api/umrah-visa/:bookingId/mark-ready-for-voucher - Mark hotel booking as ready for voucher (Admin/Staff only)
+router.post('/:bookingId/mark-ready-for-voucher', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Only admin/staff can mark as ready
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can mark booking as ready for voucher' });
+    }
+
+    // Check if booking exists
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (booking.accommodationType !== 'hotel') {
+      return res.status(400).json({ 
+        error: 'This action is only available for hotel accommodation bookings'
+      });
+    }
+
+    if (booking.status !== 'group_assigned') {
+      return res.status(400).json({ 
+        error: 'Booking can only be marked as ready when status is group_assigned',
+        currentStatus: booking.status 
+      });
+    }
+
+    // Update status to voucher
+    await prisma.$transaction(async (tx) => {
+      await tx.umrahVisaBooking.update({
+        where: { id: bookingId },
+        data: {
+          lastUpdatedBy: user.id,
+        },
+      });
+
+      // Sync status separately (handles booking status + history)
+      await syncBookingStatusInTx(bookingId, 'voucher', user.id, 'Marked as ready for voucher generation', tx);
+    });
+    
+    // Re-fetch updated booking
+    const finalBooking = await prisma.umrahVisaBooking.findUnique({ where: { id: bookingId } });
+
+    res.json({
+      message: 'Booking marked as ready for voucher generation',
+      data: {
+        booking: finalBooking,
+      },
+    });
+  } catch (error) {
+    console.error('Error marking booking as ready for voucher:', error);
+    res.status(500).json({ error: 'Failed to mark booking as ready for voucher' });
   }
 });
 
@@ -483,7 +553,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Check status
+    // Check status - must be voucher
     if (booking.status !== 'voucher') {
       return res.status(400).json({ 
         error: 'Voucher can only be generated when status is voucher',
@@ -626,13 +696,26 @@ router.get('/:bookingId/available-actions', authenticate, async (req, res) => {
 
       case 'group_assigned':
         if (isAdminOrStaff) {
-          availableActions.push({
-            action: 'upload_confirmation',
-            label: 'Upload Image',
-            description: 'Upload confirmation image',
-            endpoint: `/api/umrah-visa/${bookingId}/upload-confirmation`,
-            method: 'POST',
-          });
+          // For iqama bookings: show upload confirmation
+          if (booking.accommodationType === 'iqama') {
+            availableActions.push({
+              action: 'upload_confirmation',
+              label: 'Upload Image',
+              description: 'Upload confirmation image',
+              endpoint: `/api/umrah-visa/${bookingId}/upload-confirmation`,
+              method: 'POST',
+            });
+          }
+          // For hotel bookings: show done button to transition to voucher
+          else if (booking.accommodationType === 'hotel') {
+            availableActions.push({
+              action: 'mark_ready_for_voucher',
+              label: 'Done',
+              description: 'Mark booking as ready for voucher generation',
+              endpoint: `/api/umrah-visa/${bookingId}/mark-ready-for-voucher`,
+              method: 'POST',
+            });
+          }
         }
         break;
 

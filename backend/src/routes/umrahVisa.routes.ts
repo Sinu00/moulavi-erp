@@ -84,6 +84,12 @@ router.get('/bookings', authenticate, async (req, res) => {
             },
           },
           sponsorIqamaDetails: true,
+          umrahVisaProvider: {
+            select: {
+              id: true,
+              partyName: true,
+            },
+          },
           passengers: {
             include: {
               documents: true,

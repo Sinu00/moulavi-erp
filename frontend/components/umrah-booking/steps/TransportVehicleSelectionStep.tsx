@@ -108,7 +108,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   // Load transport options
   useEffect(() => {
     const loadTransportOptions = async () => {
-      if (determinedRoute.length < 2 || !step1Data.passengerCount) {
+      if (determinedRoute.length < 2 || !step2Data.passengerCount) {
         return;
       }
 
@@ -119,7 +119,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
 
         // Filter transports by PAX capacity
         // Logic: vehicle.paxCount >= passengerCount (e.g., 30 PAX vehicle can handle 20 passengers)
-        const passengerCount = step1Data.passengerCount || 0;
+        const passengerCount = step2Data.passengerCount || 0;
 
         const filterByPax = (routes: any[]): TransportOption[] => {
           const options: TransportOption[] = [];
@@ -184,7 +184,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     };
 
     loadTransportOptions();
-  }, [determinedRoute, step1Data.passengerCount]);
+  }, [determinedRoute, step2Data.passengerCount]);
 
   const getRouteString = (route: TransportOption['route']) => {
     const cities = [
@@ -238,11 +238,11 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     );
   }
 
-  if (!step1Data.passengerCount) {
+  if (!step2Data.passengerCount) {
     return (
       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p className="text-yellow-800">
-          Please enter the number of passengers in Step 1 to see transport options.
+          Please enter the number of passengers in Step 2 to see transport options.
         </p>
       </div>
     );
@@ -273,7 +273,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                 No Transport Options Available
               </h3>
               <p className="text-gray-700 mb-4">
-                We couldn't find any transport vehicles for your route with <strong>{step1Data.passengerCount} passengers</strong>.
+                We couldn't find any transport vehicles for your route with <strong>{step2Data.passengerCount} passengers</strong>.
               </p>
               
               {hasRoutes ? (
@@ -283,7 +283,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900 mb-1">Routes Found, But No Suitable Vehicles</p>
                       <p className="text-sm text-gray-600">
-                        Routes matching your cities were found, but none of the vehicles have sufficient capacity for {step1Data.passengerCount} passengers.
+                        Routes matching your cities were found, but none of the vehicles have sufficient capacity for {step2Data.passengerCount} passengers.
                       </p>
                       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
                         <p className="font-medium mb-1">How it works:</p>
@@ -336,7 +336,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
             <div className="flex items-center space-x-4 text-sm">
               <div className="flex items-center space-x-1.5 text-gray-600">
                 <Users className="h-4 w-4" />
-                <span><strong className="text-gray-900">{step1Data.passengerCount}</strong> Passengers</span>
+                <span><strong className="text-gray-900">{step2Data.passengerCount}</strong> Passengers</span>
               </div>
               <div className="flex items-center space-x-1.5 text-gray-600">
                 <Route className="h-4 w-4" />
@@ -370,7 +370,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                   transport={transport}
                   isSelected={selectedTransportId === transport.id}
                   isSuggested={true}
-                  passengerCount={step1Data.passengerCount}
+                  passengerCount={step2Data.passengerCount}
                   onSelect={() => handleSelectTransport(transport)}
                   getRouteString={getRouteString}
                   getRouteTypeLabel={getRouteTypeLabel}

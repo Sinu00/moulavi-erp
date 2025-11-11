@@ -211,15 +211,12 @@ router.post('/create-booking', authenticate, async (req, res) => {
     }
 
     // Determine initial status
-    let initialStatus: 'pending' | 'group_assigned' | 'voucher';
+    let initialStatus: 'pending' | 'group_assigned';
     if (!hasGroupNumber) {
       initialStatus = 'pending';
-    } else if (accommodationType === 'iqama') {
-      initialStatus = 'group_assigned';
-    } else if (accommodationType === 'hotel') {
-      initialStatus = 'voucher';
     } else {
-      initialStatus = 'pending';
+      // If hasGroupNumber is true, always set to group_assigned (regardless of accommodation type)
+      initialStatus = 'group_assigned';
     }
 
     // Calculate hasTransportation
@@ -235,7 +232,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
           hasGroupNumber,
-          passengerCount: step1Data.passengerCount || finalPassengerCount,
+          passengerCount: step2Data.passengerCount || finalPassengerCount,
           umrahVisaProviderId: step1Data.umrahVisaProviderId || null,
           status: initialStatus,
           visaType: 'individual_visa',

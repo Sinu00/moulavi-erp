@@ -204,7 +204,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create UmrahVisaBooking directly with partyId (group visa, always hotel, status = voucher)
+      // 1. Create UmrahVisaBooking directly with partyId (group visa, always hotel, status = group_assigned)
       const booking = await tx.umrahVisaBooking.create({
         data: {
           partyId: partyId,
@@ -214,7 +214,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
           hasGroupNumber: true,
           passengerCount: step1Data.passengerCount,
           umrahVisaProviderId: step1Data.umrahVisaProviderId || null,
-          status: 'voucher',
+          status: 'group_assigned',
           visaType: 'group_visa',
           accommodationType: 'hotel',
           hasTransportation,
@@ -628,7 +628,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         data: {
           bookingId: booking.id,
           oldStatus: null,
-          newStatus: 'voucher',
+          newStatus: 'group_assigned',
           changedBy: user.id,
           reason: 'Group booking created',
         },
@@ -643,7 +643,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         bookingId: result.booking.id,
         passengerCount: passengerCount,
         passengers: result.passengers,
-        status: 'voucher',
+        status: 'group_assigned',
       },
     });
   } catch (error) {

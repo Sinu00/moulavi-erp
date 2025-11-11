@@ -34,9 +34,10 @@ import {
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { UmrahVisaBooking, UmrahVisaStatus } from '@/types';
-import { umrahVisaAPI } from '@/lib/api';
+import { UmrahVisaBooking, UmrahVisaStatus, Party } from '@/types';
+import { umrahVisaAPI, partyAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function AssignGroupPage() {
   const router = useRouter();
@@ -51,6 +52,9 @@ export default function AssignGroupPage() {
   const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
   const [groupNumber, setGroupNumber] = useState('');
   const [groupName, setGroupName] = useState('');
+  const [umrahVisaProviderId, setUmrahVisaProviderId] = useState('');
+  const [umrahVisaProviders, setUmrahVisaProviders] = useState<Party[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -58,7 +62,24 @@ export default function AssignGroupPage() {
 
   useEffect(() => {
     fetchBookings();
+    loadUmrahVisaProviders();
   }, []);
+
+  const loadUmrahVisaProviders = async () => {
+    setLoadingProviders(true);
+    try {
+      const response = await partyAPI.getAll({ 
+        supplier_service_type: 'umrah_service',
+        limit: 1000 
+      });
+      setUmrahVisaProviders(response.data.parties || []);
+    } catch (error) {
+      console.error('Error loading umrah visa providers:', error);
+      setUmrahVisaProviders([]);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
 
   useEffect(() => {
     filterData();
@@ -122,18 +143,29 @@ export default function AssignGroupPage() {
 
   const handleAddGroupData = async () => {
     if (!selectedBooking || !groupNumber || !groupName) {
-      toast.error('Please fill in all fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     if (!selectedBooking.id) return;
 
     try {
-      const response = await umrahVisaAPI.addGroupData(selectedBooking.id, { groupNumber, groupName });
+      const payload: any = {
+        groupNumber, 
+        groupName,
+      };
+      
+      // Only include umrahVisaProviderId if it has a value
+      if (umrahVisaProviderId && umrahVisaProviderId.trim()) {
+        payload.umrahVisaProviderId = umrahVisaProviderId;
+      }
+      
+      const response = await umrahVisaAPI.addGroupData(selectedBooking.id, payload);
       toast.success('Group data added successfully');
       setShowAddGroupDialog(false);
       setGroupNumber('');
       setGroupName('');
+      setUmrahVisaProviderId('');
       setSelectedBooking(null);
       fetchBookings();
     } catch (error: any) {
@@ -151,7 +183,13 @@ export default function AssignGroupPage() {
       );
     } else if (booking.status === 'documents_downloaded') {
       return (
-        <Button size="sm" onClick={() => { setSelectedBooking(booking); setShowAddGroupDialog(true); }} className="flex items-center gap-1">
+        <Button size="sm" onClick={() => { 
+          setSelectedBooking(booking); 
+          setGroupNumber(booking.groupNumber || '');
+          setGroupName(booking.groupName || '');
+          setUmrahVisaProviderId(booking.umrahVisaProviderId || '');
+          setShowAddGroupDialog(true); 
+        }} className="flex items-center gap-1">
           <Plus className="h-3 w-3" />
           Assign Group
         </Button>
@@ -274,20 +312,55 @@ export default function AssignGroupPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign Group Details</DialogTitle>
-            <DialogDescription>Assign group number and name to this booking</DialogDescription>
+            <DialogDescription>Assign group number, name, and umrah visa providing company to this booking</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="groupNumber">Group Number</Label>
+              <Label htmlFor="groupNumber">Group Number *</Label>
               <Input id="groupNumber" placeholder="e.g., GRP-2024-001" value={groupNumber} onChange={(e) => setGroupNumber(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="groupName">Group Name</Label>
+              <Label htmlFor="groupName">Group Name *</Label>
               <Input id="groupName" placeholder="e.g., Ramadan Group 2024" value={groupName} onChange={(e) => setGroupName(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="umrahVisaProviderId">Umrah Visa Providing Company</Label>
+              <Select
+                value={umrahVisaProviderId || undefined}
+                onValueChange={(value) => setUmrahVisaProviderId(value || '')}
+                disabled={loadingProviders}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingProviders ? "Loading..." : "Select umrah visa provider (optional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {umrahVisaProviders.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      {provider.partyName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {umrahVisaProviderId && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 h-6 text-xs"
+                  onClick={() => setUmrahVisaProviderId('')}
+                >
+                  Clear selection
+                </Button>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddGroupDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => {
+              setShowAddGroupDialog(false);
+              setGroupNumber('');
+              setGroupName('');
+              setUmrahVisaProviderId('');
+            }}>Cancel</Button>
             <Button onClick={handleAddGroupData}>Assign Group</Button>
           </DialogFooter>
         </DialogContent>

@@ -69,9 +69,9 @@ export default function UmrahVisaNewPage() {
       case 1:
         return validateStep1(bookingState.step1Data);
       case 2:
-        return validateStep2(bookingState.step2Data, masterData.airports);
+        return validateStep2(bookingState.step2Data, masterData.airports, bookingState.step1Data);
       case 3:
-        return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step1Data);
+        return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step2Data);
       case 4:
         return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, masterData.locationMasters);
       case 5:
@@ -138,7 +138,7 @@ export default function UmrahVisaNewPage() {
             departureDate={bookingState.step2Data.departureDate}
             onLoadHotels={loadHotels}
             getHotelsForLocation={getHotelsForLocation}
-            passengerCount={bookingState.step1Data.passengerCount}
+            passengerCount={bookingState.step2Data.passengerCount}
             disabled={isLoading}
           />
         );

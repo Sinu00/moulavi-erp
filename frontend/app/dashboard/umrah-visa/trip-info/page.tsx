@@ -47,6 +47,7 @@ export default function TripInfoPage() {
   const [filteredData, setFilteredData] = useState<UmrahVisaBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'iqama' | 'hotel'>('iqama');
   
   // Dialog states
   const [showUploadConfirmationDialog, setShowUploadConfirmationDialog] = useState(false);
@@ -65,7 +66,7 @@ export default function TripInfoPage() {
 
   useEffect(() => {
     filterData();
-  }, [searchQuery, bookingList]);
+  }, [searchQuery, bookingList, activeTab]);
 
   const fetchBookings = async () => {
     try {
@@ -73,9 +74,9 @@ export default function TripInfoPage() {
       const response = await umrahVisaAPI.getBookings({ limit: 1000, status: 'group_assigned' });
       const data = response.data;
       
-      // Filter only group_assigned bookings
+      // Filter only group_assigned bookings (both iqama and hotel)
       const bookingsData = data.bookings
-        .filter((booking: any) => booking.status === 'group_assigned' && booking.accommodationType === 'iqama')
+        .filter((booking: any) => booking.status === 'group_assigned')
         .map((booking: any) => booking);
 
       setBookingList(bookingsData);
@@ -88,8 +89,27 @@ export default function TripInfoPage() {
   };
 
   const filterData = () => {
-    // No filtering needed - only group_assigned bookings are fetched
-    setFilteredData(bookingList);
+    let filtered = bookingList;
+
+    // Filter by accommodation type based on active tab
+    if (activeTab === 'iqama') {
+      filtered = filtered.filter(booking => booking.accommodationType === 'iqama');
+    } else if (activeTab === 'hotel') {
+      filtered = filtered.filter(booking => booking.accommodationType === 'hotel');
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(booking =>
+        booking.party?.partyName?.toLowerCase().includes(query) ||
+        booking.groupNumber?.toLowerCase().includes(query) ||
+        booking.groupName?.toLowerCase().includes(query) ||
+        booking.sponsorIqamaDetails?.iqamaNumber?.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredData(filtered);
   };
 
   const formatDate = (dateString: string) => {
@@ -130,28 +150,55 @@ export default function TripInfoPage() {
     }
   };
 
+  const handleMarkReadyForVoucher = async (booking: UmrahVisaBooking) => {
+    if (!booking.id) return;
+
+    try {
+      toast.info('Marking booking as ready for voucher...');
+      const response = await umrahVisaAPI.markReadyForVoucher(booking.id);
+      toast.success('Booking marked as ready for voucher generation');
+      fetchBookings();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to mark booking as ready');
+    }
+  };
+
   const renderActionButton = (booking: UmrahVisaBooking) => {
-    // Only handle group_assigned status - this page only shows group_assigned bookings
-        return (
-          <div className="flex flex-col gap-1">
-            <div className="text-xs text-gray-500 text-center">
-              Downloads: {booking.documentsDownloadCount || 0}/1
-            </div>
-            <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => {
-              setSelectedBooking(booking);
-              setShowUploadConfirmationDialog(true);
-            }}
-            className="flex items-center gap-1 whitespace-nowrap"
-          >
-            <Upload className="h-3 w-3" />
-            Upload Image
-          </Button>
+    if (booking.accommodationType === 'iqama') {
+      // Iqama bookings: Show upload confirmation button
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="text-xs text-gray-500 text-center">
+            Downloads: {booking.documentsDownloadCount || 0}/1
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedBooking(booking);
+                setShowUploadConfirmationDialog(true);
+              }}
+              className="flex items-center gap-1 whitespace-nowrap"
+            >
+              <Upload className="h-3 w-3" />
+              Upload Image
+            </Button>
+          </div>
         </div>
-      </div>
-    );
+      );
+    } else if (booking.accommodationType === 'hotel') {
+      // Hotel bookings: Show Done button
+      return (
+        <Button
+          size="sm"
+          onClick={() => handleMarkReadyForVoucher(booking)}
+          className="flex items-center gap-1 whitespace-nowrap"
+        >
+          Done
+        </Button>
+      );
+    }
+    return null;
   };
 
   if (!user) {
@@ -236,6 +283,30 @@ export default function TripInfoPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Tabs for Accommodation Type */}
+              <div className="flex space-x-2 border-b">
+                <button
+                  onClick={() => setActiveTab('iqama')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'iqama'
+                      ? 'border-red-600 text-red-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Iqama
+                </button>
+                <button
+                  onClick={() => setActiveTab('hotel')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'hotel'
+                      ? 'border-red-600 text-red-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Hotel
+                </button>
+              </div>
+
               {/* Search Bar */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
@@ -256,7 +327,7 @@ export default function TripInfoPage() {
                       <TableHead className="w-[200px]">Group Details</TableHead>
                       <TableHead className="w-[180px]">Arrival Details</TableHead>
                       <TableHead className="w-[180px]">Return Details</TableHead>
-                      <TableHead className="w-[220px]">Iqama Details</TableHead>
+                      <TableHead className="w-[220px]">{activeTab === 'iqama' ? 'Iqama Details' : 'Hotel Details'}</TableHead>
                       <TableHead className="w-[150px]">Updated By</TableHead>
                       <TableHead className="w-[280px]">Status & Action</TableHead>
                     </TableRow>
@@ -302,9 +373,11 @@ export default function TripInfoPage() {
                                 <div className="text-sm font-medium text-gray-900">
                                   {booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  {iqamaDetails?.sponserMobileNumber || 'N/A'}
-                                </div>
+                                {activeTab === 'iqama' && (
+                                  <div className="text-xs text-gray-600">
+                                    {iqamaDetails?.sponserMobileNumber || 'N/A'}
+                                  </div>
+                                )}
                               </div>
                             </TableCell>
 
@@ -314,34 +387,57 @@ export default function TripInfoPage() {
                                 <div className="text-sm font-medium text-gray-900">
                                   {booking.travelDetails?.departureDateTime ? formatDate(booking.travelDetails.departureDateTime) : 'N/A'}
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  {iqamaDetails?.sponserMobileNumber || 'N/A'}
-                                </div>
+                                {activeTab === 'iqama' && (
+                                  <div className="text-xs text-gray-600">
+                                    {iqamaDetails?.sponserMobileNumber || 'N/A'}
+                                  </div>
+                                )}
                               </div>
                             </TableCell>
 
-                            {/* Iqama Details */}
+                            {/* Accommodation Details */}
                             <TableCell>
-                              <div className="space-y-1 text-xs">
-                                <div>
-                                  <span className="text-gray-500">Number:</span>{' '}
-                                  <span className="font-medium">{iqamaDetails?.iqamaNumber || 'N/A'}</span>
+                              {activeTab === 'iqama' ? (
+                                <div className="space-y-1 text-xs">
+                                  <div>
+                                    <span className="text-gray-500">Number:</span>{' '}
+                                    <span className="font-medium">{iqamaDetails?.iqamaNumber || 'N/A'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500">Holder:</span>{' '}
+                                    <span className="font-medium">{iqamaDetails?.iqamaSponserName || 'N/A'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500">DOB:</span>{' '}
+                                    <span className="font-medium">
+                                      {iqamaDetails?.sponserDob ? formatDate(iqamaDetails.sponserDob) : 'N/A'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500">Phone:</span>{' '}
+                                    <span className="font-medium">{iqamaDetails?.sponserMobileNumber || 'N/A'}</span>
+                                  </div>
                                 </div>
-                                <div>
-                                  <span className="text-gray-500">Holder:</span>{' '}
-                                  <span className="font-medium">{iqamaDetails?.iqamaSponserName || 'N/A'}</span>
+                              ) : (
+                                <div className="space-y-1 text-xs">
+                                  <div>
+                                    <span className="text-gray-500">Hotels:</span>{' '}
+                                    <span className="font-medium">
+                                      {booking.hotelBookings?.length || 0} hotel(s)
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500">Passengers:</span>{' '}
+                                    <span className="font-medium">{booking.passengerCount || 'N/A'}</span>
+                                  </div>
+                                  {booking.umrahVisaProvider && (
+                                    <div>
+                                      <span className="text-gray-500">Provider:</span>{' '}
+                                      <span className="font-medium">{booking.umrahVisaProvider.partyName}</span>
+                                    </div>
+                                  )}
                                 </div>
-                                <div>
-                                  <span className="text-gray-500">DOB:</span>{' '}
-                                  <span className="font-medium">
-                                    {iqamaDetails?.sponserDob ? formatDate(iqamaDetails.sponserDob) : 'N/A'}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500">Phone:</span>{' '}
-                                  <span className="font-medium">{iqamaDetails?.sponserMobileNumber || 'N/A'}</span>
-                                </div>
-                              </div>
+                              )}
                             </TableCell>
 
                             {/* Updated By */}

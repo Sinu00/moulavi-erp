@@ -17,6 +17,7 @@ export interface Step2Data {
   departureTime: string;
   departureAirportId: string;
   departureFlightNumber: string;
+  passengerCount?: number; // Number of passengers (for individual bookings)
   transportBookings?: TransportBooking[];
   hotelBookings?: HotelBooking[]; // For group bookings, hotels are in Step 2
 }

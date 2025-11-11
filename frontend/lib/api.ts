@@ -215,6 +215,9 @@ export const umrahVisaAPI = {
   uploadConfirmation: (bookingId: string, confirmationImagePath: string) =>
     api.post(`/umrah-visa/${bookingId}/upload-confirmation`, { confirmationImagePath }),
 
+  markReadyForVoucher: (bookingId: string) =>
+    api.post(`/umrah-visa/${bookingId}/mark-ready-for-voucher`),
+
   getVoucherData: (bookingId: string) =>
     api.get(`/umrah-visa/${bookingId}/voucher-data`),
 

@@ -85,9 +85,6 @@ export const validateStep1 = (data: Step1Data): string | null => {
     if (!data.groupName?.trim()) {
       return 'Group name is required for group booking mode';
     }
-    if (!data.passengerCount || data.passengerCount < 1) {
-      return 'Number of passengers (pax) is required and must be at least 1';
-    }
     if (!data.umrahVisaProviderId) {
       return 'Umrah visa providing company is required';
     }
@@ -95,13 +92,20 @@ export const validateStep1 = (data: Step1Data): string | null => {
   return null;
 };
 
-export const validateStep2 = (data: Step2Data, airports: any[]): string | null => {
+export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step1Data): string | null => {
   if (!data.arrivalDate || !data.arrivalTime || !data.arrivalAirportId || !data.arrivalFlightNumber) {
     return 'Please fill in all required arrival details';
   }
 
   if (!data.departureDate || !data.departureTime || !data.departureAirportId || !data.departureFlightNumber) {
     return 'Please fill in all required departure details';
+  }
+
+  // If booking mode is 'group_number', passenger count is required in Step 2
+  if (step1Data?.bookingMode === 'group_number') {
+    if (!data.passengerCount || data.passengerCount < 1) {
+      return 'Number of passengers (pax) is required and must be at least 1';
+    }
   }
 
   if (!FLIGHT_NUMBER_REGEX.test(data.arrivalFlightNumber)) {
@@ -141,7 +145,7 @@ export const validateStep2 = (data: Step2Data, airports: any[]): string | null =
   return null;
 };
 
-export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDate: string, step1Data?: { passengerCount?: number }): string | null => {
+export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDate: string, step2Data?: { passengerCount?: number }): string | null => {
   // Check if this is an individual booking (has accommodationType) or group booking (has transportSegments)
   const isIndividualBooking = !!data.accommodationType;
   const isGroupBooking = !isIndividualBooking && data.transportSegments !== undefined;
@@ -169,7 +173,7 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
   if (isIndividualBooking) {
     if (data.accommodationType === 'iqama') {
       // Validate passenger count for iqama (max 5)
-      const passengerCount = step1Data?.passengerCount;
+      const passengerCount = step2Data?.passengerCount;
       if (passengerCount && passengerCount > 5) {
         return `Iqama accommodation is only allowed for up to 5 passengers. You have ${passengerCount} passengers.`;
       }

@@ -94,6 +94,7 @@ export const step2Schema = z.object({
   departureTime: z.string(), // HH:mm format
   departureAirportId: z.string().uuid(),
   departureFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
+  passengerCount: z.number().min(1).max(50).optional(), // Number of passengers (for individual bookings)
   transportBookings: z.array(z.object({
     fromLocationId: z.string().uuid(),
     toLocationId: z.string().uuid(),
