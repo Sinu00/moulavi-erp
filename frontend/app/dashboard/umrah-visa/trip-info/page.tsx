@@ -34,7 +34,7 @@ import {
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { TripInfo, UmrahVisaStatus } from '@/types';
+import { UmrahVisaBooking, UmrahVisaStatus } from '@/types';
 import { umrahVisaAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
 
@@ -43,14 +43,14 @@ export default function TripInfoPage() {
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [tripInfoList, setTripInfoList] = useState<TripInfo[]>([]);
-  const [filteredData, setFilteredData] = useState<TripInfo[]>([]);
+  const [bookingList, setBookingList] = useState<UmrahVisaBooking[]>([]);
+  const [filteredData, setFilteredData] = useState<UmrahVisaBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Dialog states
   const [showUploadConfirmationDialog, setShowUploadConfirmationDialog] = useState(false);
-  const [selectedTrip, setSelectedTrip] = useState<TripInfo | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
   
   // Form states
   const [confirmationImage, setConfirmationImage] = useState<File | null>(null);
@@ -60,35 +60,28 @@ export default function TripInfoPage() {
       router.push('/');
       return;
     }
-    fetchTripInfo();
+    fetchBookings();
   }, []); // Remove user and router from dependencies to prevent infinite loop
 
   useEffect(() => {
     filterData();
-  }, [searchQuery, tripInfoList]);
+  }, [searchQuery, bookingList]);
 
-  const fetchTripInfo = async () => {
+  const fetchBookings = async () => {
     try {
       setIsLoading(true);
       const response = await umrahVisaAPI.getBookings({ limit: 1000, status: 'group_assigned' });
       const data = response.data;
       
-      // Extract trip info from bookings - only group_assigned status
-      const tripInfoData = data.bookings
-        .filter((booking: any) => booking.tripInfo && booking.tripInfo.status === 'group_assigned')
-        .map((booking: any) => ({
-          ...booking.tripInfo,
-          visaType: booking.visaType,
-          booking: {
-            id: booking.id,
-            passengerCount: booking.passengerCount,
-          },
-        }));
+      // Filter only group_assigned bookings
+      const bookingsData = data.bookings
+        .filter((booking: any) => booking.status === 'group_assigned' && booking.accommodationType === 'iqama')
+        .map((booking: any) => booking);
 
-      setTripInfoList(tripInfoData);
+      setBookingList(bookingsData);
     } catch (error) {
-      console.error('Error fetching trip info:', error);
-      toast.error('Failed to load trip info');
+      console.error('Error fetching bookings:', error);
+      toast.error('Failed to load bookings');
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +89,7 @@ export default function TripInfoPage() {
 
   const filterData = () => {
     // No filtering needed - only group_assigned bookings are fetched
-    setFilteredData(tripInfoList);
+    setFilteredData(bookingList);
   };
 
   const formatDate = (dateString: string) => {
@@ -110,10 +103,12 @@ export default function TripInfoPage() {
   // Action Handlers
 
   const handleUploadConfirmation = async () => {
-    if (!confirmationImage || !selectedTrip) {
+    if (!confirmationImage || !selectedBooking) {
       toast.error('Please select an image');
       return;
     }
+
+    if (!selectedBooking.id) return;
 
     try {
       // For testing: Use dummy image path instead of actual upload
@@ -122,31 +117,31 @@ export default function TripInfoPage() {
 
       const token = localStorage.getItem('accessToken');
       
-      // Update trip info with confirmation
-      const response = await umrahVisaAPI.uploadConfirmation(selectedTrip.bookingId, imagePath);
+      // Update booking with confirmation
+      const response = await umrahVisaAPI.uploadConfirmation(selectedBooking.id, imagePath);
 
       toast.success('Confirmation uploaded successfully! Status changed to Booking Success');
       setShowUploadConfirmationDialog(false);
       setConfirmationImage(null);
-      setSelectedTrip(null);
-      fetchTripInfo();
+      setSelectedBooking(null);
+      fetchBookings();
     } catch (error: any) {
       toast.error(error.message || 'Failed to upload confirmation');
     }
   };
 
-  const renderActionButton = (trip: TripInfo) => {
+  const renderActionButton = (booking: UmrahVisaBooking) => {
     // Only handle group_assigned status - this page only shows group_assigned bookings
         return (
           <div className="flex flex-col gap-1">
             <div className="text-xs text-gray-500 text-center">
-              Downloads: {trip.documentsDownloadCount}/1
+              Downloads: {booking.documentsDownloadCount || 0}/1
             </div>
             <div className="flex items-center gap-2">
           <Button
             size="sm"
             onClick={() => {
-              setSelectedTrip(trip);
+              setSelectedBooking(booking);
               setShowUploadConfirmationDialog(true);
             }}
             className="flex items-center gap-1 whitespace-nowrap"
@@ -221,7 +216,7 @@ export default function TripInfoPage() {
               </div>
             </div>
             <Button 
-              onClick={fetchTripInfo}
+              onClick={fetchBookings}
               variant="outline"
               className="flex items-center gap-2"
             >
@@ -237,7 +232,7 @@ export default function TripInfoPage() {
             <CardHeader>
               <CardTitle>Trip Information</CardTitle>
               <CardDescription>
-                Showing {filteredData.length} of {tripInfoList.length} trips
+                Showing {filteredData.length} of {bookingList.length} bookings
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -276,23 +271,24 @@ export default function TripInfoPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredData.map((trip) => {
+                      filteredData.map((booking) => {
+                        const iqamaDetails = booking.sponsorIqamaDetails;
                         return (
-                          <TableRow key={trip.id}>
+                          <TableRow key={booking.id}>
                             {/* Visa Type */}
                             <TableCell>
-                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
-                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              <Badge variant={booking.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
                               </Badge>
                             </TableCell>
                             {/* Group Details */}
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="font-semibold text-gray-900">{trip.partyName}</div>
-                                {trip.groupNumber ? (
+                                <div className="font-semibold text-gray-900">{booking.party?.partyName || 'N/A'}</div>
+                                {booking.groupNumber ? (
                                   <>
-                                    <div className="text-sm font-medium text-indigo-600">{trip.groupNumber}</div>
-                                    <div className="text-xs text-gray-500">{trip.groupName}</div>
+                                    <div className="text-sm font-medium text-indigo-600">{booking.groupNumber}</div>
+                                    <div className="text-xs text-gray-500">{booking.groupName}</div>
                                   </>
                                 ) : (
                                   <div className="text-sm text-gray-400 italic">No group assigned</div>
@@ -304,10 +300,10 @@ export default function TripInfoPage() {
                             <TableCell>
                               <div className="space-y-1">
                                 <div className="text-sm font-medium text-gray-900">
-                                  {formatDate(trip.arrivalDate)}
+                                  {booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}
                                 </div>
                                 <div className="text-xs text-gray-600">
-                                  {trip.iqamaHolderMobile || 'N/A'}
+                                  {iqamaDetails?.sponserMobileNumber || 'N/A'}
                                 </div>
                               </div>
                             </TableCell>
@@ -316,10 +312,10 @@ export default function TripInfoPage() {
                             <TableCell>
                               <div className="space-y-1">
                                 <div className="text-sm font-medium text-gray-900">
-                                  {formatDate(trip.departureDate)}
+                                  {booking.travelDetails?.departureDateTime ? formatDate(booking.travelDetails.departureDateTime) : 'N/A'}
                                 </div>
                                 <div className="text-xs text-gray-600">
-                                  {trip.iqamaHolderMobile || 'N/A'}
+                                  {iqamaDetails?.sponserMobileNumber || 'N/A'}
                                 </div>
                               </div>
                             </TableCell>
@@ -329,21 +325,21 @@ export default function TripInfoPage() {
                               <div className="space-y-1 text-xs">
                                 <div>
                                   <span className="text-gray-500">Number:</span>{' '}
-                                  <span className="font-medium">{trip.iqamaNumber || 'N/A'}</span>
+                                  <span className="font-medium">{iqamaDetails?.iqamaNumber || 'N/A'}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Holder:</span>{' '}
-                                  <span className="font-medium">{trip.iqamaHolderName || 'N/A'}</span>
+                                  <span className="font-medium">{iqamaDetails?.iqamaSponserName || 'N/A'}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">DOB:</span>{' '}
                                   <span className="font-medium">
-                                    {trip.iqamaHolderDob ? formatDate(trip.iqamaHolderDob) : 'N/A'}
+                                    {iqamaDetails?.sponserDob ? formatDate(iqamaDetails.sponserDob) : 'N/A'}
                                   </span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500">Phone:</span>{' '}
-                                  <span className="font-medium">{trip.iqamaHolderMobile || 'N/A'}</span>
+                                  <span className="font-medium">{iqamaDetails?.sponserMobileNumber || 'N/A'}</span>
                                 </div>
                               </div>
                             </TableCell>
@@ -352,10 +348,10 @@ export default function TripInfoPage() {
                             <TableCell>
                               <div className="space-y-1 text-xs">
                                 <div className="font-medium text-gray-900">
-                                  {trip.updatedByUser?.name || 'System'}
+                                  {booking.lastUpdatedByUser?.name || 'System'}
                                 </div>
                                 <div className="text-gray-500">
-                                  {formatDate(trip.updatedAt)}
+                                  {booking.updatedAt ? formatDate(booking.updatedAt) : 'N/A'}
                                 </div>
                               </div>
                             </TableCell>
@@ -368,7 +364,7 @@ export default function TripInfoPage() {
                                   {UMRAH_VISA_STATUS_CONFIG.group_assigned.label}
                                 </Badge>
                                 <div className="flex-shrink-0">
-                                  {renderActionButton(trip)}
+                                  {renderActionButton(booking)}
                                 </div>
                               </div>
                             </TableCell>

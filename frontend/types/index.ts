@@ -215,38 +215,14 @@ export interface UmrahVisaBooking {
   passengerCount: number;
   status?: UmrahVisaStatus;
   passengers?: UmrahPassenger[];
-  tripInfo?: TripInfo;
+  documentsDownloadCount?: number;
+  documentsDownloadedBy?: string;
+  lastUpdatedBy?: string;
   party?: Party;
   documents?: Document[];
   createdAt?: string;
   updatedAt?: string;
-}
-
-// Trip Info Types
-export interface TripInfo {
-  id: string;
-  bookingId: string;
-  groupNumber?: string;
-  groupName?: string;
-  partyName: string;
-  arrivalDate: string;
-  departureDate: string;
-  iqamaNumber?: string;
-  iqamaHolderName?: string;
-  iqamaHolderDob?: string;
-  iqamaHolderMobile?: string;
-  iqamaNationalShortAddress?: string;
-  documentsDownloadCount: number;
-  documentsDownloadedAt?: string;
-  documentsDownloadedBy?: string;
-  confirmationImagePath?: string;
-  confirmationUploadedAt?: string;
-  updatedBy: string;
-  status: UmrahVisaStatus;
-  visaType?: 'individual_visa' | 'group_visa';
-  createdAt: string;
-  updatedAt: string;
-  updatedByUser?: {
+  lastUpdatedByUser?: {
     id: string;
     name: string;
     email: string;
@@ -257,6 +233,7 @@ export interface TripInfo {
     email: string;
   };
 }
+
 
 // Available Actions Type
 export interface AvailableAction {

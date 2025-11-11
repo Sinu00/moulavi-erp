@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { prisma } from './umrahVisa/shared';
-import { ensureTripInfoExists, syncBookingAndTripInfoStatus, syncBookingAndTripInfoStatusInTx } from '../services/statusSyncService';
+import { syncBookingStatus, syncBookingStatusInTx } from '../services/statusSyncService';
 import { generateVoucherNumber, generateRouteNumbers, formatTime, formatDate, assignRouteNumbersToMovementDetails } from '../services/voucherService';
 import { generateVoucherPDF } from '../services/pdfService';
 import { VoucherPdfData } from '../types/voucher';
@@ -28,18 +28,13 @@ router.post('/:bookingId/add-group-data', authenticate, async (req, res) => {
     // Check if booking exists
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
-      include: { tripInfo: true },
     });
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    if (!booking.tripInfo) {
-      return res.status(404).json({ error: 'Trip info not found' });
-    }
-
-    if (booking.tripInfo.status !== 'documents_downloaded') {
+    if (booking.status !== 'documents_downloaded') {
       return res.status(400).json({ error: 'Group data can only be added when status is documents_downloaded' });
     }
 
@@ -53,38 +48,29 @@ router.post('/:bookingId/add-group-data', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Accommodation type not set for this booking' });
     }
 
-    // Update booking and trip info - use sync function to ensure status consistency
-    const [updatedBooking, updatedTripInfo] = await prisma.$transaction([
-      prisma.umrahVisaBooking.update({
+    // Update booking - use sync function to ensure status consistency
+    await prisma.$transaction(async (tx) => {
+      await tx.umrahVisaBooking.update({
         where: { id: bookingId },
         data: {
           groupNumber,
           groupName,
           hasGroupNumber: true,
+          lastUpdatedBy: user.id,
         },
-      }),
-      prisma.tripInfo.update({
-        where: { bookingId },
-        data: {
-          groupNumber,
-          groupName,
-          updatedBy: user.id,
-        },
-      }),
-    ]);
+      });
 
-    // Sync status separately (handles both booking and tripInfo status + history)
-    await syncBookingAndTripInfoStatus(bookingId, nextStatus, user.id, 'Group data added');
+      // Sync status separately (handles booking status + history)
+      await syncBookingStatusInTx(bookingId, nextStatus, user.id, 'Group data added', tx);
+    });
     
-    // Re-fetch updated records
+    // Re-fetch updated booking
     const finalBooking = await prisma.umrahVisaBooking.findUnique({ where: { id: bookingId } });
-    const finalTripInfo = await prisma.tripInfo.findUnique({ where: { bookingId } });
 
     res.json({
       message: 'Group data added successfully',
       data: {
         booking: finalBooking,
-        tripInfo: finalTripInfo,
       },
     });
   } catch (error) {
@@ -108,7 +94,6 @@ router.post('/:bookingId/download-documents', authenticate, async (req, res) => 
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
       include: {
-        tripInfo: true,
         passengers: {
           include: {
             documents: {
@@ -123,24 +108,19 @@ router.post('/:bookingId/download-documents', authenticate, async (req, res) => 
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    if (!booking.tripInfo) {
-      return res.status(404).json({ error: 'Trip info not found' });
-    }
-
-    if (booking.tripInfo.status !== 'pending') {
+    if (booking.status !== 'pending') {
       return res.status(400).json({ 
         error: 'Documents can only be downloaded when status is pending',
-        currentStatus: booking.tripInfo.status 
+        currentStatus: booking.status 
       });
     }
 
     // Check if documents have already been downloaded
-    if (booking.tripInfo.documentsDownloadCount > 0) {
+    if (booking.documentsDownloadCount > 0) {
       return res.status(400).json({ 
         error: 'Documents have already been downloaded. Please request admin permission for re-download.',
-        downloadCount: booking.tripInfo.documentsDownloadCount,
-        lastDownloadedAt: booking.tripInfo.documentsDownloadedAt,
-        lastDownloadedBy: booking.tripInfo.documentsDownloadedBy,
+        downloadCount: booking.documentsDownloadCount,
+        lastDownloadedBy: booking.documentsDownloadedBy,
       });
     }
 
@@ -152,30 +132,29 @@ router.post('/:bookingId/download-documents', authenticate, async (req, res) => 
     //   return res.status(400).json({ error: 'No documents found for this booking' });
     // }
 
-    // Update trip info - mark as downloaded
-    const updatedTripInfo = await prisma.$transaction([
-      prisma.tripInfo.update({
-        where: { bookingId },
+    // Update booking - mark as downloaded
+    await prisma.$transaction(async (tx) => {
+      await tx.umrahVisaBooking.update({
+        where: { id: bookingId },
         data: {
           documentsDownloadCount: { increment: 1 },
-          documentsDownloadedAt: new Date(),
           documentsDownloadedBy: user.id,
-          updatedBy: user.id,
+          lastUpdatedBy: user.id,
         },
-      }),
-    ]);
+      });
 
-    // Sync status separately (handles both booking and tripInfo status + history)
-    await syncBookingAndTripInfoStatus(bookingId, 'documents_downloaded', user.id, 'Documents downloaded');
+      // Sync status separately (handles booking status + history)
+      await syncBookingStatusInTx(bookingId, 'documents_downloaded', user.id, 'Documents downloaded', tx);
+    });
     
-    // Re-fetch updated tripInfo
-    const finalTripInfo = await prisma.tripInfo.findUnique({ where: { bookingId } });
+    // Re-fetch updated booking
+    const finalBooking = await prisma.umrahVisaBooking.findUnique({ where: { id: bookingId } });
 
     res.json({
       message: 'Documents download tracked successfully',
       data: {
         documents: allDocuments,
-        tripInfo: finalTripInfo,
+        booking: finalBooking,
       },
     });
   } catch (error) {
@@ -204,21 +183,29 @@ router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) =>
     // Check if booking exists
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
-      include: { tripInfo: true },
+      include: {
+        sponsorIqamaDetails: true,
+      },
     });
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    if (!booking.tripInfo) {
-      return res.status(404).json({ error: 'Trip info not found' });
+    if (booking.accommodationType !== 'iqama') {
+      return res.status(400).json({ 
+        error: 'Confirmation can only be uploaded for iqama accommodation bookings'
+      });
     }
 
-    if (booking.tripInfo.status !== 'group_assigned') {
+    if (!booking.sponsorIqamaDetails) {
+      return res.status(404).json({ error: 'Iqama details not found for this booking' });
+    }
+
+    if (booking.status !== 'group_assigned') {
       return res.status(400).json({ 
         error: 'Confirmation can only be uploaded when status is group_assigned',
-        currentStatus: booking.tripInfo.status 
+        currentStatus: booking.status 
       });
     }
 
@@ -230,28 +217,39 @@ router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) =>
       nextStatus = 'bill';
     }
 
-    // Update trip info with confirmation image
-    const [updatedTripInfo] = await prisma.$transaction([
-      prisma.tripInfo.update({
+    // Update iqama details with confirmation image
+    await prisma.$transaction(async (tx) => {
+      await tx.umrahSponserIqamaDetails.update({
         where: { bookingId },
         data: {
           confirmationImagePath,
           confirmationUploadedAt: new Date(),
-          updatedBy: user.id,
         },
-      }),
-    ]);
+      });
 
-    // Sync status separately (handles both booking and tripInfo status + history)
-    await syncBookingAndTripInfoStatus(bookingId, nextStatus, user.id, 'Confirmation image uploaded');
+      await tx.umrahVisaBooking.update({
+        where: { id: bookingId },
+        data: {
+          lastUpdatedBy: user.id,
+        },
+      });
+
+      // Sync status separately (handles booking status + history)
+      await syncBookingStatusInTx(bookingId, nextStatus, user.id, 'Confirmation image uploaded', tx);
+    });
     
-    // Re-fetch updated tripInfo
-    const finalTripInfo = await prisma.tripInfo.findUnique({ where: { bookingId } });
+    // Re-fetch updated booking with iqama details
+    const finalBooking = await prisma.umrahVisaBooking.findUnique({ 
+      where: { id: bookingId },
+      include: {
+        sponsorIqamaDetails: true,
+      },
+    });
 
     res.json({
       message: 'Confirmation uploaded successfully',
       data: {
-        tripInfo: finalTripInfo,
+        booking: finalBooking,
       },
     });
   } catch (error) {
@@ -291,7 +289,6 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
             email: true,
           },
         },
-        tripInfo: true,
         voucher: {
           select: {
             voucherNumber: true,
@@ -356,24 +353,6 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Auto-create TripInfo if missing (for group visas that might not have completed Step 4)
-    let tripInfo = booking.tripInfo;
-    if (!tripInfo) {
-      try {
-        tripInfo = await ensureTripInfoExists(bookingId, user.id);
-        // Re-fetch booking to get updated tripInfo
-        const updatedBooking = await prisma.umrahVisaBooking.findUnique({
-          where: { id: bookingId },
-          include: { tripInfo: true },
-        });
-        tripInfo = updatedBooking?.tripInfo || tripInfo;
-      } catch (error: any) {
-        console.error('Error creating TripInfo:', error);
-        return res.status(400).json({ 
-          error: 'Cannot create trip info. Missing required data: ' + error.message 
-        });
-      }
-    }
 
     // Assign route numbers to movement details before generating voucher data
     await assignRouteNumbersToMovementDetails(bookingId);
@@ -403,8 +382,8 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       reservationNumber: booking.voucher?.voucherNumber || '', // Use voucher number as reservation number (empty if voucher not generated yet)
       guestName: booking.party.partyName,
       guestMobile: booking.party.contactNumber || booking.party.whatsappNumber || '',
-      groupCode: booking.groupNumber || tripInfo.groupNumber || '',
-      groupName: booking.groupName || tripInfo.groupName || '',
+      groupCode: booking.groupNumber || '',
+      groupName: booking.groupName || '',
       paxCount: booking.passengerCount,
       // Umrah Visa Provider details (for header section)
       umrahVisaProvider: booking.umrahVisaProvider ? {
@@ -484,10 +463,9 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
     }
 
     // Check if booking exists
-    let booking = await prisma.umrahVisaBooking.findUnique({
+    const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
       include: {
-        tripInfo: true,
         umrahVisaProvider: {
           select: {
             id: true,
@@ -505,55 +483,11 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Ensure TripInfo exists (auto-create if missing)
-    let tripInfo = booking.tripInfo;
-    if (!tripInfo) {
-      try {
-        tripInfo = await ensureTripInfoExists(bookingId, user.id);
-        // Re-fetch to get updated booking
-        const updatedBooking = await prisma.umrahVisaBooking.findUnique({
-          where: { id: bookingId },
-          include: { 
-            tripInfo: true,
-            umrahVisaProvider: {
-              select: {
-                id: true,
-              },
-            },
-            party: {
-              select: {
-                partyName: true,
-              },
-            },
-          },
-        });
-        if (updatedBooking && updatedBooking.tripInfo) {
-          tripInfo = updatedBooking.tripInfo;
-        }
-      } catch (error: any) {
-        return res.status(400).json({ 
-          error: 'Cannot create trip info. Missing required data: ' + error.message 
-        });
-      }
-    }
-
-    if (!booking) {
-      return res.status(404).json({ error: 'Booking not found after creating TripInfo' });
-    }
-
-    // Check status - use booking.status as source of truth, but also check tripInfo.status
-    if (!tripInfo) {
-      return res.status(400).json({ 
-        error: 'TripInfo is required to generate voucher'
-      });
-    }
-    const currentStatus = booking.status === 'voucher' ? 'voucher' : tripInfo.status;
-    if (currentStatus !== 'voucher') {
+    // Check status
+    if (booking.status !== 'voucher') {
       return res.status(400).json({ 
         error: 'Voucher can only be generated when status is voucher',
-        currentStatus,
-        bookingStatus: booking.status,
-        tripInfoStatus: tripInfo.status,
+        currentStatus: booking.status,
       });
     }
 
@@ -575,7 +509,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
           reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
           guestName: voucherData.guestName || booking!.party?.partyName || '',
           guestMobile: voucherData.guestMobile || '',
-          groupCode: voucherData.groupCode || booking!.groupNumber || (booking!.tripInfo?.groupNumber || ''),
+          groupCode: voucherData.groupCode || booking!.groupNumber || '',
           umrahVisaProviderId: booking!.umrahVisaProviderId || null,
           paxCount: voucherData.paxCount || booking!.passengerCount,
           hotelSchedules: voucherData.hotelSchedules || [],
@@ -594,8 +528,8 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
         },
       });
 
-      // Sync status using helper (updates both booking and tripInfo status in sync)
-      await syncBookingAndTripInfoStatusInTx(bookingId, 'bill', user.id, 'Voucher generated', tx);
+      // Sync status using helper (updates booking status + history)
+      await syncBookingStatusInTx(bookingId, 'bill', user.id, 'Voucher generated', tx);
 
       return newVoucher;
     });
@@ -648,21 +582,16 @@ router.get('/:bookingId/available-actions', authenticate, async (req, res) => {
     const { bookingId } = req.params;
     const user = (req as any).user;
 
-    // Get booking with trip info
+    // Get booking
     const booking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
-      include: { tripInfo: true },
     });
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    if (!booking.tripInfo) {
-      return res.status(404).json({ error: 'Trip info not found' });
-    }
-
-    const status = booking.tripInfo.status;
+    const status = booking.status;
     const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
 
     let availableActions: any[] = [];
@@ -676,7 +605,7 @@ router.get('/:bookingId/available-actions', authenticate, async (req, res) => {
             description: 'Download passenger documents',
             endpoint: `/api/umrah-visa/${bookingId}/download-documents`,
             method: 'POST',
-            warning: booking.tripInfo.documentsDownloadCount > 0 
+            warning: booking.documentsDownloadCount > 0 
               ? 'Documents already downloaded. Contact admin for re-download.' 
               : null,
           });
@@ -745,7 +674,11 @@ router.get('/:bookingId/available-actions', authenticate, async (req, res) => {
       bookingId,
       currentStatus: status,
       availableActions,
-      tripInfo: booking.tripInfo,
+      booking: {
+        documentsDownloadCount: booking.documentsDownloadCount,
+        documentsDownloadedBy: booking.documentsDownloadedBy,
+        lastUpdatedBy: booking.lastUpdatedBy,
+      },
     });
   } catch (error) {
     console.error('Error fetching available actions:', error);
@@ -753,20 +686,26 @@ router.get('/:bookingId/available-actions', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/umrah-visa/:bookingId/trip-info - Get trip info details
+// GET /api/umrah-visa/:bookingId/trip-info - Get booking details (replaces trip-info)
 router.get('/:bookingId/trip-info', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
 
-    const tripInfo = await prisma.tripInfo.findUnique({
-      where: { bookingId },
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
       include: {
-        booking: {
-          include: {
-            party: true,
+        party: {
+          select: {
+            id: true,
+            partyName: true,
+            email: true,
+            contactNumber: true,
+            whatsappNumber: true,
           },
         },
-        updatedByUser: {
+        travelDetails: true,
+        sponsorIqamaDetails: true,
+        lastUpdatedByUser: {
           select: {
             id: true,
             name: true,
@@ -783,14 +722,14 @@ router.get('/:bookingId/trip-info', authenticate, async (req, res) => {
       },
     });
 
-    if (!tripInfo) {
-      return res.status(404).json({ error: 'Trip info not found' });
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
     }
 
-    res.json(tripInfo);
+    res.json(booking);
   } catch (error) {
-    console.error('Error fetching trip info:', error);
-    res.status(500).json({ error: 'Failed to fetch trip info' });
+    console.error('Error fetching booking info:', error);
+    res.status(500).json({ error: 'Failed to fetch booking info' });
   }
 });
 

@@ -34,7 +34,7 @@ import {
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { TripInfo, UmrahVisaStatus } from '@/types';
+import { UmrahVisaBooking, UmrahVisaStatus } from '@/types';
 import { umrahVisaAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
 
@@ -43,12 +43,12 @@ export default function AssignGroupPage() {
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [tripInfoList, setTripInfoList] = useState<TripInfo[]>([]);
-  const [filteredData, setFilteredData] = useState<TripInfo[]>([]);
+  const [bookingList, setBookingList] = useState<UmrahVisaBooking[]>([]);
+  const [filteredData, setFilteredData] = useState<UmrahVisaBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddGroupDialog, setShowAddGroupDialog] = useState(false);
-  const [selectedTrip, setSelectedTrip] = useState<TripInfo | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
   const [groupNumber, setGroupNumber] = useState('');
   const [groupName, setGroupName] = useState('');
 
@@ -57,28 +57,24 @@ export default function AssignGroupPage() {
   }
 
   useEffect(() => {
-    fetchTripInfo();
+    fetchBookings();
   }, []);
 
   useEffect(() => {
     filterData();
-  }, [searchQuery, tripInfoList]);
+  }, [searchQuery, bookingList]);
 
-  const fetchTripInfo = async () => {
+  const fetchBookings = async () => {
     try {
       setIsLoading(true);
       const response = await umrahVisaAPI.getBookings({ limit: 1000 });
       const data = response.data;
       
-      const tripInfoData = data.bookings
-        .filter((booking: any) => booking.tripInfo)
-        .map((booking: any) => ({
-          ...booking.tripInfo,
-          visaType: booking.visaType,
-          booking: { id: booking.id, passengerCount: booking.passengerCount },
-        }));
+      const bookingsData = data.bookings
+        .filter((booking: any) => booking.status === 'pending' || booking.status === 'documents_downloaded')
+        .map((booking: any) => booking);
 
-      setTripInfoList(tripInfoData);
+      setBookingList(bookingsData);
     } catch (error) {
       console.error('Error:', error);
       toast.error('Failed to load data');
@@ -88,16 +84,16 @@ export default function AssignGroupPage() {
   };
 
   const filterData = () => {
-    let filtered = tripInfoList.filter(trip => 
-      trip.status === 'pending' || trip.status === 'documents_downloaded'
+    let filtered = bookingList.filter(booking => 
+      booking.status === 'pending' || booking.status === 'documents_downloaded'
     );
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(trip =>
-        trip.partyName?.toLowerCase().includes(query) ||
-        trip.groupNumber?.toLowerCase().includes(query) ||
-        trip.groupName?.toLowerCase().includes(query)
+      filtered = filtered.filter(booking =>
+        booking.party?.partyName?.toLowerCase().includes(query) ||
+        booking.groupNumber?.toLowerCase().includes(query) ||
+        booking.groupName?.toLowerCase().includes(query)
       );
     }
 
@@ -112,47 +108,50 @@ export default function AssignGroupPage() {
     });
   };
 
-  const handleDownloadDocuments = async (trip: TripInfo) => {
+  const handleDownloadDocuments = async (booking: UmrahVisaBooking) => {
+    if (!booking.id) return;
     try {
       toast.info('Downloading documents...');
-      const response = await umrahVisaAPI.downloadDocuments(trip.bookingId);
+      const response = await umrahVisaAPI.downloadDocuments(booking.id);
       toast.success('Documents downloaded successfully!');
-      fetchTripInfo();
+      fetchBookings();
     } catch (error: any) {
       toast.error(error.message || 'Failed to download documents');
     }
   };
 
   const handleAddGroupData = async () => {
-    if (!selectedTrip || !groupNumber || !groupName) {
+    if (!selectedBooking || !groupNumber || !groupName) {
       toast.error('Please fill in all fields');
       return;
     }
 
+    if (!selectedBooking.id) return;
+
     try {
-      const response = await umrahVisaAPI.addGroupData(selectedTrip.bookingId, { groupNumber, groupName });
+      const response = await umrahVisaAPI.addGroupData(selectedBooking.id, { groupNumber, groupName });
       toast.success('Group data added successfully');
       setShowAddGroupDialog(false);
       setGroupNumber('');
       setGroupName('');
-      setSelectedTrip(null);
-      fetchTripInfo();
+      setSelectedBooking(null);
+      fetchBookings();
     } catch (error: any) {
       toast.error(error.message || 'Failed to add group data');
     }
   };
 
-  const renderActionButton = (trip: TripInfo) => {
-    if (trip.status === 'pending') {
+  const renderActionButton = (booking: UmrahVisaBooking) => {
+    if (booking.status === 'pending') {
       return (
-        <Button size="sm" onClick={() => handleDownloadDocuments(trip)} className="flex items-center gap-1">
+        <Button size="sm" onClick={() => handleDownloadDocuments(booking)} className="flex items-center gap-1">
           <Download className="h-3 w-3" />
           Download Docs
         </Button>
       );
-    } else if (trip.status === 'documents_downloaded') {
+    } else if (booking.status === 'documents_downloaded') {
       return (
-        <Button size="sm" onClick={() => { setSelectedTrip(trip); setShowAddGroupDialog(true); }} className="flex items-center gap-1">
+        <Button size="sm" onClick={() => { setSelectedBooking(booking); setShowAddGroupDialog(true); }} className="flex items-center gap-1">
           <Plus className="h-3 w-3" />
           Assign Group
         </Button>
@@ -185,7 +184,7 @@ export default function AssignGroupPage() {
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">Manage pending and documents downloaded bookings</p>
               </div>
             </div>
-            <Button onClick={fetchTripInfo} variant="outline" className="flex items-center gap-2">
+            <Button onClick={fetchBookings} variant="outline" className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
@@ -197,7 +196,7 @@ export default function AssignGroupPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Assign Group</CardTitle>
-                <CardDescription>Showing {filteredData.length} of {tripInfoList.length} bookings</CardDescription>
+                <CardDescription>Showing {filteredData.length} of {bookingList.length} bookings</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative">
@@ -228,40 +227,37 @@ export default function AssignGroupPage() {
                           <TableCell colSpan={7} className="text-center py-8 text-gray-500">No bookings found</TableCell>
                         </TableRow>
                       ) : (
-                        filteredData.map((trip) => (
-                          <TableRow key={trip.id}>
+                        filteredData.map((booking) => (
+                          <TableRow key={booking.id}>
                             <TableCell>
-                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
-                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              <Badge variant={booking.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="font-semibold">{trip.groupNumber || 'N/A'}</div>
-                                <div className="text-xs text-gray-500">{trip.groupName || 'No group'}</div>
+                                <div className="font-semibold">{booking.groupNumber || 'N/A'}</div>
+                                <div className="text-xs text-gray-500">{booking.groupName || 'No group'}</div>
                               </div>
                             </TableCell>
-                            <TableCell><div className="font-medium">{trip.partyName}</div></TableCell>
-                            <TableCell><div className="text-sm">{formatDate(trip.arrivalDate)}</div></TableCell>
+                            <TableCell><div className="font-medium">{booking.party?.partyName || 'N/A'}</div></TableCell>
+                            <TableCell><div className="text-sm">{booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}</div></TableCell>
                             <TableCell>
-                              {trip.documentsDownloadedByUser ? (
+                              {booking.documentsDownloadedByUser ? (
                                 <div className="space-y-1 text-xs">
-                                  <div className="font-medium text-gray-900">{trip.documentsDownloadedByUser.name}</div>
-                                  <div className="text-gray-500">
-                                    {trip.documentsDownloadedAt ? formatDate(trip.documentsDownloadedAt) : 'N/A'}
-                                  </div>
-                                  <div className="text-gray-400">Download #{trip.documentsDownloadCount}</div>
+                                  <div className="font-medium text-gray-900">{booking.documentsDownloadedByUser.name}</div>
+                                  <div className="text-gray-400">Download #{booking.documentsDownloadCount || 0}</div>
                                 </div>
                               ) : (
                                 <span className="text-gray-400 text-xs">Not downloaded yet</span>
                               )}
                             </TableCell>
                             <TableCell>
-                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[trip.status].color} text-xs`}>
-                                {UMRAH_VISA_STATUS_CONFIG[trip.status].label}
+                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[booking.status || 'pending'].color} text-xs`}>
+                                {UMRAH_VISA_STATUS_CONFIG[booking.status || 'pending'].label}
                               </Badge>
                             </TableCell>
-                            <TableCell>{renderActionButton(trip)}</TableCell>
+                            <TableCell>{renderActionButton(booking)}</TableCell>
                           </TableRow>
                         ))
                       )}

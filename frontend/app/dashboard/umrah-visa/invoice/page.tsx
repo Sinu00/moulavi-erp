@@ -32,7 +32,7 @@ import {
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { TripInfo, UmrahVisaStatus } from '@/types';
+import { UmrahVisaBooking, UmrahVisaStatus } from '@/types';
 import { umrahVisaAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
 
@@ -40,59 +40,55 @@ export default function InvoicePage() {
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [tripInfoList, setTripInfoList] = useState<TripInfo[]>([]);
-  const [filteredData, setFilteredData] = useState<TripInfo[]>([]);
+  const [bookingList, setBookingList] = useState<UmrahVisaBooking[]>([]);
+  const [filteredData, setFilteredData] = useState<UmrahVisaBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [selectedTrip, setSelectedTrip] = useState<TripInfo | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
   }
 
   useEffect(() => {
-    fetchTripInfo();
+    fetchBookings();
   }, []);
 
   useEffect(() => {
     filterData();
-  }, [searchQuery, tripInfoList]);
+  }, [searchQuery, bookingList]);
 
-  const fetchTripInfo = async () => {
+  const fetchBookings = async () => {
     try {
       setIsLoading(true);
       const response = await umrahVisaAPI.getBookings({ limit: 1000 });
       const data = response.data;
       
-      const tripInfoData = data.bookings
-        .filter((booking: any) => booking.tripInfo)
-        .map((booking: any) => ({
-          ...booking.tripInfo,
-          visaType: booking.visaType,
-          booking: { id: booking.id, passengerCount: booking.passengerCount },
-        }));
+      const bookingsData = data.bookings
+        .filter((booking: any) => booking.status === 'bill' || booking.status === 'booking_success')
+        .map((booking: any) => booking);
 
-      setTripInfoList(tripInfoData);
+      setBookingList(bookingsData);
     } catch (error) {
-      console.error('Error fetching trip info:', error);
-      toast.error('Failed to load trip info');
+      console.error('Error fetching bookings:', error);
+      toast.error('Failed to load bookings');
     } finally {
       setIsLoading(false);
     }
   };
 
   const filterData = () => {
-    let filtered = tripInfoList.filter(trip => 
-      trip.status === 'bill' || trip.status === 'booking_success'
+    let filtered = bookingList.filter(booking => 
+      booking.status === 'bill' || booking.status === 'booking_success'
     );
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(trip =>
-        trip.partyName?.toLowerCase().includes(query) ||
-        trip.groupNumber?.toLowerCase().includes(query) ||
-        trip.groupName?.toLowerCase().includes(query)
+      filtered = filtered.filter(booking =>
+        booking.party?.partyName?.toLowerCase().includes(query) ||
+        booking.groupNumber?.toLowerCase().includes(query) ||
+        booking.groupName?.toLowerCase().includes(query)
       );
     }
 
@@ -108,25 +104,25 @@ export default function InvoicePage() {
   };
 
   const handleGenerateBill = async () => {
-    if (!selectedTrip) return;
+    if (!selectedBooking) return;
     try {
       toast.info('Generating bill... (Functionality coming soon)');
       setShowGenerateDialog(false);
-      setSelectedTrip(null);
+      setSelectedBooking(null);
     } catch (error: any) {
       toast.error(error.message);
     }
   };
 
-  const renderActionButton = (trip: TripInfo) => {
-    if (trip.status === 'bill') {
+  const renderActionButton = (booking: UmrahVisaBooking) => {
+    if (booking.status === 'bill') {
       return (
-        <Button size="sm" onClick={() => { setSelectedTrip(trip); setShowGenerateDialog(true); }} className="flex items-center gap-1">
+        <Button size="sm" onClick={() => { setSelectedBooking(booking); setShowGenerateDialog(true); }} className="flex items-center gap-1">
           <Receipt className="h-3 w-3" />
           Generate Bill
         </Button>
       );
-    } else if (trip.status === 'booking_success') {
+    } else if (booking.status === 'booking_success') {
       return (
         <Badge variant="outline" className="whitespace-nowrap">
           <CheckCircle className="h-3 w-3 mr-1" />
@@ -161,7 +157,7 @@ export default function InvoicePage() {
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">Manage billing and completion status</p>
               </div>
             </div>
-            <Button onClick={fetchTripInfo} variant="outline" className="flex items-center gap-2">
+            <Button onClick={fetchBookings} variant="outline" className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
@@ -173,7 +169,7 @@ export default function InvoicePage() {
             <Card>
               <CardHeader>
                 <CardTitle>Invoice</CardTitle>
-                <CardDescription>Showing {filteredData.length} of {tripInfoList.length} bookings</CardDescription>
+                <CardDescription>Showing {filteredData.length} of {bookingList.length} bookings</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative">
@@ -203,27 +199,27 @@ export default function InvoicePage() {
                           <TableCell colSpan={6} className="text-center py-8 text-gray-500">No bookings found</TableCell>
                         </TableRow>
                       ) : (
-                        filteredData.map((trip) => (
-                          <TableRow key={trip.id}>
+                        filteredData.map((booking) => (
+                          <TableRow key={booking.id}>
                             <TableCell>
-                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
-                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              <Badge variant={booking.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="font-semibold">{trip.groupNumber || 'N/A'}</div>
-                                <div className="text-xs text-gray-500">{trip.groupName || 'No group'}</div>
+                                <div className="font-semibold">{booking.groupNumber || 'N/A'}</div>
+                                <div className="text-xs text-gray-500">{booking.groupName || 'No group'}</div>
                               </div>
                             </TableCell>
-                            <TableCell><div className="font-medium">{trip.partyName}</div></TableCell>
-                            <TableCell><div className="text-sm">{formatDate(trip.arrivalDate)}</div></TableCell>
+                            <TableCell><div className="font-medium">{booking.party?.partyName || 'N/A'}</div></TableCell>
+                            <TableCell><div className="text-sm">{booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}</div></TableCell>
                             <TableCell>
-                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[trip.status].color} text-xs`}>
-                                {UMRAH_VISA_STATUS_CONFIG[trip.status].label}
+                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[booking.status || 'bill'].color} text-xs`}>
+                                {UMRAH_VISA_STATUS_CONFIG[booking.status || 'bill'].label}
                               </Badge>
                             </TableCell>
-                            <TableCell>{renderActionButton(trip)}</TableCell>
+                            <TableCell>{renderActionButton(booking)}</TableCell>
                           </TableRow>
                         ))
                       )}

@@ -221,8 +221,6 @@ export const umrahVisaAPI = {
   generateVoucher: (bookingId: string, voucherData: any) =>
     api.post(`/umrah-visa/${bookingId}/generate-voucher`, voucherData),
 
-  getTripInfo: (bookingId: string) =>
-    api.get(`/umrah-visa/${bookingId}/trip-info`),
 
   getAvailableActions: (bookingId: string) =>
     api.get(`/umrah-visa/${bookingId}/available-actions`),

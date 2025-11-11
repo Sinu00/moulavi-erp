@@ -218,6 +218,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
           visaType: 'group_visa',
           accommodationType: 'hotel',
           hasTransportation,
+          lastUpdatedBy: user.id,
         },
       });
 
@@ -622,21 +623,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         select: { partyName: true },
       });
 
-      // 9. Create TripInfo
-      const tripInfo = await tx.tripInfo.create({
-        data: {
-          bookingId: booking.id,
-          groupNumber: booking.groupNumber,
-          groupName: booking.groupName,
-          partyName: party?.partyName || '',
-          arrivalDate: travelDetails.arrivalDateTime,
-          departureDate: travelDetails.departureDateTime,
-          updatedBy: user.id,
-          status: 'voucher',
-        },
-      });
-
-      // 10. Create BookingStatusHistory
+      // 9. Create BookingStatusHistory
       await tx.bookingStatusHistory.create({
         data: {
           bookingId: booking.id,
@@ -647,7 +634,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         },
       });
 
-      return { booking, travelDetails, passengers: passengerRecords, tripInfo };
+      return { booking, travelDetails, passengers: passengerRecords };
     });
 
     res.status(201).json({
@@ -656,7 +643,6 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         bookingId: result.booking.id,
         passengerCount: passengerCount,
         passengers: result.passengers,
-        tripInfo: result.tripInfo,
         status: 'voucher',
       },
     });

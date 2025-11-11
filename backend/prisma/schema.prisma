@@ -21,8 +21,8 @@ model User {
   createdParties    Party[]                @relation("CreatedBy")
   party             Party?                 @relation("PartyUser")
   refreshTokens     RefreshToken[]
-  tripInfoDownloads TripInfo[]             @relation("TripInfoDownloadedBy")
-  tripInfoUpdates   TripInfo[]             @relation("TripInfoUpdatedBy")
+  bookingsDocumentsDownloaded UmrahVisaBooking[] @relation("BookingDocumentsDownloadedBy")
+  bookingsLastUpdated         UmrahVisaBooking[] @relation("BookingLastUpdatedBy")
   vouchersGenerated Voucher[]              @relation("VoucherGeneratedBy")
 
   @@index([email])
@@ -90,8 +90,10 @@ model UmrahVisaBooking {
   voucherGeneratedBy   String?                    @map("voucher_generated_by") @db.Uuid
   billGeneratedAt      DateTime?                  @map("bill_generated_at") @db.Timestamp(6)
   billGeneratedBy      String?                    @map("bill_generated_by") @db.Uuid
+  documentsDownloadCount Int                      @default(0) @map("documents_download_count")
+  documentsDownloadedBy String?                   @map("documents_downloaded_by") @db.Uuid
+  lastUpdatedBy        String?                    @map("last_updated_by") @db.Uuid
   statusHistory        BookingStatusHistory[]
-  tripInfo             TripInfo?
   hotelBookings        UmrahHotelBooking[]
   sponsorIqamaDetails  UmrahSponserIqamaDetails?
   passengers           UmrahPassenger[]
@@ -102,6 +104,8 @@ model UmrahVisaBooking {
   documents            Document[]
   party                Party                      @relation("BookingParty", fields: [partyId], references: [id], onDelete: Cascade)
   umrahVisaProvider    Party?                     @relation("UmrahVisaProvider", fields: [umrahVisaProviderId], references: [id])
+  documentsDownloadedByUser User?                 @relation("BookingDocumentsDownloadedBy", fields: [documentsDownloadedBy], references: [id])
+  lastUpdatedByUser    User?                      @relation("BookingLastUpdatedBy", fields: [lastUpdatedBy], references: [id])
 
   @@index([partyId])
   @@index([status])
@@ -435,6 +439,8 @@ model UmrahSponserIqamaDetails {
   sponserDob                DateTime         @map("sponser_dob") @db.Date
   sponserMobileNumber       String           @map("sponser_mobile_number") @db.VarChar(20)
   sponserNationalShortAddress String         @map("sponser_national_short_address") @db.VarChar(500)
+  confirmationImagePath     String?          @map("confirmation_image_path") @db.VarChar(500)
+  confirmationUploadedAt    DateTime?        @map("confirmation_uploaded_at") @db.Timestamp(6)
   createdAt                 DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt                 DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   booking                   UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -505,38 +511,6 @@ model PassengerDocument {
   @@map("passenger_documents")
 }
 
-model TripInfo {
-  id                        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bookingId                 String           @unique @map("booking_id") @db.Uuid
-  groupNumber               String?          @map("group_number") @db.VarChar(100)
-  groupName                 String?          @map("group_name") @db.VarChar(255)
-  partyName                 String           @map("party_name") @db.VarChar(255)
-  arrivalDate               DateTime         @map("arrival_date") @db.Date
-  departureDate             DateTime         @map("departure_date") @db.Date
-  iqamaNumber               String?          @map("iqama_number") @db.VarChar(50)
-  iqamaHolderName           String?          @map("iqama_holder_name") @db.VarChar(255)
-  iqamaHolderDob            DateTime?        @map("iqama_holder_dob") @db.Date
-  iqamaHolderMobile         String?          @map("iqama_holder_mobile") @db.VarChar(20)
-  iqamaNationalShortAddress String?          @map("iqama_national_short_address") @db.VarChar(500)
-  documentsDownloadCount    Int              @default(0) @map("documents_download_count")
-  documentsDownloadedAt     DateTime?        @map("documents_downloaded_at") @db.Timestamp(6)
-  documentsDownloadedBy     String?          @map("documents_downloaded_by") @db.Uuid
-  confirmationImagePath     String?          @map("confirmation_image_path") @db.VarChar(500)
-  confirmationUploadedAt    DateTime?        @map("confirmation_uploaded_at") @db.Timestamp(6)
-  updatedBy                 String           @map("updated_by") @db.Uuid
-  status                    UmrahVisaStatus
-  createdAt                 DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt                 DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  booking                   UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  documentsDownloadedByUser User?            @relation("TripInfoDownloadedBy", fields: [documentsDownloadedBy], references: [id])
-  updatedByUser             User             @relation("TripInfoUpdatedBy", fields: [updatedBy], references: [id])
-
-  @@index([bookingId])
-  @@index([groupNumber])
-  @@index([status])
-  @@index([updatedBy])
-  @@map("trip_info")
-}
 
 model Voucher {
   id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

@@ -241,6 +241,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
           visaType: 'individual_visa',
           accommodationType: step3Data.accommodationType,
           hasTransportation,
+          lastUpdatedBy: user.id,
         },
       });
 
@@ -465,37 +466,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
         )
       );
 
-      // 8. Get party name for TripInfo
-      const party = await tx.party.findUnique({
-        where: { id: validatedData.partyId },
-        select: { partyName: true },
-      });
-
-      // 9. Get sponsor iqama details if exists
-      const sponsorIqamaDetails = await tx.umrahSponserIqamaDetails.findUnique({
-        where: { bookingId: booking.id },
-      });
-
-      // 10. Create TripInfo
-      const tripInfo = await tx.tripInfo.create({
-        data: {
-          bookingId: booking.id,
-          groupNumber: booking.groupNumber,
-          groupName: booking.groupName,
-          partyName: party?.partyName || '',
-          arrivalDate: travelDetails.arrivalDateTime,
-          departureDate: travelDetails.departureDateTime,
-          iqamaNumber: sponsorIqamaDetails?.iqamaNumber || null,
-          iqamaHolderName: sponsorIqamaDetails?.iqamaSponserName || null,
-          iqamaHolderDob: sponsorIqamaDetails?.sponserDob || null,
-          iqamaHolderMobile: sponsorIqamaDetails?.sponserMobileNumber || null,
-          iqamaNationalShortAddress: sponsorIqamaDetails?.sponserNationalShortAddress || null,
-          updatedBy: user.id,
-          status: initialStatus,
-        },
-      });
-
-      // 11. Create BookingStatusHistory
+      // 8. Create BookingStatusHistory
       await tx.bookingStatusHistory.create({
         data: {
           bookingId: booking.id,
@@ -506,17 +477,16 @@ router.post('/create-booking', authenticate, async (req, res) => {
         },
       });
 
-      return { booking, travelDetails, passengers, tripInfo };
+      return { booking, travelDetails, passengers };
     });
 
     res.status(201).json({
       message: 'Booking completed successfully',
       data: {
         bookingId: result.booking.id,
-        passengerCount: finalPassengerCount,
-        passengers: result.passengers,
-        tripInfo: result.tripInfo,
-        status: initialStatus,
+          passengerCount: finalPassengerCount,
+          passengers: result.passengers,
+          status: initialStatus,
       },
     });
   } catch (error) {

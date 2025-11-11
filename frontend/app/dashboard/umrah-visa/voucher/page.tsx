@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { TripInfo, UmrahVisaStatus } from '@/types';
+import { UmrahVisaBooking, UmrahVisaStatus } from '@/types';
 import { umrahVisaAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
 import { VoucherPreviewDialog } from '@/components/voucher/VoucherPreviewDialog';
@@ -40,50 +40,28 @@ export default function VoucherPage() {
   const user = getUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [tripInfoList, setTripInfoList] = useState<TripInfo[]>([]);
-  const [filteredData, setFilteredData] = useState<TripInfo[]>([]);
+  const [bookingList, setBookingList] = useState<UmrahVisaBooking[]>([]);
+  const [filteredData, setFilteredData] = useState<UmrahVisaBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [selectedTrip, setSelectedTrip] = useState<TripInfo | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
 
-  const fetchTripInfo = async () => {
+  const fetchBookings = async () => {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('accessToken');
       
-      // Fetch ALL bookings - don't filter on backend, we'll filter by booking.status OR tripInfo.status
+      // Fetch ALL bookings - filter by booking.status
       const response = await umrahVisaAPI.getBookings({ limit: 1000 });
       const data = response.data;
       
-      // Include ALL bookings where booking.status is 'voucher' OR tripInfo.status is 'voucher'
-      // Even if tripInfo doesn't exist, if booking.status is 'voucher', include it
-      const tripInfoData = data.bookings
-        .filter((booking: any) => {
-          // Include if booking status is 'voucher' OR tripInfo status is 'voucher'
-          return booking.status === 'voucher' || booking.tripInfo?.status === 'voucher';
-        })
-        .map((booking: any) => ({
-          // Use tripInfo if exists, otherwise create a minimal tripInfo from booking data
-          ...(booking.tripInfo || {
-            id: `temp-${booking.id}`,
-            bookingId: booking.id,
-            partyName: booking.party?.partyName || '',
-            groupNumber: booking.groupNumber || '',
-            groupName: booking.groupName || '',
-            arrivalDate: booking.travelDetails?.arrivalDate || new Date().toISOString(),
-            departureDate: booking.travelDetails?.departureDate || new Date().toISOString(),
-            status: booking.status, // Use booking status as tripInfo status
-            createdAt: booking.createdAt,
-            updatedAt: booking.updatedAt,
-            documentsDownloadCount: 0,
-            updatedBy: '',
-          }),
-          visaType: booking.visaType,
-          booking: { id: booking.id, passengerCount: booking.passengerCount },
-        }));
+      // Include ALL bookings where booking.status is 'voucher'
+      const bookingsData = data.bookings
+        .filter((booking: any) => booking.status === 'voucher')
+        .map((booking: any) => booking);
 
-      setTripInfoList(tripInfoData);
+      setBookingList(bookingsData);
     } catch (error) {
       console.error('Error:', error);
       toast.error('Failed to load data');
@@ -93,15 +71,15 @@ export default function VoucherPage() {
   };
 
   const filterData = () => {
-    // Filter by tripInfo status 'voucher' (all entries should be 'voucher' at this point)
-    let filtered = tripInfoList.filter(trip => trip.status === 'voucher');
+    // Filter by booking status 'voucher' (all entries should be 'voucher' at this point)
+    let filtered = bookingList.filter(booking => booking.status === 'voucher');
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(trip =>
-        trip.partyName?.toLowerCase().includes(query) ||
-        trip.groupNumber?.toLowerCase().includes(query) ||
-        trip.groupName?.toLowerCase().includes(query)
+      filtered = filtered.filter(booking =>
+        booking.party?.partyName?.toLowerCase().includes(query) ||
+        booking.groupNumber?.toLowerCase().includes(query) ||
+        booking.groupName?.toLowerCase().includes(query)
       );
     }
 
@@ -110,7 +88,7 @@ export default function VoucherPage() {
 
   useEffect(() => {
     if (user && hasRole(['admin', 'staff'])) {
-      fetchTripInfo();
+      fetchBookings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -118,7 +96,7 @@ export default function VoucherPage() {
   useEffect(() => {
     filterData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, tripInfoList]);
+  }, [searchQuery, bookingList]);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -132,22 +110,18 @@ export default function VoucherPage() {
     });
   };
 
-  const handleGenerateVoucherClick = (trip: TripInfo) => {
-    // Ensure we have the correct booking ID
-    const bookingId = (trip as any).booking?.id || trip.bookingId;
-    if (!bookingId) {
+  const handleGenerateVoucherClick = (booking: UmrahVisaBooking) => {
+    if (!booking.id) {
       toast.error('Booking ID not found');
       return;
     }
-    // Store booking ID in trip for later use
-    const tripWithBookingId = { ...trip, bookingId };
-    setSelectedTrip(tripWithBookingId);
+    setSelectedBooking(booking);
     setShowGenerateDialog(true);
   };
 
   const handleVoucherSuccess = () => {
-    setSelectedTrip(null);
-    fetchTripInfo();
+    setSelectedBooking(null);
+    fetchBookings();
   };
 
   return (
@@ -174,7 +148,7 @@ export default function VoucherPage() {
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">Generate transport vouchers for bookings</p>
               </div>
             </div>
-            <Button onClick={fetchTripInfo} variant="outline" className="flex items-center gap-2">
+            <Button onClick={fetchBookings} variant="outline" className="flex items-center gap-2">
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
@@ -186,7 +160,7 @@ export default function VoucherPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Book Voucher</CardTitle>
-                <CardDescription>Showing {filteredData.length} of {tripInfoList.length} bookings</CardDescription>
+                <CardDescription>Showing {filteredData.length} of {bookingList.length} bookings</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="relative">
@@ -216,28 +190,28 @@ export default function VoucherPage() {
                           <TableCell colSpan={6} className="text-center py-8 text-gray-500">No bookings found</TableCell>
                         </TableRow>
                       ) : (
-                        filteredData.map((trip) => (
-                          <TableRow key={trip.id}>
+                        filteredData.map((booking) => (
+                          <TableRow key={booking.id}>
                             <TableCell>
-                              <Badge variant={trip.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
-                                {trip.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                              <Badge variant={booking.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
                               </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="font-semibold">{trip.groupNumber || 'N/A'}</div>
-                                <div className="text-xs text-gray-500">{trip.groupName || 'No group'}</div>
+                                <div className="font-semibold">{booking.groupNumber || 'N/A'}</div>
+                                <div className="text-xs text-gray-500">{booking.groupName || 'No group'}</div>
                               </div>
                             </TableCell>
-                            <TableCell><div className="font-medium">{trip.partyName}</div></TableCell>
-                            <TableCell><div className="text-sm">{formatDate(trip.arrivalDate)}</div></TableCell>
+                            <TableCell><div className="font-medium">{booking.party?.partyName || 'N/A'}</div></TableCell>
+                            <TableCell><div className="text-sm">{booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}</div></TableCell>
                             <TableCell>
-                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[trip.status].color} text-xs`}>
-                                {UMRAH_VISA_STATUS_CONFIG[trip.status].label}
+                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[booking.status || 'voucher'].color} text-xs`}>
+                                {UMRAH_VISA_STATUS_CONFIG[booking.status || 'voucher'].label}
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Button size="sm" onClick={() => handleGenerateVoucherClick(trip)} className="flex items-center gap-1">
+                              <Button size="sm" onClick={() => handleGenerateVoucherClick(booking)} className="flex items-center gap-1">
                                 <Ticket className="h-3 w-3" />
                                 Generate Voucher
                               </Button>
@@ -254,11 +228,11 @@ export default function VoucherPage() {
         </div>
       </div>
 
-      {selectedTrip && (
+      {selectedBooking && selectedBooking.id && (
         <VoucherPreviewDialog
           open={showGenerateDialog}
           onOpenChange={setShowGenerateDialog}
-          bookingId={(selectedTrip as any).booking?.id || selectedTrip.bookingId}
+          bookingId={selectedBooking.id}
           onSuccess={handleVoucherSuccess}
         />
       )}

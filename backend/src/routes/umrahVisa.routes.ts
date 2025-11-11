@@ -89,22 +89,18 @@ router.get('/bookings', authenticate, async (req, res) => {
               documents: true,
             },
           },
-          tripInfo: {
-            include: {
-              updatedByUser: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
-              documentsDownloadedByUser: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
+          lastUpdatedByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          documentsDownloadedByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
             },
           },
         },
