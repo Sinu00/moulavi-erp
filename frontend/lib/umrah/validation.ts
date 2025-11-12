@@ -251,21 +251,50 @@ export const validateStep4 = (
     return isJeddah && step3Data.accommodationType === 'hotel';
   })();
   
+  // Check if we have either single or multiple transport selection
+  const hasSingleTransport = !!data.selectedTransport;
+  const hasMultipleTransports = !!(data.selectedTransports && data.selectedTransports.length > 0);
+  
   // If transport is required, validate it
   if (isTransportRequired) {
-    if (!data.selectedTransport) {
+    if (!hasSingleTransport && !hasMultipleTransports) {
       return 'Please select a transport vehicle for your route (required for Jeddah arrival with hotel accommodation)';
     }
-    
+  }
+  
+  // Validate single transport if provided
+  if (hasSingleTransport) {
     if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
       return 'Invalid transport selection. Please select again.';
     }
   }
   
-  // If transport is provided (even when optional), validate it
-  if (data.selectedTransport) {
-    if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
-      return 'Invalid transport selection. Please select again.';
+  // Validate multiple transports if provided (for fulltrip routes)
+  if (hasMultipleTransports) {
+    if (!data.selectedTransports || data.selectedTransports.length === 0) {
+      return 'Please select at least one vehicle for your route.';
+    }
+    
+    // Validate each transport in the array
+    for (const transport of data.selectedTransports) {
+      if (!transport.routeId || !transport.transportId || !transport.vehicleTypeId || !transport.price) {
+        return 'Invalid transport selection. Please select again.';
+      }
+      if (!transport.quantity || transport.quantity < 1) {
+        return 'Each selected vehicle must have a quantity of at least 1.';
+      }
+    }
+    
+    // Check if total capacity meets passenger count
+    if (step2Data?.passengerCount) {
+      const totalCapacity = data.selectedTransports.reduce((sum, t) => {
+        // We need to get the vehicle type capacity, but we don't have it here
+        // This will be validated in the component itself
+        return sum;
+      }, 0);
+      
+      // Note: Capacity validation is done in the UI component
+      // We just validate the structure here
     }
   }
   

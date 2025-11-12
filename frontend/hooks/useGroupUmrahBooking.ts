@@ -271,8 +271,11 @@ export const useGroupUmrahBooking = () => {
     // Step 4: Transport Vehicle Selection - just validate and move to next step
     setIsLoading(true);
     try {
-      // Validate that transport is selected
-      if (!bookingState.step4Data.selectedTransport) {
+      // Validate that transport is selected (either single or multiple)
+      const hasSingleTransport = !!bookingState.step4Data.selectedTransport;
+      const hasMultipleTransports = !!(bookingState.step4Data.selectedTransports && bookingState.step4Data.selectedTransports.length > 0);
+      
+      if (!hasSingleTransport && !hasMultipleTransports) {
         toast.error('Please select a transport vehicle');
         return false;
       }

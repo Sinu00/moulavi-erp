@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Step4Data, Step2Data, Step1Data, Step3Data, LocationMaster } from '@/lib/umrah/types';
 import { transportRouteMasterAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Truck, CheckCircle2, Loader2, Route, Users, MapPin, Sparkles, Info, AlertCircle } from 'lucide-react';
+import { Truck, CheckCircle2, Loader2, Route, Users, MapPin, Sparkles, Info, AlertCircle, Plus, Minus } from 'lucide-react';
 
 interface TransportVehicleSelectionStepProps {
   data: Step4Data;
@@ -55,6 +55,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   const [selectedTransportId, setSelectedTransportId] = useState<string | null>(
     data.selectedTransport?.transportId || null
   );
+  // For fulltrip routes: track selected vehicles with quantities
+  const [selectedVehicles, setSelectedVehicles] = useState<Map<string, number>>(new Map());
+
+  // Check if we have any fulltrip routes
+  const hasFulltripRoute = useMemo(() => {
+    return [...exactMatches, ...otherOptions].some(opt => opt.route.routeType === 'fulltrip');
+  }, [exactMatches, otherOptions]);
 
   // Determine route from airports and hotels
   const determinedRoute = useMemo(() => {
@@ -111,8 +118,6 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
         const response = await transportRouteMasterAPI.matchByCities(determinedRoute);
         const { exactMatches: exact, otherRoutes: other } = response.data;
 
-        // Filter transports by PAX capacity
-        // Logic: vehicle.paxCount >= passengerCount (e.g., 30 PAX vehicle can handle 20 passengers)
         const passengerCount = step2Data.passengerCount || 0;
 
         const filterByPax = (routes: any[]): TransportOption[] => {
@@ -121,27 +126,50 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
             if (!route.transports || route.transports.length === 0) {
               return;
             }
+            const isRouteFulltrip = route.routeType === 'fulltrip';
             route.transports?.forEach((transport: any) => {
               const vehiclePax = transport.vehicleType?.paxCount || 0;
               
-              // Filter: vehicle PAX capacity must be >= passenger count
-              // Example: 30 PAX vehicle can handle 20 passengers (30 >= 20 = true)
-              if (vehiclePax >= passengerCount && transport.isActive) {
-                options.push({
-                  id: transport.id,
-                  routeId: route.id,
-                  route: {
-                    id: route.id,
-                    city1: route.city1,
-                    city2: route.city2,
-                    city3: route.city3,
-                    city4: route.city4,
-                    routeType: route.routeType,
-                  },
-                  vehicleType: transport.vehicleType,
-                  price: Number(transport.price),
-                  isActive: transport.isActive,
-                });
+              // For fulltrip routes: show ALL active vehicles (can be combined)
+              // For other routes: only show vehicles where vehiclePax >= passengerCount
+              if (isRouteFulltrip) {
+                // Show all active vehicles for fulltrip routes
+                if (transport.isActive) {
+                  options.push({
+                    id: transport.id,
+                    routeId: route.id,
+                    route: {
+                      id: route.id,
+                      city1: route.city1,
+                      city2: route.city2,
+                      city3: route.city3,
+                      city4: route.city4,
+                      routeType: route.routeType,
+                    },
+                    vehicleType: transport.vehicleType,
+                    price: Number(transport.price),
+                    isActive: transport.isActive,
+                  });
+                }
+              } else {
+                // Original logic for non-fulltrip routes: only show vehicles >= passengerCount
+                if (vehiclePax >= passengerCount && transport.isActive) {
+                  options.push({
+                    id: transport.id,
+                    routeId: route.id,
+                    route: {
+                      id: route.id,
+                      city1: route.city1,
+                      city2: route.city2,
+                      city3: route.city3,
+                      city4: route.city4,
+                      routeType: route.routeType,
+                    },
+                    vehicleType: transport.vehicleType,
+                    price: Number(transport.price),
+                    isActive: transport.isActive,
+                  });
+                }
               }
             });
           });
@@ -169,6 +197,15 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
           exact: exact?.length || 0,
           other: other?.length || 0
         });
+
+        // Initialize selected vehicles from data if exists
+        if (data.selectedTransports && data.selectedTransports.length > 0) {
+          const vehicleMap = new Map<string, number>();
+          data.selectedTransports.forEach(st => {
+            vehicleMap.set(st.transportId, st.quantity);
+          });
+          setSelectedVehicles(vehicleMap);
+        }
       } catch (error: any) {
         console.error('Error loading transport options:', error);
         toast.error('Failed to load transport options');
@@ -178,7 +215,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     };
 
     loadTransportOptions();
-  }, [determinedRoute, step2Data.passengerCount]);
+  }, [determinedRoute, step2Data.passengerCount, data.selectedTransports]);
 
   const getRouteString = (route: TransportOption['route']) => {
     const cities = [
@@ -191,16 +228,83 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   };
 
   const handleSelectTransport = (transport: TransportOption) => {
-    setSelectedTransportId(transport.id);
-    onChange({
-      selectedTransport: {
+    if (hasFulltripRoute && transport.route.routeType === 'fulltrip') {
+      // For fulltrip routes, use multiple selection
+      return; // Handled by quantity controls
+    } else {
+      // For non-fulltrip routes, use single selection
+      setSelectedTransportId(transport.id);
+      onChange({
+        selectedTransport: {
+          routeId: transport.routeId,
+          transportId: transport.id,
+          vehicleTypeId: transport.vehicleType.id,
+          price: transport.price,
+        },
+        selectedTransports: undefined, // Clear multiple selection
+      });
+    }
+  };
+
+  const handleQuantityChange = (transportId: string, delta: number) => {
+    const currentQty = selectedVehicles.get(transportId) || 0;
+    const newQty = Math.max(0, currentQty + delta);
+    
+    const newMap = new Map(selectedVehicles);
+    if (newQty === 0) {
+      newMap.delete(transportId);
+    } else {
+      newMap.set(transportId, newQty);
+    }
+    setSelectedVehicles(newMap);
+
+    // Update parent data
+    const selectedTransports = Array.from(newMap.entries()).map(([transportId, quantity]) => {
+      const transport = [...exactMatches, ...otherOptions].find(t => t.id === transportId);
+      if (!transport) return null;
+      return {
         routeId: transport.routeId,
         transportId: transport.id,
         vehicleTypeId: transport.vehicleType.id,
         price: transport.price,
-      },
+        quantity,
+      };
+    }).filter(Boolean) as Array<{
+      routeId: string;
+      transportId: string;
+      vehicleTypeId: string;
+      price: number;
+      quantity: number;
+    }>;
+
+    onChange({
+      selectedTransports: selectedTransports.length > 0 ? selectedTransports : undefined,
+      selectedTransport: undefined, // Clear single selection
     });
   };
+
+  // Calculate total capacity and price for selected vehicles (fulltrip)
+  const totalCapacity = useMemo(() => {
+    let total = 0;
+    selectedVehicles.forEach((quantity, transportId) => {
+      const transport = [...exactMatches, ...otherOptions].find(t => t.id === transportId);
+      if (transport) {
+        total += transport.vehicleType.paxCount * quantity;
+      }
+    });
+    return total;
+  }, [selectedVehicles, exactMatches, otherOptions]);
+
+  const totalPrice = useMemo(() => {
+    let total = 0;
+    selectedVehicles.forEach((quantity, transportId) => {
+      const transport = [...exactMatches, ...otherOptions].find(t => t.id === transportId);
+      if (transport) {
+        total += transport.price * quantity;
+      }
+    });
+    return total;
+  }, [selectedVehicles, exactMatches, otherOptions]);
 
   const getRouteTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -248,7 +352,139 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   }).join(' → ');
 
   const allOptions = [...exactMatches, ...otherOptions];
+  const fulltripOptions = allOptions.filter(opt => opt.route.routeType === 'fulltrip');
+  const nonFulltripOptions = allOptions.filter(opt => opt.route.routeType !== 'fulltrip');
 
+  // For fulltrip routes: show all vehicles that can be combined
+  if (hasFulltripRoute && fulltripOptions.length > 0) {
+    const passengerCount = step2Data.passengerCount || 0;
+    const capacityMet = totalCapacity >= passengerCount;
+    const remainingCapacity = Math.max(0, passengerCount - totalCapacity);
+
+    return (
+      <div className="space-y-6">
+        {/* Route Summary Card */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0 mt-1">
+              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Your Journey Route</h3>
+              <p className="text-base font-medium text-gray-900 mb-3">
+                {routeDisplay}
+              </p>
+              <div className="flex items-center space-x-4 text-sm">
+                <div className="flex items-center space-x-1.5 text-gray-600">
+                  <Users className="h-4 w-4" />
+                  <span><strong className="text-gray-900">{passengerCount}</strong> Passengers</span>
+                </div>
+                <div className="flex items-center space-x-1.5 text-gray-600">
+                  <Route className="h-4 w-4" />
+                  <span>{determinedRoute.length} Cities</span>
+                </div>
+                <Badge className="bg-purple-100 text-purple-800 border-purple-300">
+                  Full Trip Route
+                </Badge>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Info Banner for Full Trip */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900 mb-1">Multiple Vehicle Selection Available</p>
+              <p className="text-sm text-gray-600">
+                For Full Trip routes, you can select multiple vehicles to accommodate your group. 
+                For example, you can select 2 × 30-PAX vehicles for 50 passengers.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Selection Summary */}
+        {selectedVehicles.size > 0 && (
+          <div className={`border rounded-lg p-4 ${capacityMet ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <Users className={`h-5 w-5 ${capacityMet ? 'text-green-600' : 'text-orange-600'}`} />
+                <span className="font-semibold text-gray-900">
+                  Selected Capacity: {totalCapacity} / {passengerCount} passengers
+                </span>
+              </div>
+              {capacityMet ? (
+                <Badge className="bg-green-100 text-green-800 border-green-300">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Capacity Met
+                </Badge>
+              ) : (
+                <Badge className="bg-orange-100 text-orange-800 border-orange-300">
+                  Need {remainingCapacity} more
+                </Badge>
+              )}
+            </div>
+            <div className="text-sm text-gray-600">
+              Total Price: <span className="font-semibold text-gray-900">₹{totalPrice.toLocaleString('en-IN')}</span>
+            </div>
+            {selectedVehicles.size > 0 && (
+              <div className="mt-3 space-y-1">
+                {Array.from(selectedVehicles.entries()).map(([transportId, quantity]) => {
+                  const transport = allOptions.find(t => t.id === transportId);
+                  if (!transport) return null;
+                  return (
+                    <div key={transportId} className="text-xs text-gray-600 flex items-center justify-between">
+                      <span>{quantity} × {transport.vehicleType.vehicleName} ({transport.vehicleType.paxCount} PAX each)</span>
+                      <span className="font-medium">₹{(transport.price * quantity).toLocaleString('en-IN')}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Available Vehicles for Full Trip */}
+        <div>
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
+                <Truck className="h-4 w-4 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Available Vehicles</h3>
+                <p className="text-xs text-gray-500">Select multiple vehicles to meet your passenger count</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-4">
+            {fulltripOptions.map((transport) => {
+              const quantity = selectedVehicles.get(transport.id) || 0;
+              const isSelected = quantity > 0;
+              return (
+                <FulltripVehicleCard
+                  key={transport.id}
+                  transport={transport}
+                  quantity={quantity}
+                  passengerCount={passengerCount}
+                  onQuantityChange={(delta) => handleQuantityChange(transport.id, delta)}
+                  getRouteString={getRouteString}
+                  getRouteTypeLabel={getRouteTypeLabel}
+                  disabled={disabled}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Original logic for non-fulltrip routes
   if (allOptions.length === 0) {
     // Debug: Check if we got any routes from API (before filtering)
     const hasRoutes = rawRouteCounts.exact > 0 || rawRouteCounts.other > 0;
@@ -377,7 +613,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
       )}
 
       {/* All Available Options Section - Grid Layout */}
-      {allOptions.length > 0 && (
+      {nonFulltripOptions.length > 0 && (
         <div>
           <div className="flex items-center space-x-3 mb-4">
             <div className="flex items-center space-x-2">
@@ -390,11 +626,11 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
               </div>
             </div>
             <Badge variant="outline" className="text-xs">
-              {allOptions.length} {allOptions.length === 1 ? 'option' : 'options'}
+              {nonFulltripOptions.length} {nonFulltripOptions.length === 1 ? 'option' : 'options'}
             </Badge>
           </div>
           <div className="grid grid-cols-4 gap-4">
-            {allOptions.map((transport) => (
+            {nonFulltripOptions.map((transport) => (
               <TransportOptionCard
                 key={transport.id}
                 transport={transport}
@@ -549,3 +785,127 @@ const TransportOptionCard: React.FC<TransportOptionCardProps> = ({
   );
 };
 
+interface FulltripVehicleCardProps {
+  transport: TransportOption;
+  quantity: number;
+  passengerCount: number;
+  onQuantityChange: (delta: number) => void;
+  getRouteString: (route: TransportOption['route']) => string;
+  getRouteTypeLabel: (type: string) => string;
+  disabled?: boolean;
+}
+
+const FulltripVehicleCard: React.FC<FulltripVehicleCardProps> = ({
+  transport,
+  quantity,
+  passengerCount,
+  onQuantityChange,
+  getRouteString,
+  getRouteTypeLabel,
+  disabled,
+}) => {
+  const routeString = getRouteString(transport.route);
+  const routeParts = routeString.split(' → ');
+  const isSelected = quantity > 0;
+  const totalCapacity = transport.vehicleType.paxCount * quantity;
+  const canAccommodate = totalCapacity >= passengerCount;
+
+  return (
+    <Card className={`h-full hover:shadow-lg transition-all flex flex-col ${
+      isSelected 
+        ? 'ring-2 ring-purple-500 border-purple-500 shadow-md bg-purple-50' 
+        : 'bg-white border-gray-200 hover:border-gray-300'
+    }`}>
+      <CardContent className="p-4 flex flex-col h-full">
+        {/* Route Header */}
+        <div className="mb-3">
+          <div className="flex items-center space-x-2 mb-2">
+            <div className="flex-shrink-0 h-6 w-6 rounded-full flex items-center justify-center bg-purple-100">
+              <Route className="h-3 w-3 text-purple-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-gray-900 text-sm truncate">
+                {routeParts.length > 2 
+                  ? `${routeParts[0]} → ${routeParts[routeParts.length - 1]}`
+                  : routeString
+                }
+              </h4>
+            </div>
+          </div>
+          {routeParts.length > 2 && (
+            <p className="text-xs text-gray-500 ml-8 truncate" title={routeString}>
+              {routeString}
+            </p>
+          )}
+          <Badge variant="outline" className="text-xs border-purple-300 mt-1 ml-8 bg-purple-50">
+            {getRouteTypeLabel(transport.route.routeType)}
+          </Badge>
+        </div>
+
+        {/* Vehicle & Capacity Info */}
+        <div className="space-y-2 mb-3 flex-1">
+          <div className="flex items-center space-x-2">
+            <Truck className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-xs text-gray-600">Vehicle:</span>
+            <span className="text-sm font-semibold text-gray-900">{transport.vehicleType.vehicleName}</span>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Users className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-xs text-gray-600">Capacity:</span>
+            <span className="text-sm font-semibold text-gray-900">{transport.vehicleType.paxCount} PAX</span>
+          </div>
+        </div>
+
+        {/* Price per vehicle */}
+        <div className="pt-3 border-t border-gray-200 mb-3">
+          <div className="flex items-baseline space-x-1">
+            <span className="text-xs text-gray-600">Price:</span>
+            <span className="text-lg font-bold text-gray-900">
+              ₹{transport.price.toLocaleString('en-IN')}
+            </span>
+            <span className="text-xs text-gray-500">/vehicle</span>
+          </div>
+          {quantity > 0 && (
+            <p className="text-xs text-gray-600 mt-1">
+              Total: ₹{(transport.price * quantity).toLocaleString('en-IN')} ({quantity} × ₹{transport.price.toLocaleString('en-IN')})
+            </p>
+          )}
+        </div>
+
+        {/* Quantity Selector */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-600">Quantity:</span>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onQuantityChange(-1)}
+                disabled={disabled || quantity === 0}
+                className="h-7 w-7 p-0"
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="text-sm font-semibold text-gray-900 w-8 text-center">{quantity}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onQuantityChange(1)}
+                disabled={disabled}
+                className="h-7 w-7 p-0"
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+          {quantity > 0 && (
+            <div className="text-xs text-gray-600">
+              Capacity: {transport.vehicleType.paxCount * quantity} passengers
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};

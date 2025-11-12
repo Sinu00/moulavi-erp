@@ -125,6 +125,11 @@ model UmrahPassenger {
   bookingId       String              @map("booking_id") @db.Uuid
   isLeadPassenger Boolean             @default(false) @map("is_lead_passenger")
   fullName        String              @map("full_name") @db.VarChar(255)
+  nationality     String?             @map("nationality") @db.VarChar(100)
+  passportNumber  String?             @map("passport_number") @db.VarChar(50)
+  entryDate       DateTime?           @map("entry_date") @db.Date
+  exitDate        DateTime?           @map("exit_date") @db.Date
+  visaNumber      String?             @map("visa_number") @db.VarChar(50)
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamp(6)

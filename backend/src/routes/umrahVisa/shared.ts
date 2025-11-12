@@ -143,12 +143,21 @@ export const step3Schema = z.object({
 
 // Step 4 schema - used by individual only (transport selection)
 export const step4Schema = z.object({
+  // Single transport selection (for non-fulltrip routes)
   selectedTransport: z.object({
     routeId: z.string().uuid(),
     transportId: z.string().uuid(),
     vehicleTypeId: z.string().uuid(),
     price: z.number(),
   }).optional(),
+  // Multiple transport selection (for fulltrip routes only)
+  selectedTransports: z.array(z.object({
+    routeId: z.string().uuid(),
+    transportId: z.string().uuid(),
+    vehicleTypeId: z.string().uuid(),
+    price: z.number(),
+    quantity: z.number().min(1), // Number of vehicles of this type
+  })).optional(),
   // Backward compatibility: support old format with passengers
   passengerCount: z.number().min(1).max(50).optional(),
   passengers: z.array(z.object({

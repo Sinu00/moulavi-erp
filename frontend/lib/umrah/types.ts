@@ -36,12 +36,21 @@ export interface Step3Data {
 }
 
 export interface Step4Data {
+  // Single transport selection (for non-fulltrip routes)
   selectedTransport?: {
     routeId: string;
     transportId: string;
     vehicleTypeId: string;
     price: number;
   };
+  // Multiple transport selection (for fulltrip routes only)
+  selectedTransports?: Array<{
+    routeId: string;
+    transportId: string;
+    vehicleTypeId: string;
+    price: number;
+    quantity: number; // Number of vehicles of this type
+  }>;
 }
 
 export interface Step5Data {
