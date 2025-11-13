@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "nusukautomation",
+  "private_key_id": "829cadc245829601cdb5cffb82e40c4ef7fc82e6",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDG5BTX+m3tBqCZ\nPgsFQGuNIgdHEfsk+2YGDOGIkwheZvggDOFT6J5MpzdzjJCDlJQeaETA/njZpd/H\naLJRy3lm+LaICJdOr2QP0N4i2W/iHEbs8AIiZftDekAU3/SfxJM0XMQ9FyxuzBXf\nmVHLORAjhQma7AxauFOKD/EFAJ0hrrZ32zONWlozuVP0lZeeIxaZ0hEIGIGELQk7\nnnCjraL+odqIjVHSliiYV8RvyZKsqakR8NRPlOJc/LqN5c7UzrxCt8l1QW9Zuq2/\nQx+oBmGrXvLfQPCGrpv4dZzSpijcCy82YehtMvFRJ46+xnlQVhY0EZyXJre1FeLF\nsh1fAJnjAgMBAAECggEAAVtoCwCMmcvsR5oP8DARgSEvedwqYa+3cVN1gdLjATs5\noS+v+pHBQWujVLirpGzcmofX7ustlD/t/XR+QabzmUYZf2ceRS1W2kbGD+h6O3Q5\nmv9Dkcwuq+Cx1D1M9Cl0CaztB9pYdW8TYncE2FqiJ2Pj02NImEverLf8IIPHDrDu\nkC+JUGlg177rOCdXwOVCeodvfDjBdjb9EwYztiyvdPivfSQOgf6Q2ynCTzdaQtpi\nQqE/zEXharaGjvvXVp+E4f1iWRduAN3lgIZE0MM+s40pt4a4BPqD3xAOV0AK5lOW\nLnhZavnWgZNqqEfQjorr8jHxezF27sR8frXf++S2xQKBgQD2JdW3mjFyR1zlt+Xa\n+mREMurNXarWAS4+LZTYXwsBYFEy2miMVXYPEHelmEIVPIkZx4pZyz3895CaVP9b\njFdrvUFVPdItat+1qAkhLgVlW4bvQqQdP1c/TjnkRBObxBT3og4+19YBR014a8+z\nMbkXrJ8HpRuNOCzBrb4iLCoTPwKBgQDO2gbqYBwR7jcMNCiueiL8H8XD6OIRPdjw\nQnQJ+o5sYdXgviW8ZSJI0jvUn210Wehj9s+SjInVscmrJFkNBJyeYBkKINpa24sW\nAERj+xEJNtPB8/RkAasILXimutEO1pwj5CwInzw4abF/W/L0elHonLF0hX3g+wBC\nqaG3lg1kXQKBgQCENrpfDmG04oQRl//M6WXmA/t/J+rVXHj8SPuEZTjCGnxC9nHl\nvxnU6aF6vxfv1D5ILJgxtyuqr0dqvnETOYTTiCqJoNU+NAPJzWJqAhA/6zPFXGRO\nmXFBvcD2zWJC7sXcZZ2FP+Xhde0026QKupCTGNOrBZKQ/jV8KtjP/izzfQKBgEE5\nXH7g6Vj6DV+Kvt0tZASuHBUHROl83//6ZE6VM/2W5/Li4lFCbooZyIXl84SBqRaE\nR7WFHR1F3zpYzr+dGamS0bJw44lMutGoKeiAzUFjiWgZ/ZDfOcftVqL0O2F7aGak\n1wGs/DcplK99FeHjBBrd9dKxGR0s6Esc5AJYjUZ9AoGAXgHulCnhjGYM1s+VKrct\nMCjeZEljDdpp7Swa2wyEkjuXYBsKXBxMXuuO/GJ972iQVzh7E241+j7gd6lPAAns\nfm5vuWsXAZOjKE27PnDtynJ+ovujiRioRNLOr5QWfTOer2L104iGlbzHa2LBos0A\nZWgZm9YrwRy9+a5ZdewV3dw=\n-----END PRIVATE KEY-----\n",
+  "client_email": "moulavibilling@nusukautomation.iam.gserviceaccount.com",
+  "client_id": "113057734677867946728",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/moulavibilling%40nusukautomation.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

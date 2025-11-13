@@ -96,6 +96,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Party Master', icon: Users, path: '/dashboard/masters/party' },
     { name: 'Transport Route Master', icon: Route, path: '/dashboard/masters/transport-route' },
     { name: 'Transport Master', icon: Truck, path: '/dashboard/masters/transport' },
+    { name: 'Pricing Master', icon: Tag, path: '/dashboard/masters/pricing' },
     { name: 'Expense Master', icon: Receipt, path: '/dashboard/masters/expense' },
     { name: 'Income Master', icon: TrendingUp, path: '/dashboard/masters/income' },
   ];
@@ -357,7 +358,8 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                             item.path === '/dashboard/masters/vehicle-type' ||
                             item.path === '/dashboard/masters/city' ||
                             item.path === '/dashboard/masters/user-role' ||
-                            item.path === '/dashboard/masters/airport-route') {
+                            item.path === '/dashboard/masters/airport-route' ||
+                            item.path === '/dashboard/masters/pricing') {
                           router.push(item.path);
                         } else {
                           toast.info(`${item.name} coming soon`);

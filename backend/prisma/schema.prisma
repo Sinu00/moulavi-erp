@@ -60,6 +60,7 @@ model Party {
   documents             PartyDocument[]
   umrahVisaBookings     UmrahVisaBooking[] @relation("UmrahVisaProvider")
   bookings              UmrahVisaBooking[] @relation("BookingParty")
+  pricingMasters        PricingMaster[]
 
   @@index([email])
   @@index([partyName])
@@ -130,6 +131,7 @@ model UmrahPassenger {
   entryDate       DateTime?           @map("entry_date") @db.Date
   exitDate        DateTime?           @map("exit_date") @db.Date
   visaNumber      String?             @map("visa_number") @db.VarChar(50)
+  mofaNumber      String?             @map("mofa_number") @db.VarChar(50)
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt       DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamp(6)
@@ -641,5 +643,27 @@ enum RouteType {
   citytoairport
   tripandtour
   fulltrip
+}
+
+enum PricingType {
+  umrah
+  others
+}
+
+model PricingMaster {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partyId   String       @map("party_id") @db.Uuid
+  cost      Decimal      @db.Decimal(10, 2)
+  price     Decimal      @db.Decimal(10, 2)
+  type      PricingType
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  party     Party        @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([partyId])
+  @@index([type])
+  @@index([isActive])
+  @@map("pricing_masters")
 }
 

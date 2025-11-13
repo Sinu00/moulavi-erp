@@ -243,6 +243,8 @@ export const umrahVisaAPI = {
 
   createHotelBooking: (id: string, data: any) => api.post(`/umrah-visa/${id}/hotel-bookings`, data),
   deleteHotelBooking: (rowId: string) => api.delete(`/umrah-visa/hotel-bookings/${rowId}`),
+
+  fetchFromSheet: () => api.post('/umrah-visa/invoice/fetch-from-sheet'),
 };
 
 // User Management API
@@ -348,6 +350,15 @@ export const transportMasterAPI = {
   update: (id: string, data: any) => api.put(`/transport-masters/${id}`, data),
   delete: (id: string) => api.delete(`/transport-masters/${id}`),
   toggleStatus: (id: string) => api.patch(`/transport-masters/${id}/toggle-status`),
+};
+
+// Pricing Master API
+export const pricingMasterAPI = {
+  getAll: (params?: any) => api.get('/pricing-masters', { params }),
+  getById: (id: string) => api.get(`/pricing-masters/${id}`),
+  create: (data: any) => api.post('/pricing-masters', data),
+  update: (id: string, data: any) => api.put(`/pricing-masters/${id}`, data),
+  delete: (id: string) => api.delete(`/pricing-masters/${id}`),
 };
 
 // Masters

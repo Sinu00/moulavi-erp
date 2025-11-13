@@ -27,7 +27,10 @@ import {
   Search,
   Receipt,
   CheckCircle,
-  RefreshCw
+  RefreshCw,
+  Download,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
@@ -46,6 +49,9 @@ export default function InvoicePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
+  const [isFetchingSheet, setIsFetchingSheet] = useState(false);
+  const [fetchResults, setFetchResults] = useState<any>(null);
+  const [showResultsDialog, setShowResultsDialog] = useState(false);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -66,7 +72,7 @@ export default function InvoicePage() {
       const data = response.data;
       
       const bookingsData = data.bookings
-        .filter((booking: any) => booking.status === 'bill' || booking.status === 'booking_success')
+        .filter((booking: any) => booking.status === 'bill')
         .map((booking: any) => booking);
 
       setBookingList(bookingsData);
@@ -78,9 +84,30 @@ export default function InvoicePage() {
     }
   };
 
+  const handleFetchFromSheet = async () => {
+    try {
+      setIsFetchingSheet(true);
+      const response = await umrahVisaAPI.fetchFromSheet();
+      const data = response.data;
+      
+      setFetchResults(data);
+      setShowResultsDialog(true);
+      
+      toast.success(`Successfully updated ${data.summary.totalPassengersUpdated} passengers from ${data.summary.totalGroupsProcessed} groups`);
+      
+      // Refresh bookings after fetch
+      await fetchBookings();
+    } catch (error: any) {
+      console.error('Error fetching from sheet:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to fetch from sheet');
+    } finally {
+      setIsFetchingSheet(false);
+    }
+  };
+
   const filterData = () => {
     let filtered = bookingList.filter(booking => 
-      booking.status === 'bill' || booking.status === 'booking_success'
+      booking.status === 'bill'
     );
 
     if (searchQuery) {
@@ -157,10 +184,29 @@ export default function InvoicePage() {
                 <p className="text-xs lg:text-sm text-gray-500 mt-0.5">Manage billing and completion status</p>
               </div>
             </div>
-            <Button onClick={fetchBookings} variant="outline" className="flex items-center gap-2">
-              <RefreshCw className="h-4 w-4" />
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={handleFetchFromSheet} 
+                disabled={isFetchingSheet}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isFetchingSheet ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Fetching...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">Fetch from Sheet</span>
+                  </>
+                )}
+              </Button>
+              <Button onClick={fetchBookings} variant="outline" className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -246,6 +292,82 @@ export default function InvoicePage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowGenerateDialog(false)}>Cancel</Button>
             <Button onClick={handleGenerateBill} disabled>Generate Bill (Coming Soon)</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showResultsDialog} onOpenChange={setShowResultsDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fetch from Sheet Results</DialogTitle>
+            <DialogDescription>Passenger data update summary</DialogDescription>
+          </DialogHeader>
+          {fetchResults && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <div className="text-gray-600">Groups Processed</div>
+                    <div className="text-lg font-semibold text-gray-900">{fetchResults.summary.totalGroupsProcessed}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Passengers Updated</div>
+                    <div className="text-lg font-semibold text-gray-900">{fetchResults.summary.totalPassengersUpdated}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-600">Groups Ignored</div>
+                    <div className="text-lg font-semibold text-gray-900">{fetchResults.summary.totalGroupsIgnored}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm">Group Details:</h4>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Group Number</TableHead>
+                        <TableHead>Group Name</TableHead>
+                        <TableHead>Total Passengers</TableHead>
+                        <TableHead>Updated</TableHead>
+                        <TableHead>Pending</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fetchResults.results.map((result: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{result.groupNumber}</TableCell>
+                          <TableCell>{result.groupName}</TableCell>
+                          <TableCell>{result.totalPassengers}</TableCell>
+                          <TableCell className="text-green-600">{result.updatedPassengers}</TableCell>
+                          <TableCell className={result.pendingPassengers > 0 ? 'text-orange-600' : 'text-gray-600'}>
+                            {result.pendingPassengers}
+                          </TableCell>
+                          <TableCell>
+                            {result.isReady ? (
+                              <Badge className="bg-green-100 text-green-800 border-green-300">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Ready
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-orange-100 text-orange-800 border-orange-300">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                Pending
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setShowResultsDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
