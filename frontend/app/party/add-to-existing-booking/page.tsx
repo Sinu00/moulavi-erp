@@ -163,11 +163,11 @@ export default function AddToExistingBookingPage() {
   }
 
   return (
-    <PartyLayout 
-      title="Add to Existing Booking" 
-      subtitle="Add a new group to an existing booking"
-    >
-      <div className="p-6">
+      <PartyLayout 
+        title="Add to Existing Booking" 
+        subtitle="Add a new group to an existing booking"
+      >
+        <div className="p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle>Add Group to Existing Booking</CardTitle>

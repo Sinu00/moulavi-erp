@@ -238,7 +238,7 @@ export default function PartyDashboardPage() {
       title="Dashboard Overview" 
       subtitle={`Welcome back, ${user.name}`}
     >
-      <div className="p-6">
+      <div className="p-4 lg:p-6">
         {/* Stats Overview */}
         <div className="mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -277,7 +277,7 @@ export default function PartyDashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="mb-6 flex gap-3">
+        <div className="mb-6 flex flex-col sm:flex-row gap-3">
           <Button 
             onClick={() => router.push('/party/umrah-visa-group')}
             className="bg-red-600 hover:bg-red-700 text-white"

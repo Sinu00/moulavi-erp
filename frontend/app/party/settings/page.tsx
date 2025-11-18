@@ -230,8 +230,8 @@ export default function PartySettingsPage() {
   }
 
   return (
-    <PartyLayout title="Settings" subtitle="Manage your profile and account settings">
-      <div className="p-6">
+      <PartyLayout title="Settings" subtitle="Manage your profile and account settings">
+        <div className="p-4 lg:p-6">
         <div className="space-y-6">
           {/* Tab Navigation */}
           <div className="border-b border-gray-200">

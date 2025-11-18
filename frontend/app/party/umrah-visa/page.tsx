@@ -183,7 +183,7 @@ export default function UmrahVisaNewPage() {
       title="Umrah Visa Application" 
       subtitle="Complete the steps below to apply for your Umrah visa"
     >
-      <div className="p-6 pb-24">
+      <div className="p-4 lg:p-6 pb-24">
         <div className="w-full">
           {/* Step Progress */}
           <StepProgress
