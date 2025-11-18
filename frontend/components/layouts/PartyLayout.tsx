@@ -29,7 +29,13 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
-  const user = getUser();
+  const [mounted, setMounted] = React.useState(false);
+  const [user, setUser] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    setMounted(true);
+    setUser(getUser());
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -80,7 +86,7 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
     },
   ];
 
-  if (!user) {
+  if (!mounted || !user) {
     return null;
   }
 

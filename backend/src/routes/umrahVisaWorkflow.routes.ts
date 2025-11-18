@@ -445,6 +445,42 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       },
     });
 
+    // Handle multiple groups - combine group numbers and sum passengers
+    let groupCode = booking.groupNumber || '';
+    let paxCount = booking.passengerCount;
+    
+    if (booking.hasMultipleGroup && booking.multipleGroupDetails) {
+      interface GroupDetail {
+        groupNumber?: string;
+        groupName?: string;
+        passengerCount?: number;
+        documentId?: string | null;
+      }
+
+      let multipleGroupDetails: GroupDetail[] = [];
+      try {
+        if (Array.isArray(booking.multipleGroupDetails)) {
+          multipleGroupDetails = booking.multipleGroupDetails as unknown as GroupDetail[];
+        }
+      } catch (e) {
+        console.error('Error parsing multipleGroupDetails:', e);
+      }
+      
+      if (multipleGroupDetails.length > 0) {
+        // Combine all group numbers
+        groupCode = multipleGroupDetails
+          .map((g) => g.groupNumber)
+          .filter((gn): gn is string => !!gn)
+          .join(', ');
+        
+        // Sum all passenger counts
+        paxCount = multipleGroupDetails.reduce(
+          (sum: number, g) => sum + (g.passengerCount || 0),
+          0
+        );
+      }
+    }
+
     // Format data for voucher preview
     const voucherData = {
       bookingId: booking.id,
@@ -452,9 +488,9 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       reservationNumber: booking.voucher?.voucherNumber || '', // Use voucher number as reservation number (empty if voucher not generated yet)
       guestName: booking.party.partyName,
       guestMobile: booking.party.contactNumber || booking.party.whatsappNumber || '',
-      groupCode: booking.groupNumber || '',
+      groupCode: groupCode,
       groupName: booking.groupName || '',
-      paxCount: booking.passengerCount,
+      paxCount: paxCount,
       // Umrah Visa Provider details (for header section)
       umrahVisaProvider: booking.umrahVisaProvider ? {
         partyName: booking.umrahVisaProvider.partyName,
@@ -546,6 +582,12 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
             partyName: true,
           },
         },
+        voucher: {
+          select: {
+            id: true,
+            voucherNumber: true,
+          },
+        },
       },
     });
 
@@ -561,6 +603,25 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       });
     }
 
+    // Fetch full booking details for splitting if needed
+    const fullBooking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        passengers: true,
+        travelDetails: true,
+        hotelBookings: true,
+        sponsorIqamaDetails: true,
+        transportBookings: true,
+        movementDetails: true,
+        documents: true,
+        voucher: true,
+      },
+    });
+
+    if (!fullBooking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
     // Generate voucher number
     const voucherNumber = await generateVoucherNumber();
 
@@ -569,25 +630,48 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
     // Use movementDetails from voucherData as-is
     const movementDetailsWithRoutes = voucherData.movementDetails || [];
 
-    // Create voucher record
+    // Create or update voucher record and handle splitting if hasMultipleGroup
     const voucher = await prisma.$transaction(async (tx) => {
-      // Create voucher
-      const newVoucher = await tx.voucher.create({
-        data: {
-          bookingId,
-          voucherNumber,
-          reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
-          guestName: voucherData.guestName || booking!.party?.partyName || '',
-          guestMobile: voucherData.guestMobile || '',
-          groupCode: voucherData.groupCode || booking!.groupNumber || '',
-          umrahVisaProviderId: booking!.umrahVisaProviderId || null,
-          paxCount: voucherData.paxCount || booking!.passengerCount,
-          hotelSchedules: voucherData.hotelSchedules || [],
-          movementDetails: movementDetailsWithRoutes,
-          flightDetails: voucherData.flightDetails || [],
-          generatedBy: user.id,
-        },
-      });
+      // Check if voucher already exists, if so update it, otherwise create it
+      let newVoucher;
+      if (fullBooking.voucher) {
+        // Update existing voucher
+        newVoucher = await tx.voucher.update({
+          where: { id: fullBooking.voucher.id },
+          data: {
+            voucherNumber,
+            reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
+            guestName: voucherData.guestName || booking!.party?.partyName || '',
+            guestMobile: voucherData.guestMobile || '',
+            groupCode: voucherData.groupCode || booking!.groupNumber || '',
+            umrahVisaProviderId: booking!.umrahVisaProviderId || null,
+            paxCount: voucherData.paxCount || booking!.passengerCount,
+            hotelSchedules: voucherData.hotelSchedules || [],
+            movementDetails: movementDetailsWithRoutes,
+            flightDetails: voucherData.flightDetails || [],
+            generatedBy: user.id,
+            version: fullBooking.voucher.version + 1,
+          },
+        });
+      } else {
+        // Create new voucher
+        newVoucher = await tx.voucher.create({
+          data: {
+            bookingId,
+            voucherNumber,
+            reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
+            guestName: voucherData.guestName || booking!.party?.partyName || '',
+            guestMobile: voucherData.guestMobile || '',
+            groupCode: voucherData.groupCode || booking!.groupNumber || '',
+            umrahVisaProviderId: booking!.umrahVisaProviderId || null,
+            paxCount: voucherData.paxCount || booking!.passengerCount,
+            hotelSchedules: voucherData.hotelSchedules || [],
+            movementDetails: movementDetailsWithRoutes,
+            flightDetails: voucherData.flightDetails || [],
+            generatedBy: user.id,
+          },
+        });
+      }
 
       // Update booking with voucher metadata
       await tx.umrahVisaBooking.update({
@@ -600,6 +684,228 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
 
       // Sync status using helper (updates booking status + history)
       await syncBookingStatusInTx(bookingId, 'bill', user.id, 'Voucher generated', tx);
+
+      // Check if booking has multiple groups and split if needed
+      if (fullBooking.hasMultipleGroup && fullBooking.multipleGroupDetails) {
+        // Type guard for multipleGroupDetails
+        interface GroupDetail {
+          groupNumber: string;
+          groupName: string;
+          passengerCount: number;
+          documentId?: string | null;
+        }
+
+        let multipleGroupDetails: GroupDetail[] = [];
+        try {
+          if (Array.isArray(fullBooking.multipleGroupDetails)) {
+            multipleGroupDetails = fullBooking.multipleGroupDetails as unknown as GroupDetail[];
+          }
+        } catch (e) {
+          console.error('Error parsing multipleGroupDetails:', e);
+        }
+
+        if (multipleGroupDetails.length > 1) {
+          // Get first group details (will remain in original booking)
+          const firstGroup = multipleGroupDetails[0];
+          if (!firstGroup) {
+            throw new Error('First group not found in multipleGroupDetails');
+          }
+          
+          // Calculate passenger offsets for splitting
+          const firstGroupPassengerCount = firstGroup.passengerCount || fullBooking.passengerCount;
+
+          // Split passengers: first group keeps first N passengers
+          const passengersToKeep = fullBooking.passengers.slice(0, firstGroupPassengerCount);
+          const passengersToRemove = fullBooking.passengers.slice(firstGroupPassengerCount);
+
+          // Create new bookings for each additional group
+          const newBookings = [];
+          let currentPassengerIndex = 0;
+
+          for (let i = 1; i < multipleGroupDetails.length; i++) {
+            const group = multipleGroupDetails[i];
+            if (!group) continue;
+            
+            const groupPassengerCount = group.passengerCount || 0;
+            const groupPassengers = passengersToRemove.slice(
+              currentPassengerIndex,
+              currentPassengerIndex + groupPassengerCount
+            );
+
+            // Create new booking
+            const newBooking = await tx.umrahVisaBooking.create({
+              data: {
+                partyId: fullBooking.partyId,
+                submittedAt: fullBooking.submittedAt,
+                groupNumber: group.groupNumber || '',
+                groupName: group.groupName || '',
+                passengerCount: groupPassengerCount,
+                umrahVisaProviderId: fullBooking.umrahVisaProviderId,
+                status: 'bill', // Same status as original after voucher generation
+                hasGroupNumber: true,
+                accommodationType: fullBooking.accommodationType,
+                visaType: fullBooking.visaType,
+                hasTransportation: fullBooking.hasTransportation,
+                hasMultipleGroup: false,
+                lastUpdatedBy: user.id,
+              },
+            });
+
+            // Copy travel details
+            if (fullBooking.travelDetails) {
+              await tx.umrahTravelDetails.create({
+                data: {
+                  bookingId: newBooking.id,
+                  arrivalDateTime: fullBooking.travelDetails.arrivalDateTime,
+                  departureDateTime: fullBooking.travelDetails.departureDateTime,
+                  arrivalAirportId: fullBooking.travelDetails.arrivalAirportId,
+                  arrivalFlightNumber: fullBooking.travelDetails.arrivalFlightNumber,
+                  departureAirportId: fullBooking.travelDetails.departureAirportId,
+                  departureFlightNumber: fullBooking.travelDetails.departureFlightNumber,
+                },
+              });
+            }
+
+            // Copy hotel bookings if accommodation type is hotel
+            if (fullBooking.accommodationType === 'hotel' && fullBooking.hotelBookings) {
+              await Promise.all(
+                fullBooking.hotelBookings.map(hotel =>
+                  tx.umrahHotelBooking.create({
+                    data: {
+                      bookingId: newBooking.id,
+                      locationId: hotel.locationId,
+                      hotelId: hotel.hotelId,
+                      checkInDate: hotel.checkInDate,
+                      checkOutDate: hotel.checkOutDate,
+                      brn: hotel.brn ? (hotel.brn as any) : undefined,
+                    },
+                  })
+                )
+              );
+            }
+
+            // Copy sponsor iqama details if accommodation type is iqama
+            if (fullBooking.accommodationType === 'iqama' && fullBooking.sponsorIqamaDetails) {
+              await tx.umrahSponserIqamaDetails.create({
+                data: {
+                  bookingId: newBooking.id,
+                  iqamaNumber: fullBooking.sponsorIqamaDetails.iqamaNumber,
+                  iqamaSponserName: fullBooking.sponsorIqamaDetails.iqamaSponserName,
+                  sponserDob: fullBooking.sponsorIqamaDetails.sponserDob,
+                  sponserMobileNumber: fullBooking.sponsorIqamaDetails.sponserMobileNumber,
+                  sponserNationalShortAddress: fullBooking.sponsorIqamaDetails.sponserNationalShortAddress,
+                  confirmationImagePath: fullBooking.sponsorIqamaDetails.confirmationImagePath,
+                  confirmationUploadedAt: fullBooking.sponsorIqamaDetails.confirmationUploadedAt,
+                },
+              });
+            }
+
+            // Copy transport bookings if hasTransportation
+            if (fullBooking.hasTransportation && fullBooking.transportBookings) {
+              await Promise.all(
+                fullBooking.transportBookings.map(transport =>
+                  tx.umrahTransportBooking.create({
+                    data: {
+                      bookingId: newBooking.id,
+                      transportMasterId: transport.transportMasterId,
+                      travelDateTime: transport.travelDateTime,
+                    },
+                  })
+                )
+              );
+            }
+
+            // Copy movement details
+            if (fullBooking.movementDetails) {
+              await Promise.all(
+                fullBooking.movementDetails.map(movement =>
+                  tx.umrahMovementDetail.create({
+                    data: {
+                      bookingId: newBooking.id,
+                      travelDateTime: movement.travelDateTime,
+                      fromCityId: movement.fromCityId,
+                      fromLocationId: movement.fromLocationId,
+                      toCityId: movement.toCityId,
+                      toLocationId: movement.toLocationId,
+                      routeNumber: movement.routeNumber,
+                    },
+                  })
+                )
+              );
+            }
+
+            // Copy passengers for this group
+            await Promise.all(
+              groupPassengers.map((passenger, idx) =>
+                tx.umrahPassenger.create({
+                  data: {
+                    bookingId: newBooking.id,
+                    fullName: passenger.fullName,
+                    isLeadPassenger: idx === 0,
+                    nationality: passenger.nationality || null,
+                    passportNumber: passenger.passportNumber || null,
+                    entryDate: passenger.entryDate || null,
+                    exitDate: passenger.exitDate || null,
+                    visaNumber: passenger.visaNumber || null,
+                    mofaNumber: passenger.mofaNumber || null,
+                  },
+                })
+              )
+            );
+
+            // Copy document if specified in group details
+            if (group.documentId) {
+              const originalDocument = fullBooking.documents.find(d => d.id === group.documentId);
+              if (originalDocument) {
+                await tx.document.create({
+                  data: {
+                    bookingId: newBooking.id,
+                    documentType: originalDocument.documentType,
+                    fileName: originalDocument.fileName,
+                    filePath: originalDocument.filePath,
+                    fileSize: originalDocument.fileSize,
+                    mimeType: originalDocument.mimeType,
+                  },
+                });
+              }
+            }
+
+            // Create status history for new booking
+            await tx.bookingStatusHistory.create({
+              data: {
+                bookingId: newBooking.id,
+                oldStatus: null,
+                newStatus: 'bill',
+                changedBy: user.id,
+                reason: 'Booking split from multiple group booking after voucher generation',
+              },
+            });
+
+            newBookings.push(newBooking);
+            currentPassengerIndex += groupPassengerCount;
+          }
+
+          // Update original booking to keep only first group
+          await tx.umrahVisaBooking.update({
+            where: { id: bookingId },
+            data: {
+              groupNumber: firstGroup.groupNumber || '',
+              groupName: firstGroup.groupName || '',
+              passengerCount: firstGroupPassengerCount,
+              hasMultipleGroup: false,
+            },
+          });
+
+          // Remove passengers that were moved to other bookings
+          if (passengersToRemove.length > 0) {
+            await tx.umrahPassenger.deleteMany({
+              where: {
+                id: { in: passengersToRemove.map(p => p.id) },
+              },
+            });
+          }
+        }
+      }
 
       return newVoucher;
     });

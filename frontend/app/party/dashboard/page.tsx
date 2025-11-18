@@ -276,6 +276,25 @@ export default function PartyDashboardPage() {
           </div>
         </div>
 
+        {/* Quick Actions */}
+        <div className="mb-6 flex gap-3">
+          <Button 
+            onClick={() => router.push('/party/umrah-visa-group')}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Group Booking
+          </Button>
+          <Button 
+            onClick={() => router.push('/party/add-to-existing-booking')}
+            variant="outline"
+            className="border-red-200 text-red-600 hover:bg-red-50"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add to Existing Booking
+          </Button>
+        </div>
+
         {/* Recent Applications */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="p-6 border-b border-gray-200">
