@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { getUser, hasRole } from '@/lib/auth';
 import Sidebar from '@/components/Sidebar';
-import { ArrowLeft, UploadCloud, File, X, Menu } from 'lucide-react';
+import { UploadCloud, File, X, Menu, Users, ChevronRight } from 'lucide-react';
 import { umrahVisaAPI, partyAPI } from '@/lib/api';
 
 interface UmrahVisaBooking {
@@ -226,219 +226,243 @@ export default function AdminAddToExistingBookingPage() {
       <div className="flex-1 overflow-auto">
         {/* Header Bar */}
         <div className="sticky top-0 z-10 bg-white border-b px-4 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="lg:hidden"
-                onClick={() => setMobileMenuOpen(true)}
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div>
-                <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Add to Existing Booking</h1>
-                <p className="text-xs lg:text-sm text-gray-500 mt-0.5">
-                  Add a new group to an existing booking on behalf of a party
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center space-x-4">
             <Button
               variant="ghost"
-              onClick={() => router.push('/dashboard/umrah-visa/bookings')}
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setMobileMenuOpen(true)}
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Bookings
+              <Menu className="h-5 w-5" />
             </Button>
+            <div>
+              <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Add to Existing Booking</h1>
+              <p className="text-xs lg:text-sm text-gray-500 mt-0.5">
+                Add a new group to an existing booking on behalf of a party
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-4 lg:p-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Group to Existing Booking</CardTitle>
-              <CardDescription>
-                Select a party and enter the new group details to add to an existing booking
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Party Selection */}
-                <div className="space-y-2">
-                  <Label htmlFor="partyId">Select Party *</Label>
-                  {loadingParties ? (
-                    <div className="text-sm text-gray-500 py-2">Loading parties...</div>
-                  ) : (
-                    <Select
-                      value={selectedPartyId}
-                      onValueChange={(value) => {
-                        setSelectedPartyId(value);
-                        setFormData({ ...formData, existingBookingId: '' });
-                      }}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a party" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {parties.map((party) => (
-                          <SelectItem key={party.id} value={party.id}>
-                            {party.partyName} ({party.email})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                {/* Select Existing Booking */}
-                <div className="space-y-2">
-                  <Label htmlFor="existingBookingId">Select Existing Booking *</Label>
-                  {!selectedPartyId ? (
-                    <div className="text-sm text-gray-500 py-2">Please select a party first</div>
-                  ) : loadingBookings ? (
-                    <div className="text-sm text-gray-500 py-2">Loading bookings...</div>
-                  ) : bookings.length === 0 ? (
-                    <div className="text-sm text-gray-500 py-2">No bookings found for this party. Please create a booking first.</div>
-                  ) : (
-                    <Select
-                      value={formData.existingBookingId}
-                      onValueChange={(value) => setFormData({ ...formData, existingBookingId: value })}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a booking" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bookings.map((booking) => (
-                          <SelectItem key={booking.id} value={booking.id}>
-                            {booking.groupNumber || booking.id} - {booking.groupName || 'No group name'} ({booking.passengerCount} pax)
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                {/* New Group Number */}
-                <div className="space-y-2">
-                  <Label htmlFor="newGroupNumber">New Group Number *</Label>
-                  <Input
-                    id="newGroupNumber"
-                    value={formData.newGroupNumber}
-                    onChange={(e) => setFormData({ ...formData, newGroupNumber: e.target.value })}
-                    placeholder="e.g., 445566"
-                    required
-                  />
-                </div>
-
-                {/* New Group Name */}
-                <div className="space-y-2">
-                  <Label htmlFor="newGroupName">New Group Name *</Label>
-                  <Input
-                    id="newGroupName"
-                    value={formData.newGroupName}
-                    onChange={(e) => setFormData({ ...formData, newGroupName: e.target.value })}
-                    placeholder="Enter group name"
-                    required
-                  />
-                </div>
-
-                {/* Number of Passengers */}
-                <div className="space-y-2">
-                  <Label htmlFor="passengerCount">Number of Passengers *</Label>
-                  <Input
-                    id="passengerCount"
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={formData.passengerCount}
-                    onChange={(e) => setFormData({ ...formData, passengerCount: e.target.value })}
-                    placeholder="Enter number of passengers"
-                    required
-                  />
-                </div>
-
-                {/* Document Upload */}
-                <div className="space-y-2">
-                  <Label>PAN Cards ZIP File *</Label>
-                  {!zipFile ? (
-                    <div
-                      onDrop={handleDrop}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
-                        isDragging
-                          ? 'border-red-500 bg-red-50'
-                          : 'border-gray-300 bg-gray-50 hover:border-red-400 hover:bg-red-50/50'
-                      }`}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".zip,application/zip"
-                        onChange={handleFileInputChange}
-                        className="hidden"
-                      />
-                      
-                      <div className="flex flex-col items-center justify-center space-y-4">
-                        <UploadCloud className={`w-16 h-16 ${isDragging ? 'text-red-500' : 'text-gray-400'}`} />
-                        <div>
-                          <p className="text-lg font-medium text-gray-700 mb-1">
-                            {isDragging ? 'Drop your ZIP file here' : 'Click to upload or drag and drop'}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            ZIP file containing all PAN cards (MAX. 50MB)
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50">
-                      <div className="flex items-center space-x-3">
-                        <File className="h-8 w-8 text-red-600" />
-                        <div>
-                          <p className="font-medium text-gray-900">{zipFile.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {(zipFile.size / (1024 * 1024)).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleRemoveFile}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+        <div className="p-4 lg:p-8 pb-24">
+          {!selectedPartyId ? (
+            /* Party Selection Screen - Show first */
+            <div className="max-w-2xl mx-auto mt-12">
+              <Card className="shadow-lg">
+                <CardHeader className="text-center pb-4">
+                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <Users className="h-8 w-8 text-white" />
+                  </div>
+                  <CardTitle className="text-2xl">Select Party</CardTitle>
+                  <CardDescription className="text-base mt-2">
+                    Choose the party for which you are adding a group to an existing booking
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="partyId" className="text-base">Party *</Label>
+                    {loadingParties ? (
+                      <div className="text-sm text-gray-500 py-4 text-center">Loading parties...</div>
+                    ) : (
+                      <Select
+                        value={selectedPartyId}
+                        onValueChange={(value) => {
+                          setSelectedPartyId(value);
+                          setFormData({ ...formData, existingBookingId: '' });
+                        }}
+                        required
                       >
-                        <X className="h-4 w-4" />
+                        <SelectTrigger className="h-12 text-base">
+                          <SelectValue placeholder="Select a party" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parties.map((party) => (
+                            <SelectItem key={party.id} value={party.id}>
+                              {party.partyName} ({party.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  {selectedPartyId && (
+                    <div className="pt-4 flex justify-end">
+                      <Button
+                        onClick={() => {
+                          if (selectedPartyId) {
+                            loadBookings();
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        Continue
+                        <ChevronRight className="h-4 w-4 ml-2" />
                       </Button>
                     </div>
                   )}
-                </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            /* Form - Show after party selection */
+            <div className="max-w-3xl mx-auto">
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle>Add Group to Existing Booking</CardTitle>
+                  <CardDescription>
+                    Enter the new group details to add to an existing booking
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Select Existing Booking */}
+                    <div className="space-y-2">
+                      <Label htmlFor="existingBookingId">Select Existing Booking *</Label>
+                      {loadingBookings ? (
+                        <div className="text-sm text-gray-500 py-2">Loading bookings...</div>
+                      ) : bookings.length === 0 ? (
+                        <div className="text-sm text-gray-500 py-2">No bookings found for this party. Please create a booking first.</div>
+                      ) : (
+                        <Select
+                          value={formData.existingBookingId}
+                          onValueChange={(value) => setFormData({ ...formData, existingBookingId: value })}
+                          required
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a booking" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {bookings.map((booking) => (
+                              <SelectItem key={booking.id} value={booking.id}>
+                                {booking.groupNumber || booking.id} - {booking.groupName || 'No group name'} ({booking.passengerCount} pax)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
 
-                <div className="flex justify-end space-x-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => router.push('/dashboard/umrah-visa/bookings')}
-                    disabled={loading}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={loading || !selectedPartyId}
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    {loading ? 'Adding Group...' : 'Add Group to Booking'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+                    {/* New Group Number */}
+                    <div className="space-y-2">
+                      <Label htmlFor="newGroupNumber">New Group Number *</Label>
+                      <Input
+                        id="newGroupNumber"
+                        value={formData.newGroupNumber}
+                        onChange={(e) => setFormData({ ...formData, newGroupNumber: e.target.value })}
+                        placeholder="e.g., 445566"
+                        required
+                      />
+                    </div>
+
+                    {/* New Group Name */}
+                    <div className="space-y-2">
+                      <Label htmlFor="newGroupName">New Group Name *</Label>
+                      <Input
+                        id="newGroupName"
+                        value={formData.newGroupName}
+                        onChange={(e) => setFormData({ ...formData, newGroupName: e.target.value })}
+                        placeholder="Enter group name"
+                        required
+                      />
+                    </div>
+
+                    {/* Number of Passengers */}
+                    <div className="space-y-2">
+                      <Label htmlFor="passengerCount">Number of Passengers *</Label>
+                      <Input
+                        id="passengerCount"
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={formData.passengerCount}
+                        onChange={(e) => setFormData({ ...formData, passengerCount: e.target.value })}
+                        placeholder="Enter number of passengers"
+                        required
+                      />
+                    </div>
+
+                    {/* Document Upload */}
+                    <div className="space-y-2">
+                      <Label>PAN Cards ZIP File *</Label>
+                      {!zipFile ? (
+                        <div
+                          onDrop={handleDrop}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onClick={() => fileInputRef.current?.click()}
+                          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+                            isDragging
+                              ? 'border-indigo-500 bg-indigo-50'
+                              : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/50'
+                          }`}
+                        >
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".zip,application/zip"
+                            onChange={handleFileInputChange}
+                            className="hidden"
+                          />
+                          
+                          <div className="flex flex-col items-center justify-center space-y-4">
+                            <UploadCloud className={`w-16 h-16 ${isDragging ? 'text-indigo-500' : 'text-gray-400'}`} />
+                            <div>
+                              <p className="text-lg font-medium text-gray-700 mb-1">
+                                {isDragging ? 'Drop your ZIP file here' : 'Click to upload or drag and drop'}
+                              </p>
+                              <p className="text-sm text-gray-500">
+                                ZIP file containing all PAN cards (MAX. 50MB)
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="flex items-center space-x-3">
+                            <File className="h-8 w-8 text-indigo-600" />
+                            <div>
+                              <p className="font-medium text-gray-900">{zipFile.name}</p>
+                              <p className="text-sm text-gray-500">
+                                {(zipFile.size / (1024 * 1024)).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleRemoveFile}
+                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push('/dashboard/umrah-visa/bookings')}
+                        disabled={loading}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={loading || !selectedPartyId}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        {loading ? 'Adding Group...' : 'Add Group to Booking'}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
     </div>

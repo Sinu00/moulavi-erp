@@ -59,7 +59,7 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
     }
   };
 
-  const navigationItems = [
+  const dashboardItems = [
     {
       id: 'dashboard',
       label: 'Overview',
@@ -68,6 +68,9 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
       href: '/party/dashboard',
       isActive: pathname === '/party/dashboard',
     },
+  ];
+
+  const umrahVisaItems = [
     {
       id: 'individual',
       label: 'Individual Umrah Visa',
@@ -83,6 +86,14 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
       icon: Users,
       href: '/party/umrah-visa-group',
       isActive: pathname === '/party/umrah-visa-group',
+    },
+    {
+      id: 'add-to-existing',
+      label: 'Add to Existing Booking',
+      description: 'Add group to existing booking',
+      icon: Users,
+      href: '/party/add-to-existing-booking',
+      isActive: pathname === '/party/add-to-existing-booking',
     },
   ];
 
@@ -108,48 +119,95 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
         </div>
 
         {/* Sidebar Navigation */}
-        <div className="flex-1 p-4">
-          <nav className="space-y-2">
-            <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Dashboard
-            </div>
-            
-            {navigationItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => router.push(item.href)}
-                  className={`w-full px-3 py-2 text-left rounded-lg transition-colors ${
-                    item.isActive
-                      ? 'bg-red-50 border border-red-200'
-                      : 'hover:bg-red-50'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+        <div className="flex-1 p-4 overflow-y-auto">
+          <nav className="space-y-4">
+            {/* Dashboard Section */}
+            <div className="space-y-2">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Dashboard
+              </div>
+              
+              {dashboardItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => router.push(item.href)}
+                    className={`w-full px-3 py-2 text-left rounded-lg transition-colors ${
                       item.isActive
-                        ? 'bg-red-600'
-                        : 'bg-red-100'
-                    }`}>
-                      <Icon className={`h-4 w-4 ${
+                        ? 'bg-red-50 border border-red-200'
+                        : 'hover:bg-red-50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
                         item.isActive
-                          ? 'text-white'
-                          : 'text-red-600'
-                      }`} />
-                    </div>
-                    <div>
-                      <div className={`text-sm font-medium ${
-                        item.isActive ? 'text-red-900' : 'text-gray-900'
+                          ? 'bg-red-600'
+                          : 'bg-red-100'
                       }`}>
-                        {item.label}
+                        <Icon className={`h-4 w-4 ${
+                          item.isActive
+                            ? 'text-white'
+                            : 'text-red-600'
+                        }`} />
                       </div>
-                      <div className="text-xs text-gray-500">{item.description}</div>
+                      <div>
+                        <div className={`text-sm font-medium ${
+                          item.isActive ? 'text-red-900' : 'text-gray-900'
+                        }`}>
+                          {item.label}
+                        </div>
+                        <div className="text-xs text-gray-500">{item.description}</div>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Umrah Visa Section */}
+            <div className="space-y-2">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Umrah Visa
+              </div>
+              
+              {umrahVisaItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => router.push(item.href)}
+                    className={`w-full px-3 py-2 text-left rounded-lg transition-colors ${
+                      item.isActive
+                        ? 'bg-red-50 border border-red-200'
+                        : 'hover:bg-red-50'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                        item.isActive
+                          ? 'bg-red-600'
+                          : 'bg-red-100'
+                      }`}>
+                        <Icon className={`h-4 w-4 ${
+                          item.isActive
+                            ? 'text-white'
+                            : 'text-red-600'
+                        }`} />
+                      </div>
+                      <div>
+                        <div className={`text-sm font-medium ${
+                          item.isActive ? 'text-red-900' : 'text-gray-900'
+                        }`}>
+                          {item.label}
+                        </div>
+                        <div className="text-xs text-gray-500">{item.description}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </nav>
         </div>
 

@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getUser, hasRole } from '@/lib/auth';
 import { PartyLayout } from '@/components/layouts/PartyLayout';
-import { ArrowLeft, UploadCloud, File, X } from 'lucide-react';
+import { UploadCloud, File, X } from 'lucide-react';
 import { umrahVisaAPI } from '@/lib/api';
 
 interface UmrahVisaBooking {
@@ -168,15 +168,6 @@ export default function AddToExistingBookingPage() {
       subtitle="Add a new group to an existing booking"
     >
       <div className="p-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/party/dashboard')}
-          className="mb-6"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Dashboard
-        </Button>
-
         <Card>
           <CardHeader>
             <CardTitle>Add Group to Existing Booking</CardTitle>
@@ -312,14 +303,6 @@ export default function AddToExistingBookingPage() {
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/party/dashboard')}
-                  disabled={loading}
-                >
-                  Cancel
-                </Button>
                 <Button
                   type="submit"
                   disabled={loading}
