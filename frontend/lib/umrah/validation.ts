@@ -263,7 +263,7 @@ export const validateStep4 = (
   }
   
   // Validate single transport if provided
-  if (hasSingleTransport) {
+  if (hasSingleTransport && data.selectedTransport) {
     if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
       return 'Invalid transport selection. Please select again.';
     }
