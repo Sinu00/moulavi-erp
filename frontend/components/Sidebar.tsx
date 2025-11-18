@@ -105,11 +105,15 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Bus Booking', icon: Award, path: '/dashboard/services/bus-booking' },
   ];
 
-  const umrahVisaItems = [
-    { name: 'Booking', icon: FileText, path: '/dashboard/umrah-visa/bookings' },
+  // Umrah Visa items organized into two sections
+  const umrahVisaCreateItems = [
     { name: 'Create Individual Booking', icon: FileText, path: '/dashboard/umrah-visa/create-individual' },
     { name: 'Create Group Booking', icon: Users, path: '/dashboard/umrah-visa/create-group' },
     { name: 'Add to Existing Booking', icon: Users, path: '/dashboard/umrah-visa/add-to-existing-booking' },
+  ];
+
+  const umrahVisaManagementItems = [
+    { name: 'Booking', icon: FileText, path: '/dashboard/umrah-visa/bookings' },
     { name: 'Assign Group', icon: Users, path: '/dashboard/umrah-visa/assign-group' },
     { name: 'Trip Info', icon: MapPin, path: '/dashboard/umrah-visa/trip-info' },
     { name: 'Voucher', icon: Award, path: '/dashboard/umrah-visa/voucher' },
@@ -223,27 +227,60 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
 
             {/* Umrah Visa Submenu */}
             {(umrahVisaOpen || pathname.startsWith('/dashboard/umrah-visa/')) && !collapsed && (
-              <div className="ml-4 mt-1 space-y-1 border-l-2 border-indigo-200 pl-2 animate-in slide-in-from-top-2 duration-200">
-                {umrahVisaItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.path;
-                  
-                  return (
-                    <button
-                      key={item.name}
-                      onClick={() => router.push(item.path)}
-                      className={cn(
-                        'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
-                        isActive
-                          ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600 shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-2 hover:border-gray-300'
-                      )}
-                    >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
-                      <span>{item.name}</span>
-                    </button>
-                  );
-                })}
+              <div className="ml-4 mt-1 space-y-3 border-l-2 border-indigo-200 pl-2 animate-in slide-in-from-top-2 duration-200">
+                {/* Create Section */}
+                <div className="space-y-1">
+                  <div className="px-3 py-1.5">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Create</span>
+                  </div>
+                  {umrahVisaCreateItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.path;
+                    
+                    return (
+                      <button
+                        key={item.name}
+                        onClick={() => router.push(item.path)}
+                        className={cn(
+                          'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
+                          isActive
+                            ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600 shadow-sm'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-2 hover:border-gray-300'
+                        )}
+                      >
+                        <Icon className="h-4 w-4 flex-shrink-0" />
+                        <span>{item.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Management Section */}
+                <div className="space-y-1">
+                  <div className="px-3 py-1.5">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Management</span>
+                  </div>
+                  {umrahVisaManagementItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = pathname === item.path;
+                    
+                    return (
+                      <button
+                        key={item.name}
+                        onClick={() => router.push(item.path)}
+                        className={cn(
+                          'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
+                          isActive
+                            ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600 shadow-sm'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-2 hover:border-gray-300'
+                        )}
+                      >
+                        <Icon className="h-4 w-4 flex-shrink-0" />
+                        <span>{item.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

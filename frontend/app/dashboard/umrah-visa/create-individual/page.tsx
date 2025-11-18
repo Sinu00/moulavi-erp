@@ -10,7 +10,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getUser, hasRole } from '@/lib/auth';
 import Sidebar from '@/components/Sidebar';
-import { ChevronRight, ChevronLeft, Menu } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Menu, User } from 'lucide-react';
 import { partyAPI } from '@/lib/api';
 
 // Import our new components and hooks
@@ -256,78 +256,101 @@ export default function AdminCreateIndividualUmrahVisaPage() {
 
         {/* Content */}
         <div className="p-4 lg:p-8 pb-24">
-          {/* Party Selection */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Select Party</CardTitle>
-              <CardDescription>
-                Choose the party for which you are creating this booking
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Label htmlFor="partyId">Party *</Label>
-                {loadingParties ? (
-                  <div className="text-sm text-gray-500 py-2">Loading parties...</div>
-                ) : (
-                  <Select
-                    value={selectedPartyId}
-                    onValueChange={(value) => {
-                      setSelectedPartyId(value);
-                      // Reset booking state when party changes
-                      setCurrentStep(1);
-                    }}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a party" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {parties.map((party) => (
-                        <SelectItem key={party.id} value={party.id}>
-                          {party.partyName} ({party.email})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {selectedPartyId && (
-            <div className="w-full">
-              {/* Step Progress */}
-              <StepProgress
-                currentStep={bookingState.currentStep}
-                completedSteps={bookingState.completedSteps}
-                onStepClick={goToStep}
-              />
-
-              {/* Step Content */}
-              <div className="mb-8 mt-6">
-                <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-red-100 to-red-200 flex items-center justify-center">
-                      <span className="text-red-600 font-semibold">{bookingState.currentStep}</span>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Step {bookingState.currentStep}
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        {bookingState.currentStep === 1 && 'Choose your booking type'}
-                        {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
-                        {bookingState.currentStep === 3 && 'Select accommodation type and details'}
-                        {bookingState.currentStep === 4 && 'Select transport vehicle (optional)'}
-                        {bookingState.currentStep === 5 && 'Upload required documents'}
-                      </p>
-                    </div>
+          {!selectedPartyId ? (
+            /* Party Selection Screen - Show first */
+            <div className="max-w-2xl mx-auto mt-12">
+              <Card className="shadow-lg">
+                <CardHeader className="text-center pb-4">
+                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <User className="h-8 w-8 text-white" />
                   </div>
-                  {renderStepContent()}
+                  <CardTitle className="text-2xl">Select Party</CardTitle>
+                  <CardDescription className="text-base mt-2">
+                    Choose the party for which you are creating this Umrah visa booking
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="partyId" className="text-base">Party *</Label>
+                    {loadingParties ? (
+                      <div className="text-sm text-gray-500 py-4 text-center">Loading parties...</div>
+                    ) : (
+                      <Select
+                        value={selectedPartyId}
+                        onValueChange={(value) => {
+                          setSelectedPartyId(value);
+                          // Reset booking state when party changes
+                          setCurrentStep(1);
+                        }}
+                        required
+                      >
+                        <SelectTrigger className="h-12 text-base">
+                          <SelectValue placeholder="Select a party" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {parties.map((party) => (
+                            <SelectItem key={party.id} value={party.id}>
+                              {party.partyName} ({party.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  {selectedPartyId && (
+                    <div className="pt-4 flex justify-end">
+                      <Button
+                        onClick={() => {
+                          if (selectedPartyId) {
+                            loadPartyData(selectedPartyId);
+                          }
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        Continue to Booking
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            /* Booking Flow - Show after party selection */
+            <>
+              <div className="w-full">
+                {/* Step Progress */}
+                <StepProgress
+                  currentStep={bookingState.currentStep}
+                  completedSteps={bookingState.completedSteps}
+                  onStepClick={goToStep}
+                />
+
+                {/* Step Content */}
+                <div className="mb-8 mt-6">
+                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                    <div className="flex items-center space-x-3 mb-6">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-indigo-100 to-indigo-200 flex items-center justify-center">
+                        <span className="text-indigo-600 font-semibold">{bookingState.currentStep}</span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Step {bookingState.currentStep}
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          {bookingState.currentStep === 1 && 'Choose your booking type'}
+                          {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
+                          {bookingState.currentStep === 3 && 'Select accommodation type and details'}
+                          {bookingState.currentStep === 4 && 'Select transport vehicle (optional)'}
+                          {bookingState.currentStep === 5 && 'Upload required documents'}
+                        </p>
+                      </div>
+                    </div>
+                    {renderStepContent()}
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
@@ -364,7 +387,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                   type="button"
                   onClick={nextStep}
                   disabled={isLoading || !selectedPartyId}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
                   {isLoading ? 'Processing...' : bookingState.currentStep < 5 ? 'Next' : 'Submit Application'}
                   {bookingState.currentStep < 5 && <ChevronRight className="h-4 w-4 ml-2" />}
