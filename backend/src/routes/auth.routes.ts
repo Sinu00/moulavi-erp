@@ -4,7 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { prisma } from '../config/database';
-import { comparePassword } from '../utils/password';
+import { comparePassword, hashPassword } from '../utils/password';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -159,6 +159,54 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthRequest, res: Respo
   
   res.json({ user });
 }));
+
+// Change password endpoint
+router.post(
+  '/change-password',
+  authenticate,
+  [
+    body('currentPassword').isString().notEmpty().withMessage('Current password is required'),
+    body('newPassword').isString().isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+  ],
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user!.id;
+
+    // Get user with password
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const isPasswordValid = await comparePassword(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ message: 'Password changed successfully' });
+  })
+);
 
 // Test email endpoint (for debugging)
 router.post(

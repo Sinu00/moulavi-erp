@@ -11,7 +11,8 @@ import {
   LogOut, 
   FileText, 
   Plane, 
-  Users 
+  Users,
+  Settings
 } from 'lucide-react';
 
 interface PartyLayoutProps {
@@ -212,7 +213,7 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 space-y-2">
           <div className="flex items-center space-x-3 mb-4">
             <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
               <User className="h-4 w-4 text-gray-600" />
@@ -222,6 +223,17 @@ export const PartyLayout: React.FC<PartyLayoutProps> = ({
               <div className="text-xs text-gray-500">{user.email}</div>
             </div>
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => router.push('/party/settings')}
+            className={`w-full border-gray-300 text-gray-700 hover:bg-red-50 hover:border-red-200 hover:text-red-700 ${
+              pathname === '/party/settings' ? 'bg-red-50 border-red-200 text-red-700' : ''
+            }`}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 

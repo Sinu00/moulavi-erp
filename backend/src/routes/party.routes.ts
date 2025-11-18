@@ -319,6 +319,66 @@ router.get(
   })
 );
 
+// Update own party (for party role users)
+router.put(
+  '/my-party',
+  authenticate,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    // Only party role can access this endpoint
+    if (req.user!.role !== 'party') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Get the party associated with this user
+    const existingParty = await prisma.party.findUnique({
+      where: { userId: req.user!.id },
+      select: { id: true }
+    });
+    
+    if (!existingParty) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    
+    const {
+      party_name,
+      contact_number,
+      whatsapp_number,
+      address,
+      gst_number,
+      pan_number,
+      aadhaar_number,
+      email_notification,
+      sms_notification,
+      marketing_notification,
+    } = req.body;
+    
+    const updateData: any = {};
+    
+    // Party users can only update these fields (not email, customer type, currency, etc.)
+    if (party_name !== undefined) updateData.partyName = party_name;
+    if (contact_number !== undefined) updateData.contactNumber = contact_number;
+    if (whatsapp_number !== undefined) updateData.whatsappNumber = whatsapp_number;
+    if (address !== undefined) updateData.address = address;
+    if (gst_number !== undefined) updateData.gstNumber = gst_number;
+    if (pan_number !== undefined) updateData.panNumber = pan_number;
+    if (aadhaar_number !== undefined) updateData.aadhaarNumber = aadhaar_number;
+    if (email_notification !== undefined) updateData.emailNotification = email_notification;
+    if (sms_notification !== undefined) updateData.smsNotification = sms_notification;
+    if (marketing_notification !== undefined) updateData.marketingNotification = marketing_notification;
+    
+    const party = await prisma.party.update({
+      where: { id: existingParty.id },
+      data: updateData,
+      include: {
+        accountCurrency: true,
+        contacts: true,
+      }
+    });
+    
+    res.json({ party });
+  })
+);
+
 // Get party by ID
 router.get(
   '/:id',
