@@ -4,6 +4,7 @@ export interface Step1Data {
   bookingMode: 'group_number' | 'travel_details';
   groupNumber?: string;
   groupName?: string;
+  passengerCount?: number; // Required when bookingMode is 'group_number'
   umrahVisaProviderId?: string;
 }
 

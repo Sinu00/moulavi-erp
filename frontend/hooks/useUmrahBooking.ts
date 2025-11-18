@@ -84,15 +84,21 @@ export const useUmrahBooking = () => {
     setBookingState(prev => ({ ...prev, currentStep: step }));
   }, []);
 
-  const loadPartyData = useCallback(async () => {
+  const loadPartyData = useCallback(async (providedPartyId?: string) => {
     try {
-      const response = await partyAPI.getMyParty();
-      const userParty = response.data.party;
-      
-      if (userParty) {
-        setPartyId(userParty.id);
+      if (providedPartyId) {
+        // Use provided partyId (for admin/staff)
+        setPartyId(providedPartyId);
       } else {
-        toast.error('Party information not found');
+        // Get party from authenticated user (for party role)
+        const response = await partyAPI.getMyParty();
+        const userParty = response.data.party;
+        
+        if (userParty) {
+          setPartyId(userParty.id);
+        } else {
+          toast.error('Party information not found');
+        }
       }
     } catch (error: any) {
       console.error('Error loading party data:', error);

@@ -34,12 +34,14 @@ const completeGroupBookingSchema = z.object({
 // POST /api/umrah-visa/group/step1 - Group Step 1: Validation Only (No DB writes)
 router.post('/group/step1', authenticate, async (req, res) => {
   try {
-    const { partyId } = req.body;
-    const validatedData = groupStep1Schema.parse(req.body);
-
+    const { partyId, ...step1Data } = req.body;
+    
     if (!partyId) {
       return res.status(400).json({ error: 'Party ID is required' });
     }
+
+    // Validate only step1 data (without partyId)
+    const validatedData = groupStep1Schema.parse(step1Data);
 
     // Only validate - no database writes
     // Data will be saved only when all steps are completed in create-group-booking endpoint
@@ -675,24 +677,14 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 router.post('/group/add-to-existing-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
   try {
     const user = (req as any).user;
+    const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';
     
-    // Get party ID from user
-    const userParty = await prisma.party.findUnique({
-      where: { userId: user.id },
-      select: { id: true },
-    });
-
-    if (!userParty) {
-      return res.status(404).json({ error: 'Party not found for this user' });
-    }
-
-    const partyId = userParty.id;
-
     // Parse request body (can be JSON or form-data)
     let existingBookingId: string;
     let newGroupNumber: string;
     let newGroupName: string;
     let passengerCount: number;
+    let providedPartyId: string | undefined;
 
     if (req.body && typeof req.body === 'string') {
       // JSON mode
@@ -701,12 +693,59 @@ router.post('/group/add-to-existing-booking', authenticate, upload.single('panCa
       newGroupNumber = body.newGroupNumber;
       newGroupName = body.newGroupName;
       passengerCount = parseInt(body.passengerCount);
+      providedPartyId = body.partyId;
     } else {
       // Form-data mode
       existingBookingId = req.body.existingBookingId;
       newGroupNumber = req.body.newGroupNumber;
       newGroupName = req.body.newGroupName;
       passengerCount = parseInt(req.body.passengerCount);
+      providedPartyId = req.body.partyId;
+    }
+
+    // Determine party ID: admin/staff can provide it, party users must use their own
+    let partyId: string;
+    
+    if (isAdminOrStaff && providedPartyId) {
+      // Admin/staff provided partyId - validate it exists
+      const party = await prisma.party.findUnique({
+        where: { id: providedPartyId },
+        select: { id: true },
+      });
+      
+      if (!party) {
+        return res.status(404).json({ error: 'Party not found' });
+      }
+      
+      partyId = providedPartyId;
+    } else if (user.role === 'party') {
+      // Party users must use their own party ID
+      if (providedPartyId) {
+        return res.status(403).json({ error: 'Party users cannot specify partyId' });
+      }
+      
+      const userParty = await prisma.party.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+
+      if (!userParty) {
+        return res.status(404).json({ error: 'Party not found for this user' });
+      }
+
+      partyId = userParty.id;
+    } else {
+      // Admin/staff but no partyId provided - try to get from user's party (if exists)
+      const userParty = await prisma.party.findUnique({
+        where: { userId: user.id },
+        select: { id: true },
+      });
+
+      if (!userParty) {
+        return res.status(400).json({ error: 'Party ID is required for admin/staff users' });
+      }
+
+      partyId = userParty.id;
     }
 
     // Validate required fields

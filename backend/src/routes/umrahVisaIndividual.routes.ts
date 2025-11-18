@@ -19,14 +19,10 @@ const step1Schema = z.object({
   bookingMode: z.enum(['group_number', 'travel_details']),
   groupNumber: z.string().optional(),
   groupName: z.string().optional(),
-  passengerCount: z.number().min(1).max(50).optional(),
   umrahVisaProviderId: z.string().uuid().optional(),
 }).refine((data) => {
   if (data.bookingMode === 'group_number') {
     if (!data.groupNumber || !data.groupName) {
-      return false;
-    }
-    if (!data.passengerCount || data.passengerCount < 1) {
       return false;
     }
     if (!data.umrahVisaProviderId) {
@@ -35,7 +31,7 @@ const step1Schema = z.object({
   }
   return true;
 }, {
-  message: "Group number, group name, passenger count, and umrah visa provider are required when booking mode is 'group_number'",
+  message: "Group number, group name, and umrah visa provider are required when booking mode is 'group_number'",
   path: ["groupNumber"]
 });
 
@@ -58,12 +54,14 @@ const completeBookingSchema = z.object({
 // POST /api/umrah-visa/step1 - Step 1: Validation Only (No DB writes)
 router.post('/step1', authenticate, async (req, res) => {
   try {
-    const { partyId } = req.body;
-    const validatedData = step1Schema.parse(req.body);
-
+    const { partyId, ...step1Data } = req.body;
+    
     if (!partyId) {
       return res.status(400).json({ error: 'Party ID is required' });
     }
+
+    // Validate only step1 data (without partyId)
+    const validatedData = step1Schema.parse(step1Data);
 
     // Only validate - no database writes
     // Data will be saved only when all steps are completed in create-booking endpoint
@@ -333,8 +331,10 @@ router.post('/create-booking', authenticate, async (req, res) => {
         });
       }
 
-      // 6.5. Create UmrahMovementDetail entries (only if transport is selected - hasTransportation = true)
-      if (hasTransportation && step3Data.accommodationType === 'hotel' && step3Data.hotelBookings && step3Data.hotelBookings.length > 0) {
+      // 6.5. Create UmrahMovementDetail entries (automatically from hotel bookings)
+      // Movement details should be created for hotel bookings regardless of transport selection
+      // They represent the route: airport → hotel 1 → hotel 2 → ... → airport
+      if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings && step3Data.hotelBookings.length > 0) {
         const movementDetailsToCreate: Array<{
           bookingId: string;
           travelDateTime: Date;

@@ -300,7 +300,17 @@ router.post('/:bookingId/mark-ready-for-voucher', authenticate, async (req, res)
       });
     }
 
-    // Update status to voucher
+    // Determine next status based on hasTransportation
+    // If hasTransportation = true → voucher (needs transport voucher)
+    // If hasTransportation = false → bill (no transport, skip voucher)
+    let nextStatus: 'voucher' | 'bill';
+    if (booking.hasTransportation) {
+      nextStatus = 'voucher';
+    } else {
+      nextStatus = 'bill';
+    }
+
+    // Update status
     await prisma.$transaction(async (tx) => {
       await tx.umrahVisaBooking.update({
         where: { id: bookingId },
@@ -310,14 +320,19 @@ router.post('/:bookingId/mark-ready-for-voucher', authenticate, async (req, res)
       });
 
       // Sync status separately (handles booking status + history)
-      await syncBookingStatusInTx(bookingId, 'voucher', user.id, 'Marked as ready for voucher generation', tx);
+      const statusMessage = nextStatus === 'voucher' 
+        ? 'Marked as ready for voucher generation'
+        : 'Marked as ready for bill generation (no transportation)';
+      await syncBookingStatusInTx(bookingId, nextStatus, user.id, statusMessage, tx);
     });
     
     // Re-fetch updated booking
     const finalBooking = await prisma.umrahVisaBooking.findUnique({ where: { id: bookingId } });
 
     res.json({
-      message: 'Booking marked as ready for voucher generation',
+      message: nextStatus === 'voucher' 
+        ? 'Booking marked as ready for voucher generation'
+        : 'Booking marked as ready for bill generation (no transportation required)',
       data: {
         booking: finalBooking,
       },
