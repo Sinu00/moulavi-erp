@@ -355,7 +355,8 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   const fulltripOptions = allOptions.filter(opt => opt.route.routeType === 'fulltrip');
   const nonFulltripOptions = allOptions.filter(opt => opt.route.routeType !== 'fulltrip');
 
-  // For fulltrip routes: show all vehicles that can be combined
+  // Show both fulltrip and non-fulltrip options when available
+  // Prioritize fulltrip but also show simpler options
   if (hasFulltripRoute && fulltripOptions.length > 0) {
     const passengerCount = step2Data.passengerCount || 0;
     const capacityMet = totalCapacity >= passengerCount;
@@ -398,10 +399,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
           <div className="flex items-start space-x-3">
             <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900 mb-1">Multiple Vehicle Selection Available</p>
+              <p className="text-sm font-medium text-gray-900 mb-1">Full Trip Route - Multiple Vehicle Selection</p>
               <p className="text-sm text-gray-600">
                 For Full Trip routes, you can select multiple vehicles to accommodate your group. 
                 For example, you can select 2 × 30-PAX vehicles for 50 passengers.
+                {nonFulltripOptions.length > 0 && (
+                  <span className="block mt-1 font-medium">💡 Tip: Simpler single-vehicle options are available below if you prefer.</span>
+                )}
               </p>
             </div>
           </div>
@@ -480,11 +484,50 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
             })}
           </div>
         </div>
+
+        {/* Show non-fulltrip options as alternative if available */}
+        {nonFulltripOptions.length > 0 && (
+          <div className="mt-8 pt-8 border-t border-gray-200">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
+                  <Truck className="h-4 w-4 text-gray-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Alternative Options</h3>
+                  <p className="text-xs text-gray-500">Simpler single-vehicle options (if you prefer)</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {nonFulltripOptions.length} {nonFulltripOptions.length === 1 ? 'option' : 'options'}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              {nonFulltripOptions.map((transport) => (
+                <TransportOptionCard
+                  key={transport.id}
+                  transport={transport}
+                  isSelected={selectedTransportId === transport.id}
+                  isSuggested={exactMatches.some(m => m.id === transport.id)}
+                  passengerCount={step2Data.passengerCount || 0}
+                  onSelect={() => {
+                    // Clear fulltrip selection when selecting non-fulltrip
+                    setSelectedVehicles(new Map());
+                    handleSelectTransport(transport);
+                  }}
+                  getRouteString={getRouteString}
+                  getRouteTypeLabel={getRouteTypeLabel}
+                  disabled={disabled}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
-  // Original logic for non-fulltrip routes
+  // Original logic for non-fulltrip routes only
   if (allOptions.length === 0) {
     // Debug: Check if we got any routes from API (before filtering)
     const hasRoutes = rawRouteCounts.exact > 0 || rawRouteCounts.other > 0;

@@ -331,6 +331,7 @@ export const useGroupUmrahBooking = () => {
       formData.append('step3', JSON.stringify(step3DataWithHotels));
       formData.append('step4', JSON.stringify({
         selectedTransport: bookingState.step4Data.selectedTransport,
+        selectedTransports: bookingState.step4Data.selectedTransports,
         // passengerCount removed - backend reads from step2Data
         // No passengers array needed - backend will create from passengerCount
       }));

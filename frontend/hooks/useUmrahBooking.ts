@@ -175,8 +175,9 @@ export const useUmrahBooking = () => {
           step1: bookingState.step1Data,
           step2: bookingState.step2Data,
           step3: bookingState.step3Data,
-          step4: bookingState.step4Data.selectedTransport ? {
-            selectedTransport: bookingState.step4Data.selectedTransport
+          step4: bookingState.step4Data.selectedTransport || bookingState.step4Data.selectedTransports ? {
+            selectedTransport: bookingState.step4Data.selectedTransport,
+            selectedTransports: bookingState.step4Data.selectedTransports,
           } : undefined,
           step5: {
             passengerCount: bookingState.step5Data.passengers.length,

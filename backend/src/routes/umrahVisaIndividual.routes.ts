@@ -218,7 +218,10 @@ router.post('/create-booking', authenticate, async (req, res) => {
     }
 
     // Calculate hasTransportation
-    const hasTransportation = !!(step4Data?.selectedTransport?.transportId || (step2Data.transportBookings && step2Data.transportBookings.length > 0));
+    // Check for both single transport selection and multiple transport selection (for fulltrip routes)
+    const hasTransportation = !!(step4Data?.selectedTransport?.transportId || 
+      (step4Data?.selectedTransports && step4Data.selectedTransports.length > 0) ||
+      (step2Data.transportBookings && step2Data.transportBookings.length > 0));
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -329,6 +332,21 @@ router.post('/create-booking', authenticate, async (req, res) => {
             travelDateTime: null, // Can be set later if needed
           },
         });
+      } else if (step4Data?.selectedTransports && step4Data.selectedTransports.length > 0) {
+        // Handle multiple transport selections (for fulltrip routes)
+        // Create transport bookings for each selected transport with quantity
+        for (const transport of step4Data.selectedTransports) {
+          // Create one booking per quantity
+          for (let i = 0; i < (transport.quantity || 1); i++) {
+            await tx.umrahTransportBooking.create({
+              data: {
+                bookingId: booking.id,
+                transportMasterId: transport.transportId,
+                travelDateTime: null, // Can be set later if needed
+              },
+            });
+          }
+        }
       }
 
       // 6.5. Create UmrahMovementDetail entries (automatically from hotel bookings)

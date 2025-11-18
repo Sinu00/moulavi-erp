@@ -203,7 +203,9 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
     }));
 
     // Calculate hasTransportation
-    const hasTransportation = step4Data.selectedTransport !== undefined && step4Data.selectedTransport !== null;
+    // Check for both single transport selection and multiple transport selection (for fulltrip routes)
+    const hasTransportation = !!(step4Data.selectedTransport || 
+      (step4Data.selectedTransports && step4Data.selectedTransports.length > 0));
 
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -345,7 +347,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         );
       }
 
-      // 6. Create UmrahTransportBooking (from step4 selectedTransport)
+      // 6. Create UmrahTransportBooking (from step4 selectedTransport or selectedTransports)
       if (step4Data.selectedTransport) {
         const { transportId } = step4Data.selectedTransport;
         
@@ -356,12 +358,32 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
         // Store transportMasterId and travelDateTime - all other data (route, vehicle, price) comes from TransportMaster
         await tx.umrahTransportBooking.create({
+          data: {
+            bookingId: booking.id,
+            transportMasterId: transportId, // This is the TransportMaster ID
+            travelDateTime,
+          },
+        });
+      } else if (step4Data.selectedTransports && step4Data.selectedTransports.length > 0) {
+        // Handle multiple transport selections (for fulltrip routes)
+        // Combine arrival date and time for travelDateTime
+        const travelDateTime = step2Data.arrivalDate && step2Data.arrivalTime
+          ? combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime)
+              : undefined;
+
+        // Create transport bookings for each selected transport with quantity
+        for (const transport of step4Data.selectedTransports) {
+          // Create one booking per quantity
+          for (let i = 0; i < (transport.quantity || 1); i++) {
+            await tx.umrahTransportBooking.create({
               data: {
                 bookingId: booking.id,
-            transportMasterId: transportId, // This is the TransportMaster ID
+                transportMasterId: transport.transportId, // This is the TransportMaster ID
                 travelDateTime,
               },
             });
+          }
+        }
       }
 
       // 6.5. Create UmrahMovementDetail entries from step3Data (transportSegments and ziyaraths)
