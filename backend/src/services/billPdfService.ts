@@ -1,0 +1,505 @@
+import puppeteer from 'puppeteer';
+
+export interface BillPdfData {
+  partyName: string;
+  groupNumber: string;
+  groupName: string;
+  passengerCount: number;
+  passengers: Array<{
+    name: string;
+    visaNumber: string;
+  }>;
+  amount: number; // Total amount (price per passenger * passenger count)
+}
+
+// Helper function to find Chrome executable (same as voucher PDF)
+function findChromeExecutable(): string | undefined {
+  const possiblePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.CHROME_PATH,
+  ];
+
+  for (const path of possiblePaths) {
+    if (path) {
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(path)) {
+          return path;
+        }
+      } catch {
+        // Continue to next path
+      }
+    }
+  }
+
+  return undefined; // Will use bundled Chromium
+}
+
+// Generate HTML template for bill
+function generateBillHTML(data: BillPdfData): string {
+  const primaryColor = '#dc2626';
+  const currentDate = new Date().toLocaleDateString('en-IN', { 
+    day: '2-digit', 
+    month: 'short', 
+    year: 'numeric' 
+  });
+  const timestamp = Date.now().toString().slice(-8);
+  const billNumber = `BILL-${data.groupNumber}-${timestamp}`;
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice - ${billNumber}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #ffffff;
+      color: #1f2937;
+      line-height: 1.6;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .invoice-container {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 40px;
+    }
+
+    /* Header */
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 40px;
+      padding-bottom: 30px;
+      border-bottom: 3px solid ${primaryColor};
+    }
+
+    .company-info {
+      flex: 1;
+    }
+
+    .company-name {
+      font-size: 28px;
+      font-weight: 700;
+      color: ${primaryColor};
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .company-details {
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.8;
+    }
+
+    .invoice-title {
+      text-align: right;
+    }
+
+    .invoice-title h1 {
+      font-size: 36px;
+      font-weight: 700;
+      color: ${primaryColor};
+      margin-bottom: 10px;
+      letter-spacing: -1px;
+    }
+
+    .invoice-meta {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: right;
+      line-height: 1.8;
+    }
+
+    .invoice-meta strong {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    /* Bill To Section */
+    .bill-to-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+      padding: 25px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .bill-to-info {
+      font-size: 13px;
+      color: #1f2937;
+      line-height: 1.8;
+    }
+
+    .bill-to-info strong {
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .group-details {
+      font-size: 13px;
+      color: #1f2937;
+      line-height: 1.8;
+    }
+
+    .group-details .detail-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .group-details .detail-label {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .group-details .detail-value {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    /* Items Table */
+    .items-section {
+      margin-bottom: 30px;
+    }
+
+    .section-heading {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1f2937;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+
+    .items-table thead {
+      background: ${primaryColor};
+      color: #ffffff;
+    }
+
+    .items-table th {
+      padding: 12px 15px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .items-table th,
+    .items-table td {
+      text-align: left;
+    }
+
+    .items-table tbody tr {
+      border-bottom: 1px solid #e5e7eb;
+      page-break-inside: avoid;
+    }
+
+    .items-table tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    .items-table td {
+      padding: 6px 15px;
+      font-size: 11px;
+      color: #1f2937;
+    }
+
+    .items-table .item-name {
+      font-weight: 500;
+      color: #111827;
+    }
+
+    /* Summary Section */
+    .summary-section {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 40px;
+      page-break-inside: avoid;
+    }
+
+    .summary-box {
+      width: 300px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
+      page-break-inside: avoid;
+    }
+
+    .summary-row:last-child {
+      border-bottom: none;
+    }
+
+    .summary-label {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .summary-value {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    .summary-row.total {
+      background: ${primaryColor};
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      padding: 18px 20px;
+    }
+
+    .summary-row.total .summary-label,
+    .summary-row.total .summary-value {
+      color: #ffffff;
+    }
+
+    /* Footer */
+    .invoice-footer {
+      margin-top: 50px;
+      padding-top: 30px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+    }
+
+    .footer-note {
+      font-size: 10px;
+      color: #9ca3af;
+      line-height: 1.8;
+      margin-bottom: 15px;
+    }
+
+    .footer-terms {
+      font-size: 9px;
+      color: #6b7280;
+      line-height: 1.6;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .footer-terms strong {
+      color: #1f2937;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-container">
+    <!-- Header -->
+    <div class="invoice-header">
+      <div class="company-info">
+        <div class="company-name">Moulavi ERP</div>
+        <div class="company-details">
+          Umrah Visa Services<br>
+          Email: info@moulavi.in<br>
+          Phone: +91-XXXXXXXXXX
+        </div>
+      </div>
+      <div class="invoice-title">
+        <h1>INVOICE</h1>
+        <div class="invoice-meta">
+          <div><strong>Invoice No:</strong> ${billNumber}</div>
+          <div><strong>Date:</strong> ${currentDate}</div>
+          <div><strong>Group:</strong> ${data.groupNumber}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bill To Section -->
+    <div class="bill-to-section">
+      <div>
+        <div class="section-label">Bill To</div>
+        <div class="bill-to-info">
+          <strong>${data.partyName}</strong>
+        </div>
+      </div>
+      <div>
+        <div class="section-label">Group Details</div>
+        <div class="group-details">
+          <div class="detail-row">
+            <span class="detail-label">Group Number:</span>
+            <span class="detail-value">${data.groupNumber}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Group Name:</span>
+            <span class="detail-value">${data.groupName || 'N/A'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Total Passengers:</span>
+            <span class="detail-value">${data.passengerCount}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Items Table -->
+    <div class="items-section">
+      <div class="section-heading">Passenger Details</div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>Passenger Name</th>
+            <th style="width: 150px;">Visa Number</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.passengers.map((passenger, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td>
+                <div class="item-name">${passenger.name || 'N/A'}</div>
+              </td>
+              <td>${passenger.visaNumber || 'N/A'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Summary Section -->
+    <div class="summary-section">
+      <div class="summary-box">
+        <div class="summary-row">
+          <span class="summary-label">Subtotal:</span>
+          <span class="summary-value">₹${data.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
+        <div class="summary-row total">
+          <span class="summary-label">Total Amount:</span>
+          <span class="summary-value">₹${data.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="invoice-footer">
+      <div class="footer-note">
+        This is a computer-generated invoice. No signature required.
+      </div>
+      <div class="footer-terms">
+        <strong>Payment Terms:</strong> Payment is due within the agreed terms. For any queries regarding this invoice, please contact us at info@moulavi.in
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+// Generate PDF from HTML using Puppeteer
+export async function generateBillPDF(data: BillPdfData): Promise<Buffer> {
+  let browser;
+  try {
+    // Try to use system Chrome first (more reliable on Windows)
+    const chromePath = findChromeExecutable();
+    
+    const launchOptions: any = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--single-process',
+      ],
+      timeout: 60000,
+    };
+
+    // Use system Chrome/Chromium if available, otherwise use bundled Chromium
+    if (chromePath) {
+      console.log('Using system browser:', chromePath);
+      launchOptions.executablePath = chromePath;
+    } else {
+      console.log('Using bundled Chromium (default)');
+    }
+
+    // Launch browser
+    browser = await puppeteer.launch(launchOptions);
+
+    const page = await browser.newPage();
+
+    // Generate HTML
+    const html = generateBillHTML(data);
+
+    // Set content and wait for fonts/styles to load
+    await page.setContent(html, {
+      waitUntil: 'networkidle0',
+    });
+
+    // Generate PDF
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '0mm',
+        right: '0mm',
+        bottom: '0mm',
+        left: '0mm',
+      },
+      preferCSSPageSize: true,
+    });
+
+    return Buffer.from(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating bill PDF:', error);
+    throw new Error('Failed to generate bill PDF');
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+

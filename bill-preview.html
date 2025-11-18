@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bill Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f3f4f6;
+      color: #1f2937;
+      line-height: 1.6;
+      padding: 20px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .preview-container {
+      max-width: 210mm;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 40px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .preview-header {
+      background: #dc2626;
+      color: white;
+      padding: 15px 20px;
+      margin: -40px -40px 30px -40px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .invoice-container {
+      background: #ffffff;
+    }
+
+    /* Header */
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 40px;
+      padding-bottom: 30px;
+      border-bottom: 3px solid #dc2626;
+    }
+
+    .company-info {
+      flex: 1;
+    }
+
+    .company-name {
+      font-size: 28px;
+      font-weight: 700;
+      color: #dc2626;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .company-details {
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.8;
+    }
+
+    .invoice-title {
+      text-align: right;
+    }
+
+    .invoice-title h1 {
+      font-size: 36px;
+      font-weight: 700;
+      color: #dc2626;
+      margin-bottom: 10px;
+      letter-spacing: -1px;
+    }
+
+    .invoice-meta {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: right;
+      line-height: 1.8;
+    }
+
+    .invoice-meta strong {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    /* Bill To Section */
+    .bill-to-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+      padding: 25px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .bill-to-info {
+      font-size: 13px;
+      color: #1f2937;
+      line-height: 1.8;
+    }
+
+    .bill-to-info strong {
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .group-details {
+      font-size: 13px;
+      color: #1f2937;
+      line-height: 1.8;
+    }
+
+    .group-details .detail-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .group-details .detail-label {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .group-details .detail-value {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    /* Items Table */
+    .items-section {
+      margin-bottom: 30px;
+    }
+
+    .section-heading {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1f2937;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+
+    .items-table thead {
+      background: #dc2626;
+      color: #ffffff;
+    }
+
+    .items-table th {
+      padding: 12px 15px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .items-table th,
+    .items-table td {
+      text-align: left;
+    }
+
+    .items-table tbody tr {
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .items-table tbody tr:hover {
+      background: #f9fafb;
+    }
+
+    .items-table tbody tr {
+      page-break-inside: avoid;
+    }
+
+    .items-table td {
+      padding: 6px 15px;
+      font-size: 11px;
+      color: #1f2937;
+    }
+
+    .items-table .item-name {
+      font-weight: 500;
+      color: #111827;
+    }
+
+    /* Summary Section */
+    .summary-section {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 40px;
+      page-break-inside: avoid;
+    }
+
+    .summary-box {
+      width: 300px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
+      page-break-inside: avoid;
+    }
+
+    .summary-row:last-child {
+      border-bottom: none;
+    }
+
+    .summary-label {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .summary-value {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    .summary-row.total {
+      background: #dc2626;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      padding: 18px 20px;
+    }
+
+    .summary-row.total .summary-label,
+    .summary-row.total .summary-value {
+      color: #ffffff;
+    }
+
+    /* Footer */
+    .invoice-footer {
+      margin-top: 50px;
+      padding-top: 30px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+    }
+
+    .footer-note {
+      font-size: 10px;
+      color: #9ca3af;
+      line-height: 1.8;
+      margin-bottom: 15px;
+    }
+
+    .footer-terms {
+      font-size: 9px;
+      color: #6b7280;
+      line-height: 1.6;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .footer-terms strong {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .preview-container {
+        box-shadow: none;
+      }
+      .preview-header {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-container">
+    <div class="preview-header">
+      📄 Bill Preview - This is how your bill will look. Use browser print (Ctrl+P) to see PDF view.
+    </div>
+    
+    <div class="invoice-container">
+      <!-- Header -->
+      <div class="invoice-header">
+        <div class="company-info">
+          <div class="company-name">Moulavi ERP</div>
+          <div class="company-details">
+            Umrah Visa Services<br>
+            Email: info@moulavi.in<br>
+            Phone: +91-XXXXXXXXXX
+          </div>
+        </div>
+        <div class="invoice-title">
+          <h1>INVOICE</h1>
+          <div class="invoice-meta">
+            <div><strong>Invoice No:</strong> BILL-12345-789012</div>
+            <div><strong>Date:</strong> 15 Dec 2024</div>
+            <div><strong>Group:</strong> 12345</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bill To Section -->
+      <div class="bill-to-section">
+        <div>
+          <div class="section-label">Bill To</div>
+          <div class="bill-to-info">
+            <strong>ABC Travel Agency</strong>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">Group Details</div>
+          <div class="group-details">
+            <div class="detail-row">
+              <span class="detail-label">Group Number:</span>
+              <span class="detail-value">12345</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Group Name:</span>
+              <span class="detail-value">Umrah Group December 2024</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Total Passengers:</span>
+              <span class="detail-value">5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Items Table -->
+      <div class="items-section">
+        <div class="section-heading">Passenger Details</div>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">#</th>
+              <th>Passenger Name</th>
+              <th style="width: 150px;">Visa Number</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>
+                <div class="item-name">Ahmed Mohammed</div>
+              </td>
+              <td>VISA123456</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>
+                <div class="item-name">Fatima Ali</div>
+              </td>
+              <td>VISA123457</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>
+                <div class="item-name">Hassan Ibrahim</div>
+              </td>
+              <td>VISA123458</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>
+                <div class="item-name">Aisha Khan</div>
+              </td>
+              <td>VISA123459</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>
+                <div class="item-name">Omar Abdullah</div>
+              </td>
+              <td>VISA123460</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Summary Section -->
+      <div class="summary-section">
+        <div class="summary-box">
+          <div class="summary-row">
+            <span class="summary-label">Subtotal:</span>
+            <span class="summary-value">₹75,000.00</span>
+          </div>
+          <div class="summary-row total">
+            <span class="summary-label">Total Amount:</span>
+            <span class="summary-value">₹75,000.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="invoice-footer">
+        <div class="footer-note">
+          This is a computer-generated invoice. No signature required.
+        </div>
+        <div class="footer-terms">
+          <strong>Payment Terms:</strong> Payment is due within the agreed terms. For any queries regarding this invoice, please contact us at info@moulavi.in
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+

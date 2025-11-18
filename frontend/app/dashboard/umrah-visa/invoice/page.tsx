@@ -52,6 +52,7 @@ export default function InvoicePage() {
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
   const [fetchResults, setFetchResults] = useState<any>(null);
   const [showResultsDialog, setShowResultsDialog] = useState(false);
+  const [isGeneratingBills, setIsGeneratingBills] = useState(false);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -138,6 +139,81 @@ export default function InvoicePage() {
       setSelectedBooking(null);
     } catch (error: any) {
       toast.error(error.message);
+    }
+  };
+
+  const handleGenerateBillsForReady = async () => {
+    if (!fetchResults || !fetchResults.results) {
+      toast.error('No results available');
+      return;
+    }
+
+    // Filter ready groups
+    const readyGroups = fetchResults.results.filter((result: any) => result.isReady && result.bookingId);
+    
+    if (readyGroups.length === 0) {
+      toast.warning('No ready groups to generate bills for');
+      return;
+    }
+
+    try {
+      setIsGeneratingBills(true);
+      const bookingIds = readyGroups.map((group: any) => group.bookingId);
+      
+      const response = await umrahVisaAPI.generateBills(bookingIds);
+      const data = response.data;
+
+      // Download PDFs for successful bills
+      data.results.forEach((result: any) => {
+        if (result.success && result.pdfBase64 && result.fileName) {
+          try {
+            const byteCharacters = atob(result.pdfBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = result.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+          } catch (downloadError) {
+            console.error(`Failed to download PDF for ${result.groupNumber}:`, downloadError);
+          }
+        }
+      });
+
+      // Show summary
+      const successCount = data.summary.success;
+      const errorCount = data.summary.errors;
+      
+      if (errorCount > 0) {
+        const errorMessages = data.results
+          .filter((r: any) => !r.success)
+          .map((r: any) => `${r.groupNumber}: ${r.error}`)
+          .join('\n');
+        
+        toast.error(
+          `Generated ${successCount} bills successfully, ${errorCount} failed. Check console for details.`,
+          { duration: 5000 }
+        );
+        console.error('Bill generation errors:', errorMessages);
+      } else {
+        toast.success(`Successfully generated ${successCount} bills and sent emails`);
+      }
+
+      // Refresh bookings after generation
+      await fetchBookings();
+    } catch (error: any) {
+      console.error('Error generating bills:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to generate bills');
+    } finally {
+      setIsGeneratingBills(false);
     }
   };
 
@@ -366,7 +442,28 @@ export default function InvoicePage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex items-center justify-between">
+            <div>
+              {fetchResults && fetchResults.results && fetchResults.results.filter((r: any) => r.isReady).length > 0 && (
+                <Button
+                  onClick={handleGenerateBillsForReady}
+                  disabled={isGeneratingBills}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {isGeneratingBills ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating Bills...
+                    </>
+                  ) : (
+                    <>
+                      <Receipt className="h-4 w-4 mr-2" />
+                      Generate Bill for All Ready ({fetchResults.results.filter((r: any) => r.isReady).length})
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
             <Button onClick={() => setShowResultsDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>

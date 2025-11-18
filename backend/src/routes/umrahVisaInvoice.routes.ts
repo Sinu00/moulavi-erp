@@ -3,6 +3,8 @@ import { authenticate } from '../middleware/auth';
 import { prisma } from './umrahVisa/shared';
 import { fetchSheetData } from '../config/googleSheets';
 import { parseDateDDMMYYYY } from '../utils/dateParser';
+import { generateBillPDF, BillPdfData } from '../services/billPdfService';
+import { sendBillEmail } from '../services/emailService';
 
 const router = Router();
 
@@ -120,13 +122,14 @@ router.post('/invoice/fetch-from-sheet', authenticate, async (req, res) => {
       groupedByGroupNumber.get(groupNum)!.push(row);
     }
 
-    // Get all bookings with groupNumbers from sheet
+    // Get all bookings with groupNumbers from sheet (only with status 'bill')
     const groupNumbers = Array.from(groupedByGroupNumber.keys());
     const bookings = await prisma.umrahVisaBooking.findMany({
       where: {
         groupNumber: {
           in: groupNumbers,
         },
+        status: 'bill',
         isDeleted: false,
       },
       select: {
@@ -238,6 +241,184 @@ router.post('/invoice/fetch-from-sheet', authenticate, async (req, res) => {
     console.error('Error fetching from sheet:', error);
     res.status(500).json({
       error: 'Failed to fetch from sheet',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/umrah-visa/invoice/generate-bills
+ * Generate bills for ready groups
+ */
+router.post('/invoice/generate-bills', authenticate, async (req, res) => {
+  try {
+    const user = (req as any).user;
+
+    // Only admin/staff can generate bills
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can generate bills' });
+    }
+
+    const { bookingIds } = req.body;
+
+    if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+      return res.status(400).json({ error: 'bookingIds array is required' });
+    }
+
+    const results: Array<{
+      bookingId: string;
+      groupNumber: string;
+      groupName: string;
+      partyName: string;
+      success: boolean;
+      error?: string;
+      pdfBase64?: string;
+      fileName?: string;
+    }> = [];
+
+    // Process each booking
+    for (const bookingId of bookingIds) {
+      try {
+        // Fetch booking with party and passengers
+        const booking = await prisma.umrahVisaBooking.findUnique({
+          where: { id: bookingId, isDeleted: false },
+          include: {
+            party: true,
+            passengers: {
+              where: { isDeleted: false },
+              orderBy: { createdAt: 'asc' },
+              select: {
+                fullName: true,
+                visaNumber: true,
+              },
+            },
+          },
+        });
+
+        if (!booking) {
+          results.push({
+            bookingId,
+            groupNumber: 'N/A',
+            groupName: 'N/A',
+            partyName: 'N/A',
+            success: false,
+            error: 'Booking not found',
+          });
+          continue;
+        }
+
+        // Validate PricingMaster entry exists
+        const pricing = await prisma.pricingMaster.findFirst({
+          where: {
+            partyId: booking.partyId,
+            type: 'umrah',
+            isActive: true,
+          },
+        });
+
+        if (!pricing) {
+          results.push({
+            bookingId,
+            groupNumber: booking.groupNumber || 'N/A',
+            groupName: booking.groupName || 'N/A',
+            partyName: booking.party.partyName,
+            success: false,
+            error: `Party "${booking.party.partyName}" does not have an entry in the pricing master`,
+          });
+          continue;
+        }
+
+        // Prepare passenger data
+        const passengers = booking.passengers.map((p) => ({
+          name: p.fullName,
+          visaNumber: p.visaNumber || 'N/A',
+        }));
+
+        // Calculate amount (price per passenger * passenger count)
+        const pricePerPassenger = Number(pricing.price);
+        const totalAmount = pricePerPassenger * booking.passengerCount;
+
+        // Generate PDF
+        const billData: BillPdfData = {
+          partyName: booking.party.partyName,
+          groupNumber: booking.groupNumber || 'N/A',
+          groupName: booking.groupName || 'N/A',
+          passengerCount: booking.passengerCount,
+          passengers,
+          amount: totalAmount,
+        };
+
+        const pdfBuffer = await generateBillPDF(billData);
+
+        // Send email
+        if (booking.party.email) {
+          try {
+            await sendBillEmail(
+              booking.party.email,
+              booking.party.partyName,
+              booking.groupNumber || 'N/A',
+              booking.groupName || 'N/A',
+              pdfBuffer
+            );
+          } catch (emailError: any) {
+            console.error(`Failed to send email for booking ${bookingId}:`, emailError);
+            // Continue even if email fails
+          }
+        }
+
+        // Update booking status to completed
+        await prisma.umrahVisaBooking.update({
+          where: { id: bookingId },
+          data: {
+            status: 'booking_success',
+            billGeneratedAt: new Date(),
+            billGeneratedBy: user.id,
+          },
+        });
+
+        // Convert PDF to base64 for download
+        const pdfBase64 = pdfBuffer.toString('base64');
+        const fileName = `Bill_${booking.groupNumber || bookingId}_${(booking.groupName || '').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+
+        results.push({
+          bookingId,
+          groupNumber: booking.groupNumber || 'N/A',
+          groupName: booking.groupName || 'N/A',
+          partyName: booking.party.partyName,
+          success: true,
+          pdfBase64,
+          fileName,
+        });
+      } catch (error: any) {
+        console.error(`Error processing booking ${bookingId}:`, error);
+        results.push({
+          bookingId,
+          groupNumber: 'N/A',
+          groupName: 'N/A',
+          partyName: 'N/A',
+          success: false,
+          error: error.message || 'Failed to generate bill',
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const errorCount = results.filter((r) => !r.success).length;
+
+    res.json({
+      success: true,
+      message: `Generated ${successCount} bills successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+      summary: {
+        total: results.length,
+        success: successCount,
+        errors: errorCount,
+      },
+      results,
+    });
+  } catch (error: any) {
+    console.error('Error generating bills:', error);
+    res.status(500).json({
+      error: 'Failed to generate bills',
       message: error.message,
     });
   }

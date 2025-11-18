@@ -245,6 +245,8 @@ export const umrahVisaAPI = {
   deleteHotelBooking: (rowId: string) => api.delete(`/umrah-visa/hotel-bookings/${rowId}`),
 
   fetchFromSheet: () => api.post('/umrah-visa/invoice/fetch-from-sheet'),
+  
+  generateBills: (bookingIds: string[]) => api.post('/umrah-visa/invoice/generate-bills', { bookingIds }),
 };
 
 // User Management API

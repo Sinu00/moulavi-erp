@@ -1,0 +1,7 @@
+pending
+documents_downloaded
+group_assigned
+voucher
+bill
+booking_success
+cancelled

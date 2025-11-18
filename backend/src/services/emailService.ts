@@ -324,5 +324,68 @@ export const sendServiceConfirmationEmail = async (
   }
 };
 
+// Send bill email with PDF attachment
+export const sendBillEmail = async (
+  to: string,
+  partyName: string,
+  groupNumber: string,
+  groupName: string,
+  pdfBuffer: Buffer
+): Promise<void> => {
+  const mailOptions: nodemailer.SendMailOptions = {
+    from: EMAIL_CONFIG.from,
+    to,
+    subject: `Bill for ${groupNumber}, ${groupName} generated`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Bill Generated</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #E3000F 0%, #C7000A 100%); color: white; padding: 30px; text-align: center; }
+          .content { padding: 30px; background: #ffffff; }
+          .message { font-size: 16px; margin-bottom: 20px; color: #555; }
+          .footer { padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Bill Generated</h1>
+          </div>
+          <div class="content">
+            <p class="message">
+              Dear ${partyName},
+            </p>
+            <p class="message">
+              The bill for Group ${groupNumber} (${groupName}) has been generated and is attached to this email.
+            </p>
+            <p class="message">
+              Please find the bill PDF attached below.
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email from Moulavi ERP System.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    attachments: [
+      {
+        filename: `Bill_${groupNumber}_${groupName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      },
+    ],
+  };
+  
+  await sendEmail(mailOptions);
+};
+
 // Export transporter for testing purposes
 export { transporter };
