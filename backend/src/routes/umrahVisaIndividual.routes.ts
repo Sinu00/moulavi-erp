@@ -223,6 +223,69 @@ router.post('/create-booking', authenticate, async (req, res) => {
       (step4Data?.selectedTransports && step4Data.selectedTransports.length > 0) ||
       (step2Data.transportBookings && step2Data.transportBookings.length > 0));
 
+    // PRE-FETCH: Collect all unique IDs needed for LocationMaster lookups
+    const allLocationIds = new Set<string>();
+    const allCityIds = new Set<string>();
+    
+    // Add airport IDs
+    if (step2Data.arrivalAirportId) allLocationIds.add(step2Data.arrivalAirportId);
+    if (step2Data.departureAirportId) allLocationIds.add(step2Data.departureAirportId);
+    
+    // Add hotel IDs and location IDs from hotel bookings
+    if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings) {
+      step3Data.hotelBookings.forEach((hotel: any) => {
+        if (hotel.hotelId) allLocationIds.add(hotel.hotelId);
+        if (hotel.locationId) {
+          // Could be LocationMaster ID or City ID
+          allLocationIds.add(hotel.locationId);
+          allCityIds.add(hotel.locationId);
+        }
+      });
+    }
+
+    // Batch query to fetch all LocationMasters before transaction
+    const allLocationMasters = await prisma.locationMaster.findMany({
+      where: {
+        OR: [
+          { id: { in: Array.from(allLocationIds) } },
+          { cityId: { in: Array.from(allCityIds) } },
+        ],
+      },
+      select: { id: true, cityId: true, locationType: true },
+    });
+
+    // Create lookup maps
+    const locationMap = new Map<string, typeof allLocationMasters[0]>();
+    const cityToLocationMap = new Map<string, typeof allLocationMasters[0][]>();
+
+    allLocationMasters.forEach((lm) => {
+      locationMap.set(lm.id, lm);
+      if (lm.cityId) {
+        if (!cityToLocationMap.has(lm.cityId)) {
+          cityToLocationMap.set(lm.cityId, []);
+        }
+        cityToLocationMap.get(lm.cityId)!.push(lm);
+      }
+    });
+
+    // Helper function to resolve location ID
+    const resolveLocationId = (id: string, preferType?: string): string | null => {
+      // First check if it's a LocationMaster ID
+      if (locationMap.has(id)) {
+        return id;
+      }
+      // Otherwise, check if it's a City ID
+      const cityLocations = cityToLocationMap.get(id);
+      if (cityLocations && cityLocations.length > 0) {
+        if (preferType) {
+          const preferred = cityLocations.find((l) => l.locationType === preferType);
+          if (preferred) return preferred.id;
+        }
+        return cityLocations[0].id;
+      }
+      return null;
+    };
+
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create UmrahVisaBooking directly with partyId
@@ -268,34 +331,28 @@ router.post('/create-booking', authenticate, async (req, res) => {
         // Create hotel bookings directly linked to booking
         await Promise.all(
           step3Data.hotelBookings.map(async (hotel) => {
-            // Check if hotel.locationId is a valid LocationMaster ID
-            let locationMasterId = hotel.locationId;
-            
-            const testLocationMaster = await tx.locationMaster.findUnique({
-              where: { id: hotel.locationId },
-            });
-            
-            if (!testLocationMaster) {
-              // If not a LocationMaster ID, get the hotel's city and find a LocationMaster for that city
-              const hotelLocation = await tx.locationMaster.findUnique({
-                where: { id: hotel.hotelId },
-                select: { cityId: true },
-              });
-              
-              if (hotelLocation?.cityId) {
-                const anyLocationInCity = await tx.locationMaster.findFirst({
-                  where: { cityId: hotelLocation.cityId },
-                  select: { id: true },
-                });
-                
-                if (anyLocationInCity) {
-                  locationMasterId = anyLocationInCity.id;
-                } else {
-                  throw new Error(`No LocationMaster found for city. Hotel booking requires a LocationMaster entry for the city.`);
-                }
-              } else {
-                throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel not found or missing cityId`);
-              }
+            // Get hotel's LocationMaster from pre-fetched map
+            const hotelLocation = locationMap.get(hotel.hotelId);
+            if (!hotelLocation) {
+              throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel LocationMaster not found`);
+            }
+
+            // Resolve locationId using pre-fetched maps
+            let locationMasterId: string | null = null;
+
+            // First, try to resolve hotel.locationId (could be LocationMaster ID or City ID)
+            if (hotel.locationId) {
+              locationMasterId = resolveLocationId(hotel.locationId, 'OTHERS');
+            }
+
+            // If not resolved, use hotel's city to find a LocationMaster
+            if (!locationMasterId && hotelLocation.cityId) {
+              locationMasterId = resolveLocationId(hotelLocation.cityId, 'OTHERS');
+            }
+
+            // If still not found, throw error
+            if (!locationMasterId) {
+              throw new Error(`No LocationMaster found for hotel booking. Hotel: ${hotel.hotelId}, Location: ${hotel.locationId}`);
             }
             
             return tx.umrahHotelBooking.create({
@@ -362,17 +419,9 @@ router.post('/create-booking', authenticate, async (req, res) => {
           toLocationId: string;
         }> = [];
 
-        // Get arrival airport location
-        const arrivalAirport = await tx.locationMaster.findUnique({
-          where: { id: step2Data.arrivalAirportId },
-          select: { id: true, cityId: true },
-        });
-
-        // Get departure airport location
-        const departureAirport = await tx.locationMaster.findUnique({
-          where: { id: step2Data.departureAirportId },
-          select: { id: true, cityId: true },
-        });
+        // Get arrival and departure airports from pre-fetched maps
+        const arrivalAirport = locationMap.get(step2Data.arrivalAirportId);
+        const departureAirport = locationMap.get(step2Data.departureAirportId);
 
         if (!arrivalAirport || !departureAirport) {
           throw new Error('Invalid airport IDs');
@@ -380,10 +429,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
 
         // 1. Arrival Airport → First Hotel
         const firstHotel = step3Data.hotelBookings[0];
-        const firstHotelLocation = await tx.locationMaster.findUnique({
-          where: { id: firstHotel.hotelId },
-          select: { id: true, cityId: true },
-        });
+        const firstHotelLocation = locationMap.get(firstHotel.hotelId);
 
         if (firstHotelLocation && arrivalAirport.cityId && firstHotelLocation.cityId) {
           const arrivalDateTime = combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime);
@@ -404,15 +450,8 @@ router.post('/create-booking', authenticate, async (req, res) => {
           const prevHotel = step3Data.hotelBookings[i - 1];
           const currHotel = step3Data.hotelBookings[i];
 
-          const prevHotelLocation = await tx.locationMaster.findUnique({
-            where: { id: prevHotel.hotelId },
-            select: { id: true, cityId: true },
-          });
-
-          const currHotelLocation = await tx.locationMaster.findUnique({
-            where: { id: currHotel.hotelId },
-            select: { id: true, cityId: true },
-          });
+          const prevHotelLocation = locationMap.get(prevHotel.hotelId);
+          const currHotelLocation = locationMap.get(currHotel.hotelId);
 
           if (prevHotelLocation && currHotelLocation && 
               prevHotelLocation.cityId && currHotelLocation.cityId &&
@@ -435,10 +474,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
 
         // 3. Last Hotel → Departure Airport
         const lastHotel = step3Data.hotelBookings[step3Data.hotelBookings.length - 1];
-        const lastHotelLocation = await tx.locationMaster.findUnique({
-          where: { id: lastHotel.hotelId },
-          select: { id: true, cityId: true },
-        });
+        const lastHotelLocation = locationMap.get(lastHotel.hotelId);
 
         if (lastHotelLocation && lastHotelLocation.cityId && departureAirport.cityId &&
             lastHotelLocation.cityId !== departureAirport.cityId) {
@@ -493,6 +529,9 @@ router.post('/create-booking', authenticate, async (req, res) => {
       });
 
       return { booking, travelDetails, passengers };
+    }, {
+      maxWait: 10000,  // 10 seconds max wait
+      timeout: 30000,  // 30 seconds timeout
     });
 
     res.status(201).json({

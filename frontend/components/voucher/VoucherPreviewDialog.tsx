@@ -21,9 +21,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Trash2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Plus, Minus, Trash2, Truck, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { umrahVisaAPI } from '@/lib/api';
+import { umrahVisaAPI, transportMasterAPI } from '@/lib/api';
 import api from '@/lib/api';
 
 interface VoucherPreviewDialogProps {
@@ -66,6 +67,26 @@ interface FlightDetail {
   eta: string;
 }
 
+interface TransportOption {
+  transportId: string;
+  routeId: string;
+  route: {
+    id: string;
+    city1: { id: string; name: string } | null;
+    city2: { id: string; name: string } | null;
+    city3: { id: string; name: string } | null;
+    city4: { id: string; name: string } | null;
+    routeType: string;
+  } | null;
+  vehicleType: {
+    id: string;
+    vehicleName: string;
+    paxCount: number;
+  } | null;
+  price: number;
+  quantity: number;
+}
+
 export function VoucherPreviewDialog({
   open,
   onOpenChange,
@@ -94,7 +115,10 @@ export function VoucherPreviewDialog({
     hotelSchedules: [] as HotelSchedule[],
     movementDetails: [] as MovementDetail[],
     flightDetails: [] as FlightDetail[],
+    transportOptions: [] as TransportOption[],
   });
+  const [availableTransports, setAvailableTransports] = useState<any[]>([]);
+  const [loadingTransports, setLoadingTransports] = useState(false);
 
   useEffect(() => {
     if (open && bookingId) {
@@ -169,7 +193,11 @@ export function VoucherPreviewDialog({
             ? (() => { const [d, m, y] = fd.date.split('-'); return `${y}-${m}-${d}`; })() 
             : new Date(fd.date).toISOString().split('T')[0]) : '',
         })),
+        transportOptions: (data.transportOptions || []) as TransportOption[],
       });
+      
+      // Load all available transport masters
+      loadAvailableTransports();
     } catch (error: any) {
       console.error('Error loading voucher data:', error);
       toast.error(error.message || 'Failed to load voucher data');
@@ -201,6 +229,95 @@ export function VoucherPreviewDialog({
     const outDate = new Date(checkOut);
     const diffTime = Math.abs(outDate.getTime() - inDate.getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const loadAvailableTransports = async () => {
+    try {
+      setLoadingTransports(true);
+      // Fetch all active transport masters
+      const response = await transportMasterAPI.getAll({ isActive: 'true', limit: '1000' });
+      const transportMasters = response.data.transportMasters || [];
+      
+      // Format to match our TransportOption structure
+      const allTransports = transportMasters.map((tm: any) => ({
+        id: tm.id,
+        routeId: tm.routeId,
+        route: tm.route ? {
+          id: tm.route.id,
+          city1: tm.route.city1,
+          city2: tm.route.city2,
+          city3: tm.route.city3,
+          city4: tm.route.city4,
+          routeType: tm.route.routeType,
+        } : null,
+        vehicleType: tm.vehicleType,
+        price: Number(tm.price),
+        isActive: tm.isActive,
+      }));
+      
+      setAvailableTransports(allTransports);
+    } catch (error: any) {
+      console.error('Error loading available transports:', error);
+      toast.error('Failed to load transport options');
+    } finally {
+      setLoadingTransports(false);
+    }
+  };
+
+  const getRouteString = (route: TransportOption['route'] | null) => {
+    if (!route) return 'No route';
+    const cities = [
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
+    ].filter(Boolean);
+    if (cities.length === 0) return 'No route';
+    return cities.map(city => city?.toLowerCase() || '').join(' - ');
+  };
+
+  const handleTransportChange = (index: number, transportId: string) => {
+    const selectedTransport = availableTransports.find(t => t.id === transportId);
+    if (!selectedTransport) return;
+
+    const updated = [...voucherData.transportOptions];
+    updated[index] = {
+      transportId: selectedTransport.id,
+      routeId: selectedTransport.routeId,
+      route: selectedTransport.route,
+      vehicleType: selectedTransport.vehicleType,
+      price: selectedTransport.price,
+      quantity: updated[index]?.quantity || 1,
+    };
+    setVoucherData({ ...voucherData, transportOptions: updated });
+  };
+
+  const handleTransportQuantityChange = (index: number, delta: number) => {
+    const updated = [...voucherData.transportOptions];
+    const currentQty = updated[index]?.quantity || 0;
+    const newQty = Math.max(1, currentQty + delta);
+    updated[index] = { ...updated[index], quantity: newQty };
+    setVoucherData({ ...voucherData, transportOptions: updated });
+  };
+
+  const addTransport = () => {
+    const newTransport: TransportOption = {
+      transportId: '',
+      routeId: '',
+      route: null,
+      vehicleType: null,
+      price: 0,
+      quantity: 1,
+    };
+    setVoucherData({
+      ...voucherData,
+      transportOptions: [...voucherData.transportOptions, newTransport],
+    });
+  };
+
+  const removeTransport = (index: number) => {
+    const updated = voucherData.transportOptions.filter((_, i) => i !== index);
+    setVoucherData({ ...voucherData, transportOptions: updated });
   };
 
   const handleHotelScheduleChange = (index: number, field: keyof HotelSchedule, value: any) => {
@@ -601,6 +718,182 @@ export function VoucherPreviewDialog({
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+            </div>
+
+            {/* Transport Options - Moved to bottom */}
+            <div className="space-y-4 p-4 border rounded-lg bg-white">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-lg">Transport Options</h3>
+                <Button type="button" size="sm" onClick={addTransport} variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Transport
+                </Button>
+              </div>
+              {loadingTransports ? (
+                <p className="text-sm text-gray-500 py-4">Loading transport options...</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Selected Transports */}
+                  {voucherData.transportOptions.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Selected Transports</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {voucherData.transportOptions.map((transport, idx) => {
+                          return (
+                            <Card key={idx} className="border-2 border-blue-500 bg-blue-50">
+                              <CardContent className="p-3">
+                                <div className="space-y-2">
+                                  <div>
+                                    <div className="text-xs text-gray-600 font-medium mb-0.5">Route</div>
+                                    <div className="text-xs font-semibold text-gray-900">
+                                      {transport.route ? getRouteString(transport.route) : 'No route'}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center space-x-1">
+                                      <Truck className="h-3 w-3 text-gray-400" />
+                                      <span className="text-gray-700">{transport.vehicleType?.vehicleName || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-1">
+                                      <Users className="h-3 w-3 text-gray-400" />
+                                      <span className="text-gray-700">{transport.vehicleType?.paxCount || 0} PAX</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-600">Price:</span>
+                                    <span className="font-semibold">₹{transport.price.toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between pt-1 border-t">
+                                    <span className="text-xs text-gray-600">Qty:</span>
+                                    <div className="flex items-center space-x-1">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleTransportQuantityChange(idx, -1)}
+                                        disabled={transport.quantity <= 1}
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        <Minus className="h-3 w-3" />
+                                      </Button>
+                                      <Input
+                                        type="number"
+                                        value={transport.quantity}
+                                        onChange={(e) => {
+                                          const qty = Math.max(1, parseInt(e.target.value) || 1);
+                                          const updated = [...voucherData.transportOptions];
+                                          updated[idx] = { ...updated[idx], quantity: qty };
+                                          setVoucherData({ ...voucherData, transportOptions: updated });
+                                        }}
+                                        className="w-12 h-6 text-center text-xs p-0"
+                                        min="1"
+                                      />
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleTransportQuantityChange(idx, 1)}
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between pt-1 border-t">
+                                    <span className="text-xs text-gray-600">Total:</span>
+                                    <span className="text-xs font-bold">₹{(transport.price * transport.quantity).toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div className="pt-1">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => removeTransport(idx)}
+                                      className="w-full h-6 text-xs text-red-500 hover:text-red-700"
+                                    >
+                                      <Trash2 className="h-3 w-3 mr-1" />
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Available Transport Masters */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-gray-700">
+                        {voucherData.transportOptions.length > 0 ? 'Available Transport Options' : 'Select Transport'}
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
+                      {availableTransports.map((transport) => {
+                        const isSelected = voucherData.transportOptions.some(t => t.transportId === transport.id);
+                        return (
+                          <Card 
+                            key={transport.id} 
+                            className={`cursor-pointer hover:shadow-md transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
+                            onClick={() => {
+                              if (!isSelected) {
+                                // Add new transport
+                                const newTransport: TransportOption = {
+                                  transportId: transport.id,
+                                  routeId: transport.routeId,
+                                  route: transport.route,
+                                  vehicleType: transport.vehicleType,
+                                  price: transport.price,
+                                  quantity: 1,
+                                };
+                                setVoucherData({
+                                  ...voucherData,
+                                  transportOptions: [...voucherData.transportOptions, newTransport],
+                                });
+                              }
+                            }}
+                          >
+                            <CardContent className="p-3">
+                              <div className="space-y-1.5">
+                                <div>
+                                  <div className="text-xs text-gray-600 font-medium mb-0.5">Route</div>
+                                  <div className="text-xs font-semibold text-gray-900">
+                                    {transport.route ? getRouteString(transport.route) : 'No route'}
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center space-x-1">
+                                    <Truck className="h-3 w-3 text-gray-400" />
+                                    <span className="text-gray-700">{transport.vehicleType?.vehicleName || 'N/A'}</span>
+                                  </div>
+                                  <div className="flex items-center space-x-1">
+                                    <Users className="h-3 w-3 text-gray-400" />
+                                    <span className="text-gray-700">{transport.vehicleType?.paxCount || 0} PAX</span>
+                                  </div>
+                                </div>
+                                <div className="pt-1 border-t">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-600">Price</span>
+                                    <span className="text-xs font-bold">₹{transport.price.toLocaleString('en-IN')}</span>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <div className="pt-1">
+                                    <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">Selected</span>
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

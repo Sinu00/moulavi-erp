@@ -562,6 +562,43 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
           eta: '',
         },
       ] : [],
+      // Aggregate transport bookings by transportMasterId to get quantity
+      transportOptions: (() => {
+        const transportMap = new Map<string, any>();
+        
+        (booking.transportBookings || []).forEach((tb: any) => {
+          const transportMasterId = tb.transportMasterId;
+          
+          if (!transportMap.has(transportMasterId)) {
+            // First occurrence - create entry
+            transportMap.set(transportMasterId, {
+              transportId: transportMasterId,
+              routeId: tb.transportMaster?.routeId || '',
+              route: tb.transportMaster?.route ? {
+                id: tb.transportMaster.route.id,
+                city1: tb.transportMaster.route.city1 ? { id: tb.transportMaster.route.city1.id, name: tb.transportMaster.route.city1.name } : null,
+                city2: tb.transportMaster.route.city2 ? { id: tb.transportMaster.route.city2.id, name: tb.transportMaster.route.city2.name } : null,
+                city3: tb.transportMaster.route.city3 ? { id: tb.transportMaster.route.city3.id, name: tb.transportMaster.route.city3.name } : null,
+                city4: tb.transportMaster.route.city4 ? { id: tb.transportMaster.route.city4.id, name: tb.transportMaster.route.city4.name } : null,
+                routeType: tb.transportMaster.route.routeType,
+              } : null,
+              vehicleType: tb.transportMaster?.vehicleType ? {
+                id: tb.transportMaster.vehicleType.id,
+                vehicleName: tb.transportMaster.vehicleType.vehicleName,
+                paxCount: tb.transportMaster.vehicleType.paxCount,
+              } : null,
+              price: tb.transportMaster?.price || 0,
+              quantity: 1, // Start with 1
+            });
+          } else {
+            // Increment quantity for existing transport
+            const existing = transportMap.get(transportMasterId);
+            existing.quantity += 1;
+          }
+        });
+        
+        return Array.from(transportMap.values());
+      })(),
     };
 
     res.json(voucherData);
