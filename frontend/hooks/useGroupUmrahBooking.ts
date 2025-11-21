@@ -401,7 +401,7 @@ export const useGroupUmrahBooking = () => {
       ...prev,
       step5Data: {
         ...prev.step5Data,
-        passengers: [...prev.step5Data.passengers, {
+        passengers: [...(prev.step5Data.passengers ?? []), {
           fullName: '',
           isLeadPassenger: false,
           panCardPhoto: null,
@@ -417,13 +417,14 @@ export const useGroupUmrahBooking = () => {
 
   const removePassenger = useCallback((index: number) => {
     setBookingState(prev => {
-      if (prev.step5Data.passengers.length <= 1) return prev;
+      const passengers = prev.step5Data.passengers ?? [];
+      if (passengers.length <= 1) return prev;
       
       return {
         ...prev,
         step5Data: {
           ...prev.step5Data,
-          passengers: prev.step5Data.passengers.filter((_, i) => i !== index)
+          passengers: passengers.filter((_, i) => i !== index)
         }
       };
     });
