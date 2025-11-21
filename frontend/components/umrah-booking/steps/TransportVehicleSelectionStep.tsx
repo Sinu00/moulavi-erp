@@ -294,99 +294,95 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   const routeNotFound = determinedRoute.length >= 2 && !selectedRoute;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Route Summary */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center space-x-3">
-          <MapPin className="h-5 w-5 text-blue-600" />
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700">Your Journey Route</h3>
-            <p className="text-base font-medium text-gray-900">{routeDisplay}</p>
-            <p className="text-sm text-gray-600 mt-1">
-              {step2Data.passengerCount || 0} Passengers
-            </p>
-          </div>
+      <div className="flex items-center space-x-3 pb-4 border-b border-gray-200">
+        <MapPin className="h-5 w-5 text-red-600" />
+        <div>
+          <p className="text-sm font-medium text-gray-900">{routeDisplay}</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {step2Data.passengerCount || 0} Passengers
+          </p>
         </div>
       </div>
 
-      {/* Route Type Filter */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-700">Filter by Route Type</label>
-        <Select
-          value={routeTypeFilter}
-          onValueChange={(value) => setRouteTypeFilter(value as RouteType | 'all')}
-          disabled={disabled || loadingRoutes}
-        >
-          <SelectTrigger className="w-full max-w-xs">
-            <SelectValue placeholder="Select route type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Route Types</SelectItem>
-            <SelectItem value="fulltrip">Full Trip</SelectItem>
-            <SelectItem value="airporttocity">Airport to City</SelectItem>
-            <SelectItem value="citytocity">City to City</SelectItem>
-            <SelectItem value="citytoairport">City to Airport</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-gray-700">Filter by Route Type</label>
+          <Select
+            value={routeTypeFilter}
+            onValueChange={(value) => setRouteTypeFilter(value as RouteType | 'all')}
+            disabled={disabled || loadingRoutes}
+          >
+            <SelectTrigger className="w-full border-gray-300">
+              <SelectValue placeholder="Select route type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Route Types</SelectItem>
+              <SelectItem value="fulltrip">Full Trip</SelectItem>
+              <SelectItem value="airporttocity">Airport to City</SelectItem>
+              <SelectItem value="citytocity">City to City</SelectItem>
+              <SelectItem value="citytoairport">City to Airport</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-      {/* Route Selector */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-700">Select Route</label>
-        <Select
-          value={selectedRouteId || ''}
-          onValueChange={(value) => setSelectedRouteId(value || null)}
-          disabled={disabled || loadingRoutes || filteredRoutes.length === 0}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a route" />
-          </SelectTrigger>
-          <SelectContent>
-            {filteredRoutes.length === 0 ? (
-              <SelectItem value="__no_routes__" disabled>
-                No routes available
-              </SelectItem>
-            ) : (
-              filteredRoutes.map((route) => (
-                <SelectItem key={route.id} value={route.id}>
-                  {formatRouteDisplay(route)}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-gray-700">Select Route</label>
+          <Select
+            value={selectedRouteId || ''}
+            onValueChange={(value) => setSelectedRouteId(value || null)}
+            disabled={disabled || loadingRoutes || filteredRoutes.length === 0}
+          >
+            <SelectTrigger className="w-full border-gray-300">
+              <SelectValue placeholder="Select a route" />
+            </SelectTrigger>
+            <SelectContent>
+              {filteredRoutes.length === 0 ? (
+                <SelectItem value="__no_routes__" disabled>
+                  No routes available
                 </SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-        {routeNotFound && (
-          <p className="text-sm text-yellow-600 mt-1">
-            No exact route found. Please select a route from the dropdown above.
-          </p>
-        )}
+              ) : (
+                filteredRoutes.map((route) => (
+                  <SelectItem key={route.id} value={route.id}>
+                    {formatRouteDisplay(route)}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          {routeNotFound && (
+            <p className="text-xs text-red-600 mt-1">
+              No exact route found. Please select a route from the dropdown above.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Transport Table */}
       {selectedRouteId && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900">Available Transport Vehicles</h3>
+        <>
           {loadingTransports ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-              <span className="ml-3 text-gray-600">Loading transport vehicles...</span>
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-red-600" />
+              <span className="ml-2 text-sm text-gray-600">Loading transport vehicles...</span>
             </div>
           ) : routeTransports.length === 0 ? (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-yellow-800">
-                No transport vehicles available for this route.
-              </p>
+            <div className="text-center py-8">
+              <Truck className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-600">No transport vehicles available for this route.</p>
             </div>
           ) : (
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Vehicle Name</TableHead>
-                    <TableHead>Capacity</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Total</TableHead>
+                    <TableHead className="font-medium text-gray-700">Vehicle Name</TableHead>
+                    <TableHead className="font-medium text-gray-700">Capacity</TableHead>
+                    <TableHead className="font-medium text-gray-700">Price</TableHead>
+                    <TableHead className="font-medium text-gray-700">Quantity</TableHead>
+                    <TableHead className="font-medium text-gray-700 text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -395,22 +391,26 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                     const quantity = selectedVehicles.get(transport.id) || 0;
                     const price = Number(transport.price);
                     const total = price * quantity;
+                    const isSelected = quantity > 0;
                     return (
-                      <TableRow key={transport.id}>
+                      <TableRow 
+                        key={transport.id}
+                        className={isSelected ? 'bg-red-50' : ''}
+                      >
                         <TableCell>
                           <div className="flex items-center space-x-2">
-                            <Truck className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium">{transport.vehicleType.vehicleName}</span>
+                            <Truck className={`h-4 w-4 ${isSelected ? 'text-red-600' : 'text-gray-400'}`} />
+                            <span className="font-medium text-gray-900">{transport.vehicleType.vehicleName}</span>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <Users className="h-4 w-4 text-gray-400" />
-                            <span>{transport.vehicleType.paxCount} PAX</span>
+                            <span className="text-gray-700">{transport.vehicleType.paxCount} PAX</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-semibold">₹{price.toLocaleString('en-IN')}</span>
+                          <span className="font-medium text-gray-900">₹{price.toLocaleString('en-IN')}</span>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center space-x-2">
@@ -419,11 +419,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                               size="sm"
                               onClick={() => handleQuantityChange(transport.id, -1)}
                               disabled={disabled || quantity === 0}
-                              className="h-8 w-8 p-0"
+                              className="h-7 w-7 p-0 border-gray-300 hover:bg-red-50 hover:border-red-300"
                             >
                               <Minus className="h-3 w-3" />
                             </Button>
-                            <span className="text-sm font-semibold text-gray-900 w-8 text-center">
+                            <span className={`text-sm font-medium w-8 text-center ${
+                              isSelected ? 'text-red-600' : 'text-gray-900'
+                            }`}>
                               {quantity}
                             </span>
                             <Button
@@ -431,14 +433,18 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                               size="sm"
                               onClick={() => handleQuantityChange(transport.id, 1)}
                               disabled={disabled}
-                              className="h-8 w-8 p-0"
+                              className="h-7 w-7 p-0 border-gray-300 hover:bg-red-50 hover:border-red-300"
                             >
                               <Plus className="h-3 w-3" />
                             </Button>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <span className="font-bold">₹{total.toLocaleString('en-IN')}</span>
+                        <TableCell className="text-right">
+                          <span className={`font-semibold ${
+                            isSelected ? 'text-red-600' : 'text-gray-900'
+                          }`}>
+                            ₹{total.toLocaleString('en-IN')}
+                          </span>
                         </TableCell>
                       </TableRow>
                     );
@@ -447,7 +453,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
               </Table>
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
