@@ -23,11 +23,6 @@ import {
   Eye,
   Edit, 
   Trash2,
-  Clock,
-  RefreshCw as Processing,
-  CheckCircle,
-  XCircle,
-  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
@@ -35,7 +30,6 @@ import { getUser, hasRole } from '@/lib/auth';
 import { umrahVisaAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG, VISA_TYPE_CONFIG } from '@/lib/constants';
 import ViewUmrahVisaDialog from '@/components/ViewUmrahVisaDialog';
-import AddGroupNumberDialog from '@/components/AddGroupNumberDialog';
 
 export default function UmrahVisaPage() {
   const router = useRouter();
@@ -52,9 +46,6 @@ export default function UmrahVisaPage() {
   // Dialog states
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
-  const [groupNumberDialogOpen, setGroupNumberDialogOpen] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -152,135 +143,8 @@ export default function UmrahVisaPage() {
     }
   };
 
-  const handleStatusUpdate = async (bookingId: string, newStatus: string) => {
-    try {
-      setUpdatingStatus(bookingId);
-      await umrahVisaAPI.updateBookingStatus(bookingId, newStatus);
-      
-      setBookings(prev =>
-        prev.map(booking =>
-          booking.id === bookingId ? { ...booking, status: newStatus } : booking
-        )
-      );
-      
-      toast.success('Status updated successfully');
-    } catch (error: any) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update status');
-    } finally {
-      setUpdatingStatus(null);
-    }
-  };
-
-  const handleGroupNumberSuccess = () => {
-    fetchBookings();
-  };
 
   const statusCounts = getStatusCounts();
-
-  // Status-specific action button (single primary action based on status)
-  const renderActionButton = (booking: any) => {
-    switch (booking.status) {
-      case 'pending':
-        // Download Documents
-        return (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={async () => {
-              try {
-                await umrahVisaAPI.downloadDocuments(booking.id);
-                toast.success('Documents downloaded');
-                fetchBookings();
-              } catch (error: any) {
-                toast.error(error?.response?.data?.error || 'Failed to download');
-              }
-            }}
-            className="flex items-center gap-1"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Download Documents
-          </Button>
-        );
-
-      case 'documents_downloaded':
-        // Assign/Add Group
-    return (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setSelectedBooking(booking);
-              setGroupNumberDialogOpen(true);
-            }}
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-3 w-3" />
-            Add Group
-          </Button>
-        );
-
-      case 'group_assigned':
-        // Upload Image (go to Trip Info)
-        return (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => router.push('/dashboard/umrah-visa/trip-info')}
-            className="flex items-center gap-1"
-          >
-            <Edit className="h-3 w-3" />
-            Upload Image
-          </Button>
-        );
-
-      case 'voucher':
-        // Generate Voucher
-        return (
-          <Button
-            size="sm"
-            onClick={async () => {
-              try {
-                // First get voucher data, then generate voucher
-                const voucherDataResponse = await umrahVisaAPI.getVoucherData(booking.id!);
-                await umrahVisaAPI.generateVoucher(booking.id!, voucherDataResponse.data);
-                toast.success('Voucher generated');
-                fetchBookings();
-              } catch (error: any) {
-                toast.error(error?.response?.data?.error || 'Failed to generate voucher');
-              }
-            }}
-            className="flex items-center gap-1"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Generate Voucher
-          </Button>
-        );
-
-      case 'bill':
-        // Future: Generate Bill
-        return (
-          <Button size="sm" variant="outline" disabled className="flex items-center gap-1">
-            <CheckCircle className="h-3 w-3" />
-            Generate Bill
-          </Button>
-        );
-
-      case 'booking_success':
-    return (
-          <Button size="sm" variant="outline" disabled className="flex items-center gap-1">
-            <CheckCircle className="h-3 w-3" />
-            Completed
-          </Button>
-        );
-
-      case 'cancelled':
-        return null;
-
-      default:
-    return null;
-  }
-  };
 
   return (
     <div className="flex h-screen bg-gray-50/50">
@@ -378,7 +242,7 @@ export default function UmrahVisaPage() {
                         <TableHead className="w-[150px]">Group Details</TableHead>
                         <TableHead className="w-[120px]">Passengers</TableHead>
                         <TableHead className="w-[150px]">Travel Dates</TableHead>
-                        <TableHead className="w-[220px]">Status / Action</TableHead>
+                        <TableHead className="w-[150px]">Status</TableHead>
                         <TableHead className="w-[220px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -421,14 +285,9 @@ export default function UmrahVisaPage() {
                             </div>
                             </TableCell>
                             <TableCell>
-                              <div className="space-y-2">
-                                <Badge className={`${UMRAH_VISA_STATUS_CONFIG[booking.status as keyof typeof UMRAH_VISA_STATUS_CONFIG]?.color || 'bg-gray-100'} text-xs`}>
-                                  {UMRAH_VISA_STATUS_CONFIG[booking.status as keyof typeof UMRAH_VISA_STATUS_CONFIG]?.label || booking.status}
-                                </Badge>
-                                <div className="flex items-center gap-2">
-                                  {renderActionButton(booking)}
-                          </div>
-                        </div>
+                              <Badge className={`${UMRAH_VISA_STATUS_CONFIG[booking.status as keyof typeof UMRAH_VISA_STATUS_CONFIG]?.color || 'bg-gray-100'} text-xs`}>
+                                {UMRAH_VISA_STATUS_CONFIG[booking.status as keyof typeof UMRAH_VISA_STATUS_CONFIG]?.label || booking.status}
+                              </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -477,13 +336,6 @@ export default function UmrahVisaPage() {
         bookingId={selectedBookingId}
         open={viewDialogOpen}
         onOpenChange={setViewDialogOpen}
-      />
-      
-      <AddGroupNumberDialog
-        booking={selectedBooking}
-        open={groupNumberDialogOpen}
-        onOpenChange={setGroupNumberDialogOpen}
-        onSuccess={handleGroupNumberSuccess}
       />
     </div>
   );
