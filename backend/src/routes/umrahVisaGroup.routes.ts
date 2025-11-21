@@ -331,8 +331,19 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
       // 4. Create UmrahHotelBooking (from step2Data for group bookings - always hotel for group)
       if (hotelBookingsData.length > 0) {
-        await Promise.all(
+        const createdHotelBookings = await Promise.all(
           hotelBookingsData.map(async (hotel: any) => {
+            // Validate required fields
+            if (!hotel.hotelId) {
+              throw new Error(`Missing hotelId in hotel booking`);
+            }
+            if (!hotel.checkInDate) {
+              throw new Error(`Missing checkInDate in hotel booking`);
+            }
+            if (!hotel.checkOutDate) {
+              throw new Error(`Missing checkOutDate in hotel booking`);
+            }
+
             // Get hotel's LocationMaster to find its cityId
             const hotelLocation = locationMap.get(hotel.hotelId);
             if (!hotelLocation) {
@@ -357,13 +368,29 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
               throw new Error(`No LocationMaster found for hotel booking. Hotel: ${hotel.hotelId}, Location: ${hotel.locationId}`);
             }
 
+            // Ensure dates are Date objects
+            const checkInDate = hotel.checkInDate instanceof Date 
+              ? hotel.checkInDate 
+              : new Date(hotel.checkInDate);
+            const checkOutDate = hotel.checkOutDate instanceof Date 
+              ? hotel.checkOutDate 
+              : new Date(hotel.checkOutDate);
+            
+            // Validate dates
+            if (isNaN(checkInDate.getTime())) {
+              throw new Error(`Invalid checkInDate: ${hotel.checkInDate}`);
+            }
+            if (isNaN(checkOutDate.getTime())) {
+              throw new Error(`Invalid checkOutDate: ${hotel.checkOutDate}`);
+            }
+
             return tx.umrahHotelBooking.create({
               data: {
                 bookingId: booking.id,
                 locationId: locationMasterId,
                 hotelId: hotel.hotelId,
-                checkInDate: hotel.checkInDate,
-                checkOutDate: hotel.checkOutDate,
+                checkInDate,
+                checkOutDate,
                 brn: hotel.brn && Array.isArray(hotel.brn) && hotel.brn.length > 0 
                   ? hotel.brn 
                   : null,

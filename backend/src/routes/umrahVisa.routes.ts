@@ -152,8 +152,30 @@ router.get('/:bookingId', authenticate, async (req, res) => {
         },
         hotelBookings: {
           include: {
-            location: true,
-            hotel: true,
+            location: {
+              select: {
+                id: true,
+                name: true,
+                city: true,
+                cityId: true,
+                locationType: true,
+                cityMaster: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            hotel: {
+              select: {
+                id: true,
+                name: true,
+                city: true,
+                cityId: true,
+                locationType: true,
+              },
+            },
           },
           orderBy: {
             checkInDate: 'asc',
@@ -175,6 +197,33 @@ router.get('/:bookingId', authenticate, async (req, res) => {
                 vehicleType: true,
               },
             },
+          },
+        },
+        movementDetails: {
+          include: {
+            fromCity: true,
+            fromLocation: {
+              select: {
+                id: true,
+                name: true,
+                locationType: true,
+                city: true,
+                cityId: true,
+              },
+            },
+            toCity: true,
+            toLocation: {
+              select: {
+                id: true,
+                name: true,
+                locationType: true,
+                city: true,
+                cityId: true,
+              },
+            },
+          },
+          orderBy: {
+            travelDateTime: 'asc',
           },
         },
         passengers: {

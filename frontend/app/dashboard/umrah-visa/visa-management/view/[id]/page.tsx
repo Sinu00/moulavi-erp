@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, Plane, Users, Building, MapPin, Mail, CheckCircle, ArrowLeft, Clock, DollarSign } from 'lucide-react';
+import { Calendar, Plane, Users, Building, MapPin, Mail, CheckCircle, ArrowLeft, Clock, DollarSign, Route, Truck, ArrowRight } from 'lucide-react';
 
 export default function ViewUmrahVisaBookingPage() {
   const router = useRouter();
@@ -34,7 +34,17 @@ export default function ViewUmrahVisaBookingPage() {
     try {
       setLoading(true);
       const res = await umrahVisaAPI.getBookingById(bookingId);
-      setBooking(res.data);
+      const bookingData = res.data;
+      
+      // Debug: Log booking data to console
+      console.log('Booking Data:', {
+        accommodationType: bookingData.accommodationType,
+        hotelBookings: bookingData.hotelBookings,
+        hotelBookingsLength: bookingData.hotelBookings?.length,
+        sponsorIqamaDetails: bookingData.sponsorIqamaDetails,
+      });
+      
+      setBooking(bookingData);
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || 'Failed to load booking');
@@ -43,14 +53,47 @@ export default function ViewUmrahVisaBookingPage() {
     }
   };
 
-  const formatDate = (date?: string) => {
+  const formatDate = (date?: string | Date) => {
     if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    try {
+      return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return 'N/A';
+    }
   };
 
-  const formatTime = (time?: string) => {
-    if (!time) return 'N/A';
-    return new Date(`1970-01-01T${time}`).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (dateTime?: string | Date) => {
+    if (!dateTime) return 'N/A';
+    try {
+      return new Date(dateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'N/A';
+    }
+  };
+
+  const formatDateTime = (dateTime?: string | Date) => {
+    if (!dateTime) return { date: 'N/A', time: 'N/A' };
+    try {
+      const dt = new Date(dateTime);
+      return {
+        date: dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+        time: dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      };
+    } catch {
+      return { date: 'N/A', time: 'N/A' };
+    }
+  };
+
+  // Helper to format transport route from cities
+  const formatTransportRoute = (route: any) => {
+    if (!route) return 'N/A';
+    const cities = [
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
+    ].filter(Boolean);
+    return cities.length > 0 ? cities.join(' → ') : 'N/A';
   };
 
   return (
@@ -147,39 +190,75 @@ export default function ViewUmrahVisaBookingPage() {
               </Card>
 
               {/* Travel Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2"><Plane className="h-5 w-5 text-sky-600" /> Travel Details</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="border-l-4 border-sky-500 pl-4 py-2">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Arrival</p>
-                      <div className="text-sm">
-                        <div className="font-semibold text-gray-900 flex items-center gap-2 mb-2"><Calendar className="h-4 w-4 text-sky-600" />{formatDate(booking.travelDetails?.arrivalDate || booking.arrivalDate)}</div>
-                        <div className="font-semibold text-gray-900 flex items-center gap-2 mb-3"><Clock className="h-4 w-4 text-sky-600" />{formatTime(booking.travelDetails?.arrivalTime as any)}</div>
-                        <div className="text-sm text-gray-600 mb-1"><span className="font-medium">Airport:</span> {booking.travelDetails?.arrivalAirport?.airportName || booking.arrivalAirport || 'N/A'}</div>
-                        <div className="text-sm text-gray-600"><span className="font-medium">Flight:</span> {booking.travelDetails?.arrivalFlightNumber || booking.flightNumber || 'N/A'}</div>
+              {booking.travelDetails && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2"><Plane className="h-5 w-5 text-sky-600" /> Travel Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="border-l-4 border-sky-500 pl-4 py-2">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Arrival</p>
+                        <div className="text-sm">
+                          {(() => {
+                            const arrival = formatDateTime(booking.travelDetails.arrivalDateTime);
+                            return (
+                              <>
+                                <div className="font-semibold text-gray-900 flex items-center gap-2 mb-2">
+                                  <Calendar className="h-4 w-4 text-sky-600" />
+                                  {arrival.date}
+                                </div>
+                                <div className="font-semibold text-gray-900 flex items-center gap-2 mb-3">
+                                  <Clock className="h-4 w-4 text-sky-600" />
+                                  {arrival.time}
+                                </div>
+                              </>
+                            );
+                          })()}
+                          <div className="text-sm text-gray-600 mb-1">
+                            <span className="font-medium">Airport:</span> {booking.travelDetails.arrivalAirport?.name || 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Flight:</span> {booking.travelDetails.arrivalFlightNumber || 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-l-4 border-orange-500 pl-4 py-2">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Departure</p>
+                        <div className="text-sm">
+                          {(() => {
+                            const departure = formatDateTime(booking.travelDetails.departureDateTime);
+                            return (
+                              <>
+                                <div className="font-semibold text-gray-900 flex items-center gap-2 mb-2">
+                                  <Calendar className="h-4 w-4 text-orange-600" />
+                                  {departure.date}
+                                </div>
+                                <div className="font-semibold text-gray-900 flex items-center gap-2 mb-3">
+                                  <Clock className="h-4 w-4 text-orange-600" />
+                                  {departure.time}
+                                </div>
+                              </>
+                            );
+                          })()}
+                          <div className="text-sm text-gray-600 mb-1">
+                            <span className="font-medium">Airport:</span> {booking.travelDetails.departureAirport?.name || 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-medium">Flight:</span> {booking.travelDetails.departureFlightNumber || 'N/A'}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="border-l-4 border-orange-500 pl-4 py-2">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-3">Departure</p>
-                      <div className="text-sm">
-                        <div className="font-semibold text-gray-900 flex items-center gap-2 mb-2"><Calendar className="h-4 w-4 text-orange-600" />{formatDate(booking.travelDetails?.departureDate || booking.departureDate)}</div>
-                        <div className="font-semibold text-gray-900 flex items-center gap-2 mb-3"><Clock className="h-4 w-4 text-orange-600" />{formatTime(booking.travelDetails?.departureTime as any)}</div>
-                        <div className="text-sm text-gray-600 mb-1"><span className="font-medium">Airport:</span> {booking.travelDetails?.departureAirport?.airportName || booking.departureAirport || 'N/A'}</div>
-                        <div className="text-sm text-gray-600"><span className="font-medium">Flight:</span> {booking.travelDetails?.departureFlightNumber || booking.returnFlightNumber || 'N/A'}</div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Transportation */}
               {Array.isArray(booking.transportBookings) && booking.transportBookings.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2"><MapPin className="h-5 w-5 text-green-600" /> Transportation ({booking.transportBookings.length})</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2"><Truck className="h-5 w-5 text-green-600" /> Transportation Vehicles ({booking.transportBookings.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="overflow-x-auto">
@@ -187,28 +266,196 @@ export default function ViewUmrahVisaBookingPage() {
                         <thead>
                           <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
                             <th className="py-3 px-4">Route</th>
-                            <th className="py-3 px-4">Travel Date</th>
+                            <th className="py-3 px-4">Travel Date & Time</th>
                             <th className="py-3 px-4">Vehicle Type</th>
-                            <th className="py-3 px-4">Passengers</th>
+                            <th className="py-3 px-4">Capacity</th>
                             <th className="py-3 px-4">Price</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {booking.transportBookings.map((t: any) => (
-                            <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                              <td className="py-3 px-4 text-sm font-medium text-gray-900">{t.fromLocation?.destinationName || t.from} → {t.toLocation?.destinationName || t.to}</td>
-                              <td className="py-3 px-4 text-sm text-gray-600">{formatDate(t.travelDate || t.date)}</td>
-                              <td className="py-3 px-4 text-sm text-gray-600">{t.vehicleType}</td>
-                              <td className="py-3 px-4 text-sm text-gray-600">{t.paxCount}</td>
-                              <td className="py-3 px-4 text-sm font-semibold text-gray-900 flex items-center gap-1"><DollarSign className="h-4 w-4 text-green-600" />{t.price ? `${Number(t.price).toFixed(2)}` : 'N/A'}</td>
-                            </tr>
-                          ))}
+                          {booking.transportBookings.map((t: any) => {
+                            const route = t.transportMaster?.route;
+                            const vehicleType = t.transportMaster?.vehicleType;
+                            const travelDateTime = t.travelDateTime ? formatDateTime(t.travelDateTime) : { date: 'N/A', time: 'N/A' };
+                            const price = t.transportMaster?.price ? Number(t.transportMaster.price) : null;
+                            
+                            return (
+                              <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                                  <div className="flex items-center gap-2">
+                                    <Route className="h-4 w-4 text-green-600" />
+                                    {formatTransportRoute(route)}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-sm text-gray-600">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3 text-gray-400" />
+                                      <span>{travelDateTime.date}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3 text-gray-400" />
+                                      <span>{travelDateTime.time}</span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-sm text-gray-600">
+                                  <div className="flex items-center gap-2">
+                                    <Truck className="h-4 w-4 text-gray-400" />
+                                    <span className="font-medium">{vehicleType?.vehicleName || 'N/A'}</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-sm text-gray-600">
+                                  <div className="flex items-center gap-2">
+                                    <Users className="h-4 w-4 text-gray-400" />
+                                    <span>{vehicleType?.paxCount || 'N/A'} PAX</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-sm font-semibold text-gray-900 flex items-center gap-1">
+                                  <DollarSign className="h-4 w-4 text-green-600" />
+                                  {price ? `₹${price.toLocaleString('en-IN')}` : 'N/A'}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   </CardContent>
                 </Card>
               )}
+
+              {/* Movement Details & Ziyaraths */}
+              {Array.isArray(booking.movementDetails) && booking.movementDetails.length > 0 && (() => {
+                const regularMovements = booking.movementDetails.filter((m: any) => m.toLocation?.locationType !== 'ZIYARAT');
+                const ziyaraths = booking.movementDetails.filter((m: any) => m.toLocation?.locationType === 'ZIYARAT');
+                
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Route className="h-5 w-5 text-blue-600" /> 
+                        Movement Details & Ziyaraths ({booking.movementDetails.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Regular Movement Details */}
+                      {regularMovements.length > 0 && (
+                        <div className="mb-6">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Transport Movements</h4>
+                          <div className="space-y-4">
+                            {regularMovements.map((movement: any, index: number) => {
+                              const travelDateTime = formatDateTime(movement.travelDateTime);
+                              return (
+                                <div key={movement.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                        <span className="text-xs font-bold text-blue-600">{movement.routeNumber || `#${index + 1}`}</span>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Route {index + 1}</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {movement.fromCity?.name || 'N/A'} → {movement.toCity?.name || 'N/A'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Travel Date & Time</div>
+                                      <div className="text-sm text-gray-900">
+                                        <div className="flex items-center gap-1">
+                                          <Calendar className="h-3 w-3 text-gray-400" />
+                                          <span>{travelDateTime.date}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <Clock className="h-3 w-3 text-gray-400" />
+                                          <span>{travelDateTime.time}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-200">
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">From</p>
+                                      <div className="space-y-1">
+                                        <p className="text-sm font-medium text-gray-900">
+                                          <MapPin className="h-3 w-3 inline mr-1 text-blue-600" />
+                                          {movement.fromLocation?.name || 'N/A'}
+                                        </p>
+                                        <p className="text-xs text-gray-600 ml-4">{movement.fromCity?.name || 'N/A'}</p>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">To</p>
+                                      <div className="space-y-1">
+                                        <p className="text-sm font-medium text-gray-900">
+                                          <MapPin className="h-3 w-3 inline mr-1 text-green-600" />
+                                          {movement.toLocation?.name || 'N/A'}
+                                        </p>
+                                        <p className="text-xs text-gray-600 ml-4">{movement.toCity?.name || 'N/A'}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ziyaraths */}
+                      {ziyaraths.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Ziyaraths</h4>
+                          <div className="space-y-4">
+                            {ziyaraths.map((ziyarath: any, index: number) => {
+                              const travelDateTime = formatDateTime(ziyarath.travelDateTime);
+                              return (
+                                <div key={ziyarath.id} className="border border-purple-200 rounded-lg p-4 bg-purple-50 hover:bg-purple-100 transition-colors">
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-8 w-8 rounded-full bg-purple-200 flex items-center justify-center">
+                                        <span className="text-xs font-bold text-purple-700">Z{index + 1}</span>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Ziyarath {index + 1}</p>
+                                        <p className="text-sm font-medium text-gray-900">
+                                          {ziyarath.fromCity?.name || 'N/A'} → {ziyarath.toLocation?.name || 'N/A'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1">Date & Time</div>
+                                      <div className="text-sm text-gray-900">
+                                        <div className="flex items-center gap-1">
+                                          <Calendar className="h-3 w-3 text-purple-600" />
+                                          <span>{travelDateTime.date}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <Clock className="h-3 w-3 text-purple-600" />
+                                          <span>{travelDateTime.time}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="pt-3 border-t border-purple-200">
+                                    <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1">Ziyarath Location</p>
+                                    <p className="text-sm font-medium text-gray-900">
+                                      <MapPin className="h-3 w-3 inline mr-1 text-purple-600" />
+                                      {ziyarath.toLocation?.name || 'N/A'}
+                                    </p>
+                                    <p className="text-xs text-gray-600 ml-4 mt-1">{ziyarath.toCity?.name || 'N/A'}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
               {/* Accommodation */}
               <Card>
@@ -222,89 +469,172 @@ export default function ViewUmrahVisaBookingPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Type</p>
-                      <p className="text-sm font-bold text-gray-900 capitalize">{booking.accommodationType}</p>
+                      <p className="text-sm font-bold text-gray-900 capitalize">{booking.accommodationType || 'N/A'}</p>
                     </div>
                   </div>
-                  {booking.accommodationType === 'hotel' && Array.isArray(booking.accommodationDetails?.hotelBookings) && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
-                            <th className="py-3 px-4">Location</th>
-                            <th className="py-3 px-4">Hotel Name</th>
-                            <th className="py-3 px-4">Check-In</th>
-                            <th className="py-3 px-4">Check-Out</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {booking.accommodationDetails.hotelBookings.map((h: any) => (
-                            <tr key={h.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                              <td className="py-3 px-4 text-sm font-medium text-gray-900">{h.location?.destinationName || 'N/A'}</td>
-                              <td className="py-3 px-4 text-sm text-gray-600">{h.hotel?.hotelName || h.hotelId || 'N/A'}</td>
-                              <td className="py-3 px-4 text-sm text-gray-600">{formatDate(h.checkInDate)}</td>
-                              <td className="py-3 px-4 text-sm text-gray-600">{formatDate(h.checkOutDate)}</td>
+
+                  {/* Hotel Details */}
+                  {(() => {
+                    // Debug: Log accommodation type and hotel bookings
+                    const accType = booking.accommodationType;
+                    const hotelBookings = booking.hotelBookings;
+                    
+                    // Check if accommodation type is hotel (case-insensitive)
+                    const isHotel = accType && (accType.toLowerCase() === 'hotel');
+                    
+                    if (!isHotel) {
+                      return null;
+                    }
+                    
+                    // Check if hotelBookings exists and has data
+                    const hasHotelBookings = Array.isArray(hotelBookings) && hotelBookings.length > 0;
+                    
+                    if (!hasHotelBookings) {
+                      return (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <Building className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">No hotel bookings found</p>
+                          <p className="text-xs text-gray-400 mt-2">Accommodation Type: {accType || 'undefined'}</p>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
+                              <th className="py-3 px-4">Location</th>
+                              <th className="py-3 px-4">Hotel Name</th>
+                              <th className="py-3 px-4">Check-In</th>
+                              <th className="py-3 px-4">Check-Out</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                          </thead>
+                          <tbody>
+                            {hotelBookings.map((h: any) => {
+                              // Try multiple ways to get location name
+                              const locationName = h.location?.name 
+                                || h.location?.cityMaster?.name 
+                                || h.location?.city
+                                || 'N/A';
+                              
+                              // Try multiple ways to get hotel name
+                              const hotelName = h.hotel?.name 
+                                || h.hotel?.hotelName
+                                || 'N/A';
+                              
+                              // Try multiple ways to get dates
+                              const checkIn = h.checkInDate || h.checkIn || h.checkInDate;
+                              const checkOut = h.checkOutDate || h.checkOut || h.checkOutDate;
+                              
+                              return (
+                                <tr key={h.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                  <td className="py-3 px-4 text-sm font-medium text-gray-900">
+                                    <div className="flex items-center gap-2">
+                                      <MapPin className="h-4 w-4 text-purple-600" />
+                                      <span>{locationName}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2">
+                                      <Building className="h-4 w-4 text-gray-400" />
+                                      <span>{hotelName}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-sm text-gray-600">
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3 text-gray-400" />
+                                      <span>{formatDate(checkIn)}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-sm text-gray-600">
+                                    <div className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3 text-gray-400" />
+                                      <span>{formatDate(checkOut)}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Iqama Details */}
                   {booking.accommodationType === 'iqama' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Iqama Number</p>
-                        <p className="text-sm font-medium text-gray-900">{booking.accommodationDetails?.iqamaNumber || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Holder Name</p>
-                        <p className="text-sm font-medium text-gray-900">{booking.accommodationDetails?.iqamaName || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Date of Birth</p>
-                        <p className="text-sm font-medium text-gray-900">{formatDate(booking.accommodationDetails?.iqamaDob as any)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Mobile</p>
-                        <p className="text-sm font-medium text-gray-900">{booking.accommodationDetails?.iqamaMobile || 'N/A'}</p>
-                      </div>
-                    </div>
+                    <>
+                      {booking.sponsorIqamaDetails ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Iqama Number</p>
+                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaNumber || 'N/A'}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Holder Name</p>
+                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaSponserName || 'N/A'}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Date of Birth</p>
+                            <p className="text-sm font-medium text-gray-900">{formatDate(booking.sponsorIqamaDetails.sponserDob)}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mobile Number</p>
+                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
+                          </div>
+                          {booking.sponsorIqamaDetails.iqamaNationalShortAddress && (
+                            <div className="space-y-1 sm:col-span-2">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">National Short Address</p>
+                              <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaNationalShortAddress}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <Building className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">No iqama details found</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Passengers & Documents */}
+              {/* Passengers */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2"><Users className="h-5 w-5 text-rose-600" /> Passengers ({booking.passengers?.length || 0})</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {(booking.passengers || []).map((p: any) => (
-                      <div key={p.id} className="border-l-4 border-rose-300 bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-bold text-gray-900">{p.fullName}</div>
-                          {p.isLeadPassenger && (
-                            <Badge className="bg-rose-100 text-rose-800 border-0 text-xs flex items-center gap-1 font-semibold">
-                              <CheckCircle className="h-3 w-3" /> Lead
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3 text-sm">
-                          <div><span className="text-gray-600 font-medium">Passport:</span> <span className="text-gray-900 font-semibold">{p.passportNumber}</span></div>
-                          <div><span className="text-gray-600 font-medium">Nationality:</span> <span className="text-gray-900 font-semibold">{p.nationality}</span></div>
-                        </div>
-                        {Array.isArray(p.documents) && p.documents.length > 0 && (
-                          <div className="mt-2">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Documents ({p.documents.length})</p>
-                            <div className="flex flex-wrap gap-2">
-                              {p.documents.map((d: any) => (
-                                <Badge key={d.id} variant="outline" className="text-xs bg-white border-rose-200 text-gray-700">
-                                  {d.documentType || d.type}
-                                </Badge>
-                              ))}
-                            </div>
+                      <div 
+                        key={p.id} 
+                        className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-900 text-base mb-2">
+                              {p.fullName || 'N/A'}
+                            </h3>
+                            {p.isLeadPassenger && (
+                              <Badge className="bg-yellow-100 text-yellow-800 border-0 text-xs font-semibold mb-2">
+                                Lead Passenger
+                              </Badge>
+                            )}
                           </div>
-                        )}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                            <span className="text-sm text-gray-600 font-medium">Passport Number</span>
+                            <span className="text-sm text-gray-900 font-semibold">{p.passportNumber || 'N/A'}</span>
+                          </div>
+                          <div className="flex items-center justify-between py-2">
+                            <span className="text-sm text-gray-600 font-medium">Nationality</span>
+                            <span className="text-sm text-gray-900 font-semibold">{p.nationality || 'N/A'}</span>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

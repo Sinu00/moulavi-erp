@@ -359,45 +359,72 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
       });
 
       // 4. Create accommodation details based on type
-      if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings) {
-        // Create hotel bookings directly linked to booking
-        await Promise.all(
-          step3Data.hotelBookings.map(async (hotel: any) => {
-            // Get hotel's LocationMaster from pre-fetched map
-            const hotelLocation = locationMap.get(hotel.hotelId);
-            if (!hotelLocation) {
-              throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel LocationMaster not found`);
-            }
+      if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings && Array.isArray(step3Data.hotelBookings) && step3Data.hotelBookings.length > 0) {
+          // Create hotel bookings directly linked to booking
+          const createdHotelBookings = await Promise.all(
+            step3Data.hotelBookings.map(async (hotel: any) => {
+              // Validate required fields
+              if (!hotel.hotelId) {
+                throw new Error(`Missing hotelId in hotel booking`);
+              }
+              if (!hotel.checkInDate) {
+                throw new Error(`Missing checkInDate in hotel booking`);
+              }
+              if (!hotel.checkOutDate) {
+                throw new Error(`Missing checkOutDate in hotel booking`);
+              }
 
-            // Resolve locationId using pre-fetched maps
-            let locationMasterId: string | null = null;
+              // Get hotel's LocationMaster from pre-fetched map
+              const hotelLocation = locationMap.get(hotel.hotelId);
+              if (!hotelLocation) {
+                throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel LocationMaster not found`);
+              }
 
-            // First, try to resolve hotel.locationId (could be LocationMaster ID or City ID)
-            if (hotel.locationId) {
-              locationMasterId = resolveLocationId(hotel.locationId, 'OTHERS');
-            }
+              // Resolve locationId using pre-fetched maps
+              let locationMasterId: string | null = null;
 
-            // If not resolved, use hotel's city to find a LocationMaster
-            if (!locationMasterId && hotelLocation.cityId) {
-              locationMasterId = resolveLocationId(hotelLocation.cityId, 'OTHERS');
-            }
+              // First, try to resolve hotel.locationId (could be LocationMaster ID or City ID)
+              if (hotel.locationId) {
+                locationMasterId = resolveLocationId(hotel.locationId, 'OTHERS');
+              }
 
-            // If still not found, throw error
-            if (!locationMasterId) {
-              throw new Error(`No LocationMaster found for hotel booking. Hotel: ${hotel.hotelId}, Location: ${hotel.locationId}`);
-            }
-            
-            return tx.umrahHotelBooking.create({
-              data: {
-                bookingId: booking.id,
-                locationId: locationMasterId,
-                hotelId: hotel.hotelId,
-                checkInDate: hotel.checkInDate,
-                checkOutDate: hotel.checkOutDate,
-              },
-            });
-          })
-        );
+              // If not resolved, use hotel's city to find a LocationMaster
+              if (!locationMasterId && hotelLocation.cityId) {
+                locationMasterId = resolveLocationId(hotelLocation.cityId, 'OTHERS');
+              }
+
+              // If still not found, throw error
+              if (!locationMasterId) {
+                throw new Error(`No LocationMaster found for hotel booking. Hotel: ${hotel.hotelId}, Location: ${hotel.locationId}`);
+              }
+              
+              // Ensure dates are Date objects
+              const checkInDate = hotel.checkInDate instanceof Date 
+                ? hotel.checkInDate 
+                : new Date(hotel.checkInDate);
+              const checkOutDate = hotel.checkOutDate instanceof Date 
+                ? hotel.checkOutDate 
+                : new Date(hotel.checkOutDate);
+              
+              // Validate dates
+              if (isNaN(checkInDate.getTime())) {
+                throw new Error(`Invalid checkInDate: ${hotel.checkInDate}`);
+              }
+              if (isNaN(checkOutDate.getTime())) {
+                throw new Error(`Invalid checkOutDate: ${hotel.checkOutDate}`);
+              }
+              
+              return tx.umrahHotelBooking.create({
+                data: {
+                  bookingId: booking.id,
+                  locationId: locationMasterId,
+                  hotelId: hotel.hotelId,
+                  checkInDate,
+                  checkOutDate,
+                },
+              });
+            })
+          );
       } else if (step3Data.accommodationType === 'iqama' && step3Data.iqamaDetails) {
         // Create sponsor iqama details
         await tx.umrahSponserIqamaDetails.create({
