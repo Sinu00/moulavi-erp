@@ -1,12 +1,27 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Step4Data, Step2Data, Step1Data, Step3Data, LocationMaster } from '@/lib/umrah/types';
-import { transportRouteMasterAPI } from '@/lib/api';
+import { transportRouteMasterAPI, transportMasterAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { Truck, Loader2, Users, MapPin, Plus, Minus } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { TransportRouteMaster, TransportMaster, RouteType } from '@/types';
 
 interface TransportVehicleSelectionStepProps {
   data: Step4Data;
@@ -18,25 +33,6 @@ interface TransportVehicleSelectionStepProps {
   disabled?: boolean;
 }
 
-interface TransportOption {
-  id: string;
-  routeId: string;
-  route: {
-    id: string;
-    city1: { id: string; name: string };
-    city2: { id: string; name: string };
-    city3?: { id: string; name: string } | null;
-    city4?: { id: string; name: string } | null;
-    routeType: string;
-  };
-  vehicleType: {
-    id: string;
-    vehicleName: string;
-    paxCount: number;
-  };
-  price: number;
-  isActive: boolean;
-}
 
 export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionStepProps> = ({
   data,
@@ -47,10 +43,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   onChange,
   disabled = false,
 }) => {
-  const [loading, setLoading] = useState(false);
-  const [exactMatches, setExactMatches] = useState<TransportOption[]>([]);
-  const [otherOptions, setOtherOptions] = useState<TransportOption[]>([]);
-  // Track selected vehicles with quantities (all options use quantity-based selection)
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [loadingTransports, setLoadingTransports] = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [routeTypeFilter, setRouteTypeFilter] = useState<RouteType | 'all'>('all');
+  const [availableRoutes, setAvailableRoutes] = useState<TransportRouteMaster[]>([]);
+  const [routeTransports, setRouteTransports] = useState<TransportMaster[]>([]);
+  // Track selected vehicles with quantities
   const [selectedVehicles, setSelectedVehicles] = useState<Map<string, number>>(new Map());
 
   // Determine route from airports and hotels
@@ -96,95 +95,112 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     return cityIds;
   }, [step2Data.arrivalAirportId, step2Data.departureAirportId, step2Data.hotelBookings, step3Data?.hotelBookings, locationMasters]);
 
-  // Load transport options
+  // Helper function to format route display
+  const formatRouteDisplay = (route: TransportRouteMaster): string => {
+    const cities = [
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
+    ].filter(Boolean);
+    const routeString = cities.join(' → ');
+    // Format routeType: fulltrip -> Full Trip, airporttocity -> Airport To City, etc.
+    const routeTypeLabel = route.routeType
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // Add space before capital letters
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    return `${routeString} (${routeTypeLabel})`;
+  };
+
+  // Helper function to find route matching determined cities
+  const findRouteByCities = (routes: TransportRouteMaster[], cityIds: string[]): TransportRouteMaster | null => {
+    return routes.find(route => {
+      const routeCities = [
+        route.city1Id,
+        route.city2Id,
+        route.city3Id,
+        route.city4Id,
+      ].filter(Boolean);
+      
+      if (routeCities.length !== cityIds.length) return false;
+      
+      return routeCities.every((cityId, idx) => cityId === cityIds[idx]);
+    }) || null;
+  };
+
+  // Load all active routes
   useEffect(() => {
-    const loadTransportOptions = async () => {
-      if (determinedRoute.length < 2 || !step2Data.passengerCount) {
-        return;
-      }
-
-      setLoading(true);
+    const loadRoutes = async () => {
+      setLoadingRoutes(true);
       try {
-        const response = await transportRouteMasterAPI.matchByCities(determinedRoute);
-        const { exactMatches: exact, otherRoutes: other } = response.data;
+        const response = await transportRouteMasterAPI.getActive();
+        const routes: TransportRouteMaster[] = response.data.transportRouteMasters || [];
+        setAvailableRoutes(routes);
 
-        const passengerCount = step2Data.passengerCount || 0;
-
-        // Helper function to convert route to TransportOption
-        const createTransportOption = (route: any, transport: any): TransportOption => ({
-          id: transport.id,
-          routeId: route.id,
-          route: {
-            id: route.id,
-            city1: route.city1,
-            city2: route.city2,
-            city3: route.city3,
-            city4: route.city4,
-            routeType: route.routeType,
-          },
-          vehicleType: transport.vehicleType,
-          price: Number(transport.price),
-          isActive: transport.isActive,
-        });
-
-        // Helper function to check if route matches exactly
-        const routeMatchesExactly = (route: any): boolean => {
-          const routeCities = [
-            route.city1?.id,
-            route.city2?.id,
-            route.city3?.id,
-            route.city4?.id,
-          ].filter(Boolean);
-          
-          if (routeCities.length !== determinedRoute.length) return false;
-          
-          return routeCities.every((cityId, idx) => cityId === determinedRoute[idx]);
-        };
-
-        // Process exact matches: route matches exactly + capacity >= passenger count
-        const exactOptions: TransportOption[] = [];
-        (exact || []).forEach((route: any) => {
-          if (!route.transports || route.transports.length === 0) return;
-          
-          route.transports.forEach((transport: any) => {
-            if (!transport.isActive) return;
-            
-            const vehiclePax = transport.vehicleType?.paxCount || 0;
-            // Only show if capacity >= passenger count
-            if (vehiclePax >= passengerCount) {
-              exactOptions.push(createTransportOption(route, transport));
-            }
-          });
-        });
-
-        // Process other options: fulltrip routes that don't match exactly
-        const otherOptionsList: TransportOption[] = [];
-        (other || []).forEach((route: any) => {
-          if (!route.transports || route.transports.length === 0) return;
-          // Only show fulltrip routes
-          if (route.routeType !== 'fulltrip') return;
-          // Skip if it matches exactly (already in exact matches)
-          if (routeMatchesExactly(route)) return;
-          
-          route.transports.forEach((transport: any) => {
-            if (transport.isActive) {
-              otherOptionsList.push(createTransportOption(route, transport));
-            }
-          });
-        });
-
-        setExactMatches(exactOptions);
-        setOtherOptions(otherOptionsList);
+        // Auto-select determined route if it exists
+        if (determinedRoute.length >= 2) {
+          const matchingRoute = findRouteByCities(routes, determinedRoute);
+          if (matchingRoute) {
+            setSelectedRouteId(matchingRoute.id);
+          }
+        }
       } catch (error: any) {
-        console.error('Error loading transport options:', error);
-        toast.error('Failed to load transport options');
+        console.error('Error loading routes:', error);
+        toast.error('Failed to load routes');
       } finally {
-        setLoading(false);
+        setLoadingRoutes(false);
       }
     };
 
-    loadTransportOptions();
-  }, [determinedRoute, step2Data.passengerCount]);
+    loadRoutes();
+  }, []);
+
+  // Filter routes by routeType
+  const filteredRoutes = useMemo(() => {
+    if (routeTypeFilter === 'all') {
+      return availableRoutes;
+    }
+    return availableRoutes.filter(route => route.routeType === routeTypeFilter);
+  }, [availableRoutes, routeTypeFilter]);
+
+  // Load transports when route is selected
+  useEffect(() => {
+    const loadTransports = async () => {
+      if (!selectedRouteId) {
+        setRouteTransports([]);
+        setSelectedVehicles(new Map()); // Clear selections when no route is selected
+        return;
+      }
+
+      setLoadingTransports(true);
+      try {
+        const response = await transportMasterAPI.getByRoute(selectedRouteId);
+        const transports: TransportMaster[] = response.data.transportMasters || [];
+        setRouteTransports(transports);
+        
+        // Filter selectedVehicles to only include transports that are still in the new route
+        setSelectedVehicles(prev => {
+          const filtered = new Map<string, number>();
+          prev.forEach((quantity, transportId) => {
+            if (transports.some(t => t.id === transportId)) {
+              filtered.set(transportId, quantity);
+            }
+          });
+          return filtered;
+        });
+      } catch (error: any) {
+        console.error('Error loading transports:', error);
+        toast.error('Failed to load transport vehicles');
+        setRouteTransports([]);
+        setSelectedVehicles(new Map());
+      } finally {
+        setLoadingTransports(false);
+      }
+    };
+
+    loadTransports();
+  }, [selectedRouteId]);
 
   // Initialize selected vehicles from data when component mounts or data changes
   useEffect(() => {
@@ -194,6 +210,11 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
         vehicleMap.set(st.transportId, st.quantity);
       });
       setSelectedVehicles(vehicleMap);
+      
+      // Set the route ID from the first selected transport if available
+      if (data.selectedTransports[0]?.routeId && !selectedRouteId) {
+        setSelectedRouteId(data.selectedTransports[0].routeId);
+      }
     } else if (data.selectedTransport) {
       // Backward compatibility: convert single selection to quantity-based
       const vehicleMap = new Map<string, number>();
@@ -203,18 +224,7 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
       // Clear selection if no data
       setSelectedVehicles(new Map());
     }
-  }, [data.selectedTransports, data.selectedTransport]);
-
-  const getRouteString = (route: TransportOption['route']) => {
-    const cities = [
-      route.city1?.name,
-      route.city2?.name,
-      route.city3?.name,
-      route.city4?.name,
-    ].filter(Boolean);
-    // Return full city names with hyphens (e.g., "jeddah - makkah - madinah - jeddah")
-    return cities.map(city => city?.toLowerCase() || '').join(' - ');
-  };
+  }, [data.selectedTransports, data.selectedTransport, selectedRouteId]);
 
   const handleQuantityChange = (transportId: string, delta: number) => {
     const currentQty = selectedVehicles.get(transportId) || 0;
@@ -229,16 +239,15 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     setSelectedVehicles(newMap);
 
     // Update parent data - always use selectedTransports format
-    const allOptions = [...exactMatches, ...otherOptions];
     const selectedTransports = Array.from(newMap.entries())
       .map(([transportId, quantity]) => {
-        const transport = allOptions.find(t => t.id === transportId);
-        if (!transport) return null;
+        const transport = routeTransports.find(t => t.id === transportId);
+        if (!transport || !transport.vehicleType) return null;
         return {
           routeId: transport.routeId,
           transportId: transport.id,
           vehicleTypeId: transport.vehicleType.id,
-          price: transport.price,
+          price: Number(transport.price),
           quantity,
         };
       })
@@ -257,11 +266,11 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   };
 
 
-  if (loading) {
+  if (loadingRoutes) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        <span className="ml-3 text-gray-600">Loading transport options...</span>
+        <span className="ml-3 text-gray-600">Loading routes...</span>
       </div>
     );
   }
@@ -276,32 +285,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     );
   }
 
-  if (!step2Data.passengerCount) {
-    return (
-      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <p className="text-yellow-800">
-          Please enter the number of passengers in Step 2 to see transport options.
-        </p>
-      </div>
-    );
-  }
-
   const routeDisplay = determinedRoute.map((cityId, idx) => {
     const city = locationMasters.find(lm => lm.cityMaster?.id === cityId);
     return city?.cityMaster?.name || city?.city || `City ${idx + 1}`;
   }).join(' → ');
 
-  const allOptions = [...exactMatches, ...otherOptions];
-
-  if (allOptions.length === 0) {
-    return (
-      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <p className="text-yellow-800">
-          No transport options available for your route. Please contact support.
-        </p>
-      </div>
-    );
-  }
+  const selectedRoute = availableRoutes.find(r => r.id === selectedRouteId);
+  const routeNotFound = determinedRoute.length >= 2 && !selectedRoute;
 
   return (
     <div className="space-y-6">
@@ -319,149 +309,147 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
         </div>
       </div>
 
-      {/* Exact Route Matches */}
-      {exactMatches.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Exact Route Matches
-          </h3>
-          <div className="grid grid-cols-4 gap-4">
-            {exactMatches.map((transport) => {
-              const quantity = selectedVehicles.get(transport.id) || 0;
-              return (
-                <SimpleTransportCard
-                  key={transport.id}
-                  transport={transport}
-                  quantity={quantity}
-                  onQuantityChange={(delta) => handleQuantityChange(transport.id, delta)}
-                  getRouteString={getRouteString}
-                  disabled={disabled}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Route Type Filter */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-gray-700">Filter by Route Type</label>
+        <Select
+          value={routeTypeFilter}
+          onValueChange={(value) => setRouteTypeFilter(value as RouteType | 'all')}
+          disabled={disabled || loadingRoutes}
+        >
+          <SelectTrigger className="w-full max-w-xs">
+            <SelectValue placeholder="Select route type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Route Types</SelectItem>
+            <SelectItem value="fulltrip">Full Trip</SelectItem>
+            <SelectItem value="airporttocity">Airport to City</SelectItem>
+            <SelectItem value="citytocity">City to City</SelectItem>
+            <SelectItem value="citytoairport">City to Airport</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-      {/* Other Fulltrip Options */}
-      {otherOptions.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Other Fulltrip Options
-          </h3>
-          <div className="grid grid-cols-4 gap-4">
-            {otherOptions.map((transport) => {
-              const quantity = selectedVehicles.get(transport.id) || 0;
-              return (
-                <SimpleTransportCard
-                  key={transport.id}
-                  transport={transport}
-                  quantity={quantity}
-                  onQuantityChange={(delta) => handleQuantityChange(transport.id, delta)}
-                  getRouteString={getRouteString}
-                  disabled={disabled}
-                />
-              );
-            })}
-          </div>
+      {/* Route Selector */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-gray-700">Select Route</label>
+        <Select
+          value={selectedRouteId || ''}
+          onValueChange={(value) => setSelectedRouteId(value || null)}
+          disabled={disabled || loadingRoutes || filteredRoutes.length === 0}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a route" />
+          </SelectTrigger>
+          <SelectContent>
+            {filteredRoutes.length === 0 ? (
+              <SelectItem value="__no_routes__" disabled>
+                No routes available
+              </SelectItem>
+            ) : (
+              filteredRoutes.map((route) => (
+                <SelectItem key={route.id} value={route.id}>
+                  {formatRouteDisplay(route)}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+        {routeNotFound && (
+          <p className="text-sm text-yellow-600 mt-1">
+            No exact route found. Please select a route from the dropdown above.
+          </p>
+        )}
+      </div>
+
+      {/* Transport Table */}
+      {selectedRouteId && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-900">Available Transport Vehicles</h3>
+          {loadingTransports ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              <span className="ml-3 text-gray-600">Loading transport vehicles...</span>
+            </div>
+          ) : routeTransports.length === 0 ? (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-800">
+                No transport vehicles available for this route.
+              </p>
+            </div>
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Vehicle Name</TableHead>
+                    <TableHead>Capacity</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Quantity</TableHead>
+                    <TableHead>Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {routeTransports.map((transport) => {
+                    if (!transport.vehicleType) return null;
+                    const quantity = selectedVehicles.get(transport.id) || 0;
+                    const price = Number(transport.price);
+                    const total = price * quantity;
+                    return (
+                      <TableRow key={transport.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Truck className="h-4 w-4 text-gray-400" />
+                            <span className="font-medium">{transport.vehicleType.vehicleName}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Users className="h-4 w-4 text-gray-400" />
+                            <span>{transport.vehicleType.paxCount} PAX</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-semibold">₹{price.toLocaleString('en-IN')}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleQuantityChange(transport.id, -1)}
+                              disabled={disabled || quantity === 0}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="text-sm font-semibold text-gray-900 w-8 text-center">
+                              {quantity}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleQuantityChange(transport.id, 1)}
+                              disabled={disabled}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-bold">₹{total.toLocaleString('en-IN')}</span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-interface SimpleTransportCardProps {
-  transport: TransportOption;
-  quantity: number;
-  onQuantityChange: (delta: number) => void;
-  getRouteString: (route: TransportOption['route']) => string;
-  disabled?: boolean;
-}
-
-const SimpleTransportCard: React.FC<SimpleTransportCardProps> = ({
-  transport,
-  quantity,
-  onQuantityChange,
-  getRouteString,
-  disabled,
-}) => {
-  const routeString = getRouteString(transport.route);
-  const isSelected = quantity > 0;
-
-  return (
-    <Card className={`h-full hover:shadow-lg transition-all flex flex-col ${
-      isSelected 
-        ? 'ring-2 ring-blue-500 border-blue-500 shadow-md bg-blue-50' 
-        : 'bg-white border-gray-200 hover:border-gray-300'
-    }`}>
-      <CardContent className="p-4 flex flex-col h-full">
-        {/* Route */}
-        <div className="mb-3">
-          <h4 className="font-semibold text-gray-900 text-sm">
-            {routeString}
-          </h4>
-        </div>
-
-        {/* Vehicle Name */}
-        <div className="mb-3 flex-1">
-          <div className="flex items-center space-x-2">
-            <Truck className="h-4 w-4 text-gray-400" />
-            <span className="text-sm font-semibold text-gray-900">
-              {transport.vehicleType.vehicleName}
-            </span>
-          </div>
-        </div>
-
-        {/* Price */}
-        <div className="mb-3">
-          <div className="flex items-baseline space-x-1">
-            <span className="text-sm text-gray-600">Price:</span>
-            <span className="text-lg font-bold text-gray-900">
-              ₹{transport.price.toLocaleString('en-IN')}
-            </span>
-          </div>
-        </div>
-
-        {/* Passenger Count */}
-        <div className="mb-3">
-          <div className="flex items-center space-x-2">
-            <Users className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-600">
-              {transport.vehicleType.paxCount} PAX
-            </span>
-          </div>
-        </div>
-
-        {/* Quantity Selector */}
-        <div className="pt-3 border-t border-gray-200">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-600">Quantity:</span>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onQuantityChange(-1)}
-                disabled={disabled || quantity === 0}
-                className="h-7 w-7 p-0"
-              >
-                <Minus className="h-3 w-3" />
-              </Button>
-              <span className="text-sm font-semibold text-gray-900 w-8 text-center">
-                {quantity}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onQuantityChange(1)}
-                disabled={disabled}
-                className="h-7 w-7 p-0"
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
