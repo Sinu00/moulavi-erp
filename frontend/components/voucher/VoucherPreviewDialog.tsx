@@ -22,10 +22,13 @@ import {
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Minus, Trash2, Truck, Users } from 'lucide-react';
+import { Plus, Minus, Trash2, Truck, Users, MapPin, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { umrahVisaAPI, transportMasterAPI } from '@/lib/api';
+import { umrahVisaAPI, transportMasterAPI, transportRouteMasterAPI } from '@/lib/api';
 import api from '@/lib/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { RouteType } from '@/types';
 
 interface VoucherPreviewDialogProps {
   open: boolean;
@@ -117,8 +120,12 @@ export function VoucherPreviewDialog({
     flightDetails: [] as FlightDetail[],
     transportOptions: [] as TransportOption[],
   });
-  const [availableTransports, setAvailableTransports] = useState<any[]>([]);
   const [loadingTransports, setLoadingTransports] = useState(false);
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [routeTypeFilter, setRouteTypeFilter] = useState<RouteType | 'all'>('all');
+  const [availableRoutes, setAvailableRoutes] = useState<any[]>([]);
+  const [routeTransports, setRouteTransports] = useState<any[]>([]);
 
   useEffect(() => {
     if (open && bookingId) {
@@ -196,8 +203,13 @@ export function VoucherPreviewDialog({
         transportOptions: (data.transportOptions || []) as TransportOption[],
       });
       
-      // Load all available transport masters
-      loadAvailableTransports();
+      // Auto-select route from existing transport options if available
+      if (data.transportOptions && data.transportOptions.length > 0) {
+        const firstTransportRouteId = data.transportOptions[0]?.routeId;
+        if (firstTransportRouteId) {
+          setSelectedRouteId(firstTransportRouteId);
+        }
+      }
     } catch (error: any) {
       console.error('Error loading voucher data:', error);
       toast.error(error.message || 'Failed to load voucher data');
@@ -231,37 +243,78 @@ export function VoucherPreviewDialog({
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const loadAvailableTransports = async () => {
-    try {
-      setLoadingTransports(true);
-      // Fetch all active transport masters
-      const response = await transportMasterAPI.getAll({ isActive: 'true', limit: '1000' });
-      const transportMasters = response.data.transportMasters || [];
-      
-      // Format to match our TransportOption structure
-      const allTransports = transportMasters.map((tm: any) => ({
-        id: tm.id,
-        routeId: tm.routeId,
-        route: tm.route ? {
-          id: tm.route.id,
-          city1: tm.route.city1,
-          city2: tm.route.city2,
-          city3: tm.route.city3,
-          city4: tm.route.city4,
-          routeType: tm.route.routeType,
-        } : null,
-        vehicleType: tm.vehicleType,
-        price: Number(tm.price),
-        isActive: tm.isActive,
-      }));
-      
-      setAvailableTransports(allTransports);
-    } catch (error: any) {
-      console.error('Error loading available transports:', error);
-      toast.error('Failed to load transport options');
-    } finally {
-      setLoadingTransports(false);
+  // Load all active routes
+  useEffect(() => {
+    if (open) {
+      loadRoutes();
     }
+  }, [open]);
+
+  const loadRoutes = async () => {
+    try {
+      setLoadingRoutes(true);
+      const response = await transportRouteMasterAPI.getActive();
+      const routes = response.data.transportRouteMasters || [];
+      setAvailableRoutes(routes);
+      
+      // Auto-select first route if available
+      if (routes.length > 0 && !selectedRouteId) {
+        setSelectedRouteId(routes[0].id);
+      }
+    } catch (error: any) {
+      console.error('Error loading routes:', error);
+      toast.error('Failed to load routes');
+    } finally {
+      setLoadingRoutes(false);
+    }
+  };
+
+  // Filter routes by routeType
+  const filteredRoutes = availableRoutes.filter(route => {
+    if (routeTypeFilter === 'all') return true;
+    return route.routeType === routeTypeFilter;
+  });
+
+  // Load transports when route is selected
+  useEffect(() => {
+    const loadTransports = async () => {
+      if (!selectedRouteId) {
+        setRouteTransports([]);
+        return;
+      }
+
+      setLoadingTransports(true);
+      try {
+        const response = await transportMasterAPI.getByRoute(selectedRouteId);
+        const transports = response.data.transportMasters || [];
+        setRouteTransports(transports);
+      } catch (error: any) {
+        console.error('Error loading transports:', error);
+        toast.error('Failed to load transport vehicles');
+        setRouteTransports([]);
+      } finally {
+        setLoadingTransports(false);
+      }
+    };
+
+    loadTransports();
+  }, [selectedRouteId]);
+
+  // Helper function to format route display
+  const formatRouteDisplay = (route: any): string => {
+    const cities = [
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
+    ].filter(Boolean);
+    const routeString = cities.join(' → ');
+    const routeTypeLabel = route.routeType
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .split(' ')
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    return `${routeString} (${routeTypeLabel})`;
   };
 
   const getRouteString = (route: TransportOption['route'] | null) => {
@@ -276,49 +329,50 @@ export function VoucherPreviewDialog({
     return cities.map(city => city?.toLowerCase() || '').join(' - ');
   };
 
-  const handleTransportChange = (index: number, transportId: string) => {
-    const selectedTransport = availableTransports.find(t => t.id === transportId);
-    if (!selectedTransport) return;
 
-    const updated = [...voucherData.transportOptions];
-    updated[index] = {
-      transportId: selectedTransport.id,
-      routeId: selectedTransport.routeId,
-      route: selectedTransport.route,
-      vehicleType: selectedTransport.vehicleType,
-      price: selectedTransport.price,
-      quantity: updated[index]?.quantity || 1,
-    };
-    setVoucherData({ ...voucherData, transportOptions: updated });
+  const handleTransportQuantityChange = (transportId: string, delta: number) => {
+    const existingIndex = voucherData.transportOptions.findIndex(t => t.transportId === transportId);
+    
+    if (existingIndex >= 0) {
+      // Update existing transport quantity
+      const updated = [...voucherData.transportOptions];
+      const currentQty = updated[existingIndex]?.quantity || 0;
+      const newQty = Math.max(0, currentQty + delta);
+      
+      if (newQty === 0) {
+        // Remove if quantity becomes 0
+        updated.splice(existingIndex, 1);
+      } else {
+        updated[existingIndex] = { ...updated[existingIndex], quantity: newQty };
+      }
+      setVoucherData({ ...voucherData, transportOptions: updated });
+    } else {
+      // Add new transport
+      const transport = routeTransports.find(t => t.id === transportId);
+      if (transport && transport.vehicleType) {
+        const newTransport: TransportOption = {
+          transportId: transport.id,
+          routeId: transport.routeId,
+          route: transport.route ? {
+            id: transport.route.id,
+            city1: transport.route.city1,
+            city2: transport.route.city2,
+            city3: transport.route.city3,
+            city4: transport.route.city4,
+            routeType: transport.route.routeType,
+          } : null,
+          vehicleType: transport.vehicleType,
+          price: Number(transport.price),
+          quantity: 1,
+        };
+        setVoucherData({
+          ...voucherData,
+          transportOptions: [...voucherData.transportOptions, newTransport],
+        });
+      }
+    }
   };
 
-  const handleTransportQuantityChange = (index: number, delta: number) => {
-    const updated = [...voucherData.transportOptions];
-    const currentQty = updated[index]?.quantity || 0;
-    const newQty = Math.max(1, currentQty + delta);
-    updated[index] = { ...updated[index], quantity: newQty };
-    setVoucherData({ ...voucherData, transportOptions: updated });
-  };
-
-  const addTransport = () => {
-    const newTransport: TransportOption = {
-      transportId: '',
-      routeId: '',
-      route: null,
-      vehicleType: null,
-      price: 0,
-      quantity: 1,
-    };
-    setVoucherData({
-      ...voucherData,
-      transportOptions: [...voucherData.transportOptions, newTransport],
-    });
-  };
-
-  const removeTransport = (index: number) => {
-    const updated = voucherData.transportOptions.filter((_, i) => i !== index);
-    setVoucherData({ ...voucherData, transportOptions: updated });
-  };
 
   const handleHotelScheduleChange = (index: number, field: keyof HotelSchedule, value: any) => {
     const updated = [...voucherData.hotelSchedules];
@@ -722,179 +776,181 @@ export function VoucherPreviewDialog({
               )}
             </div>
 
-            {/* Transport Options - Moved to bottom */}
+            {/* Transport Options */}
             <div className="space-y-4 p-4 border rounded-lg bg-white">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg">Transport Options</h3>
-                <Button type="button" size="sm" onClick={addTransport} variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Transport
-                </Button>
-              </div>
-              {loadingTransports ? (
-                <p className="text-sm text-gray-500 py-4">Loading transport options...</p>
-              ) : (
-                <div className="space-y-4">
-                  {/* Selected Transports */}
-                  {voucherData.transportOptions.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">Selected Transports</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {voucherData.transportOptions.map((transport, idx) => {
-                          return (
-                            <Card key={idx} className="border-2 border-blue-500 bg-blue-50">
-                              <CardContent className="p-3">
-                                <div className="space-y-2">
-                                  <div>
-                                    <div className="text-xs text-gray-600 font-medium mb-0.5">Route</div>
-                                    <div className="text-xs font-semibold text-gray-900">
-                                      {transport.route ? getRouteString(transport.route) : 'No route'}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <div className="flex items-center space-x-1">
-                                      <Truck className="h-3 w-3 text-gray-400" />
-                                      <span className="text-gray-700">{transport.vehicleType?.vehicleName || 'N/A'}</span>
-                                    </div>
-                                    <div className="flex items-center space-x-1">
-                                      <Users className="h-3 w-3 text-gray-400" />
-                                      <span className="text-gray-700">{transport.vehicleType?.paxCount || 0} PAX</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-gray-600">Price:</span>
-                                    <span className="font-semibold">₹{transport.price.toLocaleString('en-IN')}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between pt-1 border-t">
-                                    <span className="text-xs text-gray-600">Qty:</span>
-                                    <div className="flex items-center space-x-1">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleTransportQuantityChange(idx, -1)}
-                                        disabled={transport.quantity <= 1}
-                                        className="h-6 w-6 p-0"
-                                      >
-                                        <Minus className="h-3 w-3" />
-                                      </Button>
-                                      <Input
-                                        type="number"
-                                        value={transport.quantity}
-                                        onChange={(e) => {
-                                          const qty = Math.max(1, parseInt(e.target.value) || 1);
-                                          const updated = [...voucherData.transportOptions];
-                                          updated[idx] = { ...updated[idx], quantity: qty };
-                                          setVoucherData({ ...voucherData, transportOptions: updated });
-                                        }}
-                                        className="w-12 h-6 text-center text-xs p-0"
-                                        min="1"
-                                      />
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleTransportQuantityChange(idx, 1)}
-                                        className="h-6 w-6 p-0"
-                                      >
-                                        <Plus className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center justify-between pt-1 border-t">
-                                    <span className="text-xs text-gray-600">Total:</span>
-                                    <span className="text-xs font-bold">₹{(transport.price * transport.quantity).toLocaleString('en-IN')}</span>
-                                  </div>
-                                  <div className="pt-1">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => removeTransport(idx)}
-                                      className="w-full h-6 text-xs text-red-500 hover:text-red-700"
-                                    >
-                                      <Trash2 className="h-3 w-3 mr-1" />
-                                      Remove
-                                    </Button>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Available Transport Masters */}
+              <h3 className="font-semibold text-lg">Transport Options</h3>
+              
+              {/* Route Summary */}
+              {selectedRouteId && (
+                <div className="flex items-center space-x-3 pb-4 border-b border-gray-200">
+                  <MapPin className="h-5 w-5 text-red-600" />
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-semibold text-gray-700">
-                        {voucherData.transportOptions.length > 0 ? 'Available Transport Options' : 'Select Transport'}
-                      </h4>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
-                      {availableTransports.map((transport) => {
-                        const isSelected = voucherData.transportOptions.some(t => t.transportId === transport.id);
-                        return (
-                          <Card 
-                            key={transport.id} 
-                            className={`cursor-pointer hover:shadow-md transition-all ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}`}
-                            onClick={() => {
-                              if (!isSelected) {
-                                // Add new transport
-                                const newTransport: TransportOption = {
-                                  transportId: transport.id,
-                                  routeId: transport.routeId,
-                                  route: transport.route,
-                                  vehicleType: transport.vehicleType,
-                                  price: transport.price,
-                                  quantity: 1,
-                                };
-                                setVoucherData({
-                                  ...voucherData,
-                                  transportOptions: [...voucherData.transportOptions, newTransport],
-                                });
-                              }
-                            }}
-                          >
-                            <CardContent className="p-3">
-                              <div className="space-y-1.5">
-                                <div>
-                                  <div className="text-xs text-gray-600 font-medium mb-0.5">Route</div>
-                                  <div className="text-xs font-semibold text-gray-900">
-                                    {transport.route ? getRouteString(transport.route) : 'No route'}
-                                  </div>
-                                </div>
-                                <div className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center space-x-1">
-                                    <Truck className="h-3 w-3 text-gray-400" />
-                                    <span className="text-gray-700">{transport.vehicleType?.vehicleName || 'N/A'}</span>
-                                  </div>
-                                  <div className="flex items-center space-x-1">
-                                    <Users className="h-3 w-3 text-gray-400" />
-                                    <span className="text-gray-700">{transport.vehicleType?.paxCount || 0} PAX</span>
-                                  </div>
-                                </div>
-                                <div className="pt-1 border-t">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-600">Price</span>
-                                    <span className="text-xs font-bold">₹{transport.price.toLocaleString('en-IN')}</span>
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <div className="pt-1">
-                                    <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">Selected</span>
-                                  </div>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {formatRouteDisplay(availableRoutes.find(r => r.id === selectedRouteId) || {})}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {voucherData.paxCount || 0} Passengers
+                    </p>
                   </div>
                 </div>
+              )}
+
+              {/* Filters */}
+              {loadingRoutes ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-700">Filter by Route Type</label>
+                    <Select
+                      value={routeTypeFilter}
+                      onValueChange={(value) => setRouteTypeFilter(value as RouteType | 'all')}
+                      disabled={loadingRoutes}
+                    >
+                      <SelectTrigger className="w-full border-gray-300">
+                        <SelectValue placeholder="Select route type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Route Types</SelectItem>
+                        <SelectItem value="fulltrip">Full Trip</SelectItem>
+                        <SelectItem value="airporttocity">Airport to City</SelectItem>
+                        <SelectItem value="citytocity">City to City</SelectItem>
+                        <SelectItem value="citytoairport">City to Airport</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-gray-700">Select Route</label>
+                    <Select
+                      value={selectedRouteId || ''}
+                      onValueChange={(value) => setSelectedRouteId(value || null)}
+                      disabled={loadingRoutes || filteredRoutes.length === 0}
+                    >
+                      <SelectTrigger className="w-full border-gray-300">
+                        <SelectValue placeholder="Select a route" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredRoutes.length === 0 ? (
+                          <SelectItem value="__no_routes__" disabled>
+                            No routes available
+                          </SelectItem>
+                        ) : (
+                          filteredRoutes.map((route) => (
+                            <SelectItem key={route.id} value={route.id}>
+                              {formatRouteDisplay(route)}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* Transport Table */}
+              {selectedRouteId && (
+                <>
+                  {loadingTransports ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-5 w-5 animate-spin text-red-600" />
+                      <span className="ml-2 text-sm text-gray-600">Loading transport vehicles...</span>
+                    </div>
+                  ) : routeTransports.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Truck className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600">No transport vehicles available for this route.</p>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="font-medium text-gray-700">Vehicle Name</TableHead>
+                            <TableHead className="font-medium text-gray-700">Capacity</TableHead>
+                            <TableHead className="font-medium text-gray-700">Price</TableHead>
+                            <TableHead className="font-medium text-gray-700">Quantity</TableHead>
+                            <TableHead className="font-medium text-gray-700 text-right">Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {routeTransports.map((transport) => {
+                            if (!transport.vehicleType) return null;
+                            const selectedTransport = voucherData.transportOptions.find(t => t.transportId === transport.id);
+                            const quantity = selectedTransport?.quantity || 0;
+                            const price = Number(transport.price);
+                            const total = price * quantity;
+                            const isSelected = quantity > 0;
+                            return (
+                              <TableRow 
+                                key={transport.id}
+                                className={isSelected ? 'bg-red-50' : ''}
+                              >
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <Truck className={`h-4 w-4 ${isSelected ? 'text-red-600' : 'text-gray-400'}`} />
+                                    <span className="font-medium text-gray-900">{transport.vehicleType.vehicleName}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <Users className="h-4 w-4 text-gray-400" />
+                                    <span className="text-gray-700">{transport.vehicleType.paxCount} PAX</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="font-medium text-gray-900">₹{price.toLocaleString('en-IN')}</span>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleTransportQuantityChange(transport.id, -1)}
+                                      disabled={quantity === 0}
+                                      className="h-7 w-7 p-0 border-gray-300 hover:bg-red-50 hover:border-red-300"
+                                    >
+                                      <Minus className="h-3 w-3" />
+                                    </Button>
+                                    <span className={`text-sm font-medium w-8 text-center ${
+                                      isSelected ? 'text-red-600' : 'text-gray-900'
+                                    }`}>
+                                      {quantity}
+                                    </span>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleTransportQuantityChange(transport.id, 1)}
+                                      className="h-7 w-7 p-0 border-gray-300 hover:bg-red-50 hover:border-red-300"
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span className={`font-semibold ${
+                                    isSelected ? 'text-red-600' : 'text-gray-900'
+                                  }`}>
+                                    ₹{total.toLocaleString('en-IN')}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
