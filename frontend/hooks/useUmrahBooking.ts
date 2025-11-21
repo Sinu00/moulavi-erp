@@ -168,41 +168,34 @@ export const useUmrahBooking = () => {
           }
         }
       } 
-      // Step 5: Send ALL data to create-booking endpoint
+      // Step 5: Send ALL data to create-booking endpoint with ZIP file (FormData, same as group booking)
       else if (stepNumber === 5) {
-        const payload = {
-          partyId,
-          step1: bookingState.step1Data,
-          step2: bookingState.step2Data,
-          step3: bookingState.step3Data,
-          step4: bookingState.step4Data.selectedTransport || bookingState.step4Data.selectedTransports ? {
-            selectedTransport: bookingState.step4Data.selectedTransport,
-            selectedTransports: bookingState.step4Data.selectedTransports,
-          } : undefined,
-          step5: {
-            passengerCount: bookingState.step5Data.passengers.length,
-            passengers: bookingState.step5Data.passengers.map(p => ({
-              fullName: p.fullName,
-              isLeadPassenger: p.isLeadPassenger,
-              documents: {
-                panCardPhoto: p.panCardPhoto,
-                passportFront: p.passportFront,
-                passportBack: p.passportBack,
-                iqamaPhoto: p.iqamaPhoto,
-                hotelBooking: p.hotelBooking,
-                ticketCopy: p.ticketCopy,
-              }
-            })),
-          },
-        };
+        // Create FormData for file upload
+        const formData = new FormData();
+        
+        // Add ZIP file if present
+        const zipFile = bookingState.step5Data.panCardZipFile;
+        if (zipFile) {
+          formData.append('panCardZipFile', zipFile);
+        }
+
+        // Add JSON data as string
+        formData.append('partyId', partyId);
+        formData.append('step1', JSON.stringify(bookingState.step1Data));
+        formData.append('step2', JSON.stringify(bookingState.step2Data));
+        formData.append('step3', JSON.stringify(bookingState.step3Data));
+        formData.append('step4', JSON.stringify({
+          selectedTransport: bookingState.step4Data.selectedTransport,
+          selectedTransports: bookingState.step4Data.selectedTransports,
+        }));
 
         const response = await fetch(`${API_URL}/umrah-visa/create-booking`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            // Don't set Content-Type - browser will set it with boundary for FormData
           },
-          body: JSON.stringify(payload),
+          body: formData,
         });
 
         const data = await response.json();

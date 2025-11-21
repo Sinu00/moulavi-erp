@@ -174,22 +174,9 @@ export const step4Schema = z.object({
   })).optional(),
 });
 
-// Step 5 schema - used by individual only (passengers and documents)
-export const step5Schema = z.object({
-  passengerCount: z.number().min(1).max(50),
-  passengers: z.array(z.object({
-    fullName: z.string().min(1).max(255),
-    isLeadPassenger: z.boolean().default(false),
-    documents: z.object({
-      panCardPhoto: z.any().optional(),
-      passportFront: z.any().optional(),
-      passportBack: z.any().optional(),
-      iqamaPhoto: z.any().optional(),
-      hotelBooking: z.any().optional(),
-      ticketCopy: z.any().optional(),
-    }).optional(),
-  })),
-});
+// Step 5 schema - used by individual only (ZIP file upload, same as group booking)
+// No validation needed - ZIP file is handled via multer middleware
+export const step5Schema = z.object({}).optional();
 
 // Group Step 1 schema
 export const groupStep1Schema = z.object({

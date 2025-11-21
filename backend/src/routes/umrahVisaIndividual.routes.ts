@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { z } from 'zod';
+import multer from 'multer';
 import {
   prisma,
   validateDateRange,
@@ -9,6 +10,7 @@ import {
   step4Schema,
   step5Schema,
   FLIGHT_NUMBER_REGEX,
+  upload,
 } from './umrahVisa/shared';
 import { combineDateTime, splitDateTime } from '../utils/datetime';
 
@@ -36,19 +38,14 @@ const step1Schema = z.object({
 });
 
 // Complete booking schema - combines all steps
+// Note: step5 is now optional and only used for ZIP file upload (handled via multer)
 const completeBookingSchema = z.object({
   partyId: z.string().uuid(),
   step1: step1Schema,
   step2: step2Schema,
   step3: step3Schema,
   step4: step4Schema.optional(), // Transport selection (optional)
-  step5: step5Schema.optional(), // Passengers and documents (new structure)
-}).refine((data) => {
-  // Either step5 (new structure) or step4 with passengers (old structure) must be provided
-  return !!(data.step5 || (data.step4 && data.step4.passengers && data.step4.passengerCount));
-}, {
-  message: "Either step5 (passengers) or step4 with passengers (backward compatibility) must be provided",
-  path: ["step5"]
+  step5: step5Schema.optional(), // ZIP file upload (handled via multer, not in JSON)
 });
 
 // POST /api/umrah-visa/step1 - Step 1: Validation Only (No DB writes)
@@ -131,20 +128,43 @@ router.post('/step3', authenticate, async (req, res) => {
 });
 
 // POST /api/umrah-visa/create-booking - Create complete booking (all steps in one transaction)
-router.post('/create-booking', authenticate, async (req, res) => {
+router.post('/create-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
   try {
-    const validatedData = completeBookingSchema.parse(req.body);
     const user = (req as any).user;
-
-    // Validate all steps data
-    const step1Data = validatedData.step1;
-    const step2Data = validatedData.step2;
-    const step3Data = validatedData.step3;
-    const step4Data = validatedData.step4; // Transport (optional)
-    const step5Data = validatedData.step5; // Passengers (new structure)
     
-    // Support backward compatibility: if step4 has passengers, use that; otherwise use step5
-    const passengersData = step5Data || (step4Data?.passengers && step4Data?.passengerCount ? step4Data : null);
+    // Parse JSON strings from FormData (if FormData) or use req.body directly (if JSON)
+    let step1Data, step2Data, step3Data, step4Data, partyId;
+    
+    if (req.body.step1) {
+      // FormData mode - parse JSON strings
+      partyId = req.body.partyId;
+      step1Data = JSON.parse(req.body.step1);
+      step2Data = JSON.parse(req.body.step2);
+      step3Data = JSON.parse(req.body.step3);
+      step4Data = req.body.step4 ? JSON.parse(req.body.step4) : undefined;
+      
+      // Convert date strings to Date objects for step3Data hotel bookings
+      if (step3Data.hotelBookings && Array.isArray(step3Data.hotelBookings)) {
+        step3Data.hotelBookings = step3Data.hotelBookings.map((hotel: any) => ({
+          ...hotel,
+          checkInDate: hotel.checkInDate ? new Date(hotel.checkInDate) : hotel.checkInDate,
+          checkOutDate: hotel.checkOutDate ? new Date(hotel.checkOutDate) : hotel.checkOutDate,
+        }));
+      }
+    } else {
+      // JSON mode (backward compatibility)
+      const validatedData = completeBookingSchema.parse(req.body);
+      partyId = validatedData.partyId;
+      step1Data = validatedData.step1;
+      step2Data = validatedData.step2;
+      step3Data = validatedData.step3;
+      step4Data = validatedData.step4;
+    }
+
+    // Validate required fields
+    if (!partyId) {
+      return res.status(400).json({ error: 'Party ID is required' });
+    }
 
     // Additional validations - convert date strings to Date objects for validation
     const arrivalDateObj = new Date(step2Data.arrivalDate);
@@ -153,69 +173,38 @@ router.post('/create-booking', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
     }
 
-    // Type guard: ensure passengersData has required fields
-    if (!passengersData) {
-      return res.status(400).json({ error: 'Passenger data is required' });
+    // Validate passenger count (from step2Data)
+    const passengerCount = step2Data.passengerCount;
+    if (!passengerCount || passengerCount < 1 || passengerCount > 50) {
+      return res.status(400).json({ error: 'Passenger count must be between 1 and 50' });
     }
-    
-    if (!passengersData.passengerCount || !passengersData.passengers || passengersData.passengers.length === 0) {
-      return res.status(400).json({ error: 'Passenger data is incomplete' });
-    }
-    
-    // TypeScript type narrowing: at this point, we know passengersData has passengerCount and passengers
-    const finalPassengerCount = passengersData.passengerCount;
-    const finalPassengers = passengersData.passengers;
 
-    if (step3Data.accommodationType === 'iqama' && finalPassengerCount > 5) {
+    if (step3Data.accommodationType === 'iqama' && passengerCount > 5) {
       return res.status(400).json({ error: 'Maximum 5 passengers allowed for iqama accommodation' });
     }
 
-    // Determine document requirements validation
-    const hasGroupNumber = !!(step1Data.groupNumber && step1Data.groupName);
-    const accommodationType = step3Data.accommodationType;
-
-    // Validate documents based on booking mode
-    if (hasGroupNumber && accommodationType) {
-      const leadPassenger = finalPassengers.find(p => p.isLeadPassenger);
-      if (!leadPassenger) {
-        return res.status(400).json({ error: 'Lead passenger is required for bookings with group number' });
-      }
-
-      if (accommodationType === 'iqama') {
-        if (!leadPassenger.documents?.panCardPhoto || !leadPassenger.documents?.iqamaPhoto) {
-          return res.status(400).json({ error: 'PAN card and Iqama copy are required for lead passenger' });
-        }
-      } else if (accommodationType === 'hotel') {
-        if (!leadPassenger.documents?.panCardPhoto || !leadPassenger.documents?.ticketCopy || !leadPassenger.documents?.hotelBooking) {
-          return res.status(400).json({ error: 'PAN card, Ticket copy, and Hotel copy are required for lead passenger' });
-        }
-      }
-    } else {
-      // Regular booking validation
-      const leadPassenger = finalPassengers.find(p => p.isLeadPassenger);
-      if (!leadPassenger) {
-        return res.status(400).json({ error: 'Lead passenger is required' });
-      }
-
-      if (!leadPassenger.documents?.panCardPhoto || !leadPassenger.documents?.passportFront || !leadPassenger.documents?.passportBack) {
-        return res.status(400).json({ error: 'Lead passenger requires PAN card, passport front, and passport back' });
-      }
-
-      for (const passenger of finalPassengers.filter(p => !p.isLeadPassenger)) {
-        if (!passenger.documents?.passportFront || !passenger.documents?.passportBack) {
-          return res.status(400).json({ error: `Passport front and back required for ${passenger.fullName || 'passenger'}` });
-        }
-      }
+    // Validate ZIP file upload (ONLY requirement, same as group booking)
+    const zipFile = req.file; // Multer provides the uploaded file
+    if (!zipFile) {
+      return res.status(400).json({ 
+        error: 'ZIP file is required. Please upload a ZIP file containing all required documents.' 
+      });
     }
 
-    // Determine initial status
-    let initialStatus: 'pending' | 'group_assigned';
-    if (!hasGroupNumber) {
-      initialStatus = 'pending';
-    } else {
-      // If hasGroupNumber is true, always set to group_assigned (regardless of accommodation type)
-      initialStatus = 'group_assigned';
+    // Validate ZIP file type
+    const isValidZip = zipFile.mimetype === 'application/zip' || 
+                       zipFile.mimetype === 'application/x-zip-compressed' ||
+                       zipFile.originalname.toLowerCase().endsWith('.zip');
+    if (!isValidZip) {
+      return res.status(400).json({ error: 'Invalid file type. Please upload a ZIP file (.zip)' });
     }
+
+    // Create passengers array from passengerCount (no individual names required, same as group booking)
+    const finalPassengerCount = passengerCount;
+    const finalPassengers = Array(passengerCount).fill(null).map((_, index) => ({
+      fullName: step1Data.groupName || `Passenger ${index + 1}`, // Use group name if available, otherwise default
+      isLeadPassenger: index === 0,
+    }));
 
     // Calculate hasTransportation
     // Check for both single transport selection and multiple transport selection (for fulltrip routes)
@@ -286,12 +275,22 @@ router.post('/create-booking', authenticate, async (req, res) => {
       return null;
     };
 
+    // Determine initial status
+    let initialStatus: 'pending' | 'group_assigned';
+    const hasGroupNumber = !!(step1Data.groupNumber && step1Data.groupName);
+    if (!hasGroupNumber) {
+      initialStatus = 'pending';
+    } else {
+      // If hasGroupNumber is true, always set to group_assigned (regardless of accommodation type)
+      initialStatus = 'group_assigned';
+    }
+
     // Save everything in a single transaction
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create UmrahVisaBooking directly with partyId
       const booking = await tx.umrahVisaBooking.create({
         data: {
-          partyId: validatedData.partyId,
+          partyId: partyId,
           submittedAt: new Date(),
           groupNumber: step1Data.groupNumber,
           groupName: step1Data.groupName,
@@ -330,7 +329,7 @@ router.post('/create-booking', authenticate, async (req, res) => {
       if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings) {
         // Create hotel bookings directly linked to booking
         await Promise.all(
-          step3Data.hotelBookings.map(async (hotel) => {
+          step3Data.hotelBookings.map(async (hotel: any) => {
             // Get hotel's LocationMaster from pre-fetched map
             const hotelLocation = locationMap.get(hotel.hotelId);
             if (!hotelLocation) {
@@ -517,6 +516,20 @@ router.post('/create-booking', authenticate, async (req, res) => {
         )
       );
 
+      // 7.5. Save ZIP file as Document (linked to booking, not individual passenger) - same as group booking
+      if (zipFile) {
+        await tx.document.create({
+          data: {
+            bookingId: booking.id,
+            documentType: 'pan_card_zip',
+            fileName: zipFile.originalname,
+            filePath: zipFile.path,
+            fileSize: zipFile.size,
+            mimeType: zipFile.mimetype,
+          },
+        });
+      }
+
       // 8. Create BookingStatusHistory
       await tx.bookingStatusHistory.create({
         data: {
@@ -544,9 +557,24 @@ router.post('/create-booking', authenticate, async (req, res) => {
       },
     });
   } catch (error) {
+    // Handle multer errors
+    if ((error as any).code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File size exceeds 50MB limit. Please compress your files.' });
+    }
+    if (error instanceof multer.MulterError) {
+      return res.status(400).json({ error: error.message });
+    }
+    
+    // Handle JSON parsing errors
+    if (error instanceof SyntaxError && error.message.includes('JSON')) {
+      return res.status(400).json({ error: 'Invalid JSON data in request' });
+    }
+    
+    // Handle validation errors
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: 'Validation failed', details: error.issues });
     }
+    
     console.error('❌ Error creating booking:', error);
     res.status(500).json({ error: 'Failed to create booking' });
   }

@@ -302,99 +302,23 @@ export const validateStep4 = (
 };
 
 export const validateStep5 = (data: Step5Data, step1Data: Step1Data, step3Data: Step3Data, isGroupVisa: boolean = false): string | null => {
-  // For group visa bookings (visaType: 'group_visa'), ONLY ZIP file is required
-  // Note: Individual bookings can also have group numbers, so we check visaType, not hasGroupNumber
-  if (isGroupVisa) {
-    const zipFile = data.panCardZipFile;
-    if (!zipFile) {
-      return 'Please upload a ZIP file containing all PAN cards for the group';
-    }
-
-    // Validate ZIP file type
-    const isValidZip = zipFile.type === 'application/zip' || zipFile.name.toLowerCase().endsWith('.zip');
-    if (!isValidZip) {
-      return 'Please upload a valid ZIP file (.zip)';
-    }
-
-    // Validate ZIP file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (zipFile.size > maxSize) {
-      return 'ZIP file size exceeds 50MB limit. Please compress your files.';
-    }
-    
-    return null; // All validations passed for group bookings
+  // For both group and individual bookings: ONLY ZIP file is required
+  const zipFile = data.panCardZipFile;
+  if (!zipFile) {
+    return 'Please upload a ZIP file containing all required documents';
   }
 
-  // For individual bookings (without group number): validate passengers and documents
-  const passengerCount = data.passengers.length;
-  const accommodationType = step3Data.accommodationType || 'hotel';
-
-  if (passengerCount < 1) {
-    return 'At least one passenger is required';
+  // Validate ZIP file type
+  const isValidZip = zipFile.type === 'application/zip' || zipFile.name.toLowerCase().endsWith('.zip');
+  if (!isValidZip) {
+    return 'Please upload a valid ZIP file (.zip)';
   }
 
-  if (accommodationType === 'iqama' && passengerCount > BOOKING_LIMITS.MAX_PASSENGERS_IQAMA) {
-    return `Maximum ${BOOKING_LIMITS.MAX_PASSENGERS_IQAMA} passengers allowed for iqama accommodation`;
+  // Validate ZIP file size (max 50MB)
+  const maxSize = 50 * 1024 * 1024; // 50MB
+  if (zipFile.size > maxSize) {
+    return 'ZIP file size exceeds 50MB limit. Please compress your files.';
   }
-
-  const leadPassengers = data.passengers.filter(p => p.isLeadPassenger);
-  if (leadPassengers.length !== 1) {
-    return 'Exactly one lead passenger is required';
-  }
-
-  // Validate passenger names
-  for (const passenger of data.passengers) {
-    if (!passenger.fullName.trim()) {
-      return 'All passengers must have a full name';
-    }
-  }
-
-  // Determine if booking has group number
-  const hasGroupNumber = !!(step1Data.groupNumber && step1Data.groupName);
-
-  // Individual booking WITH group number: Only lead passenger needs documents (no passport)
-  if (hasGroupNumber && step3Data.accommodationType) {
-    const leadPassenger = data.passengers.find(p => p.isLeadPassenger);
-    if (!leadPassenger) {
-      return 'Lead passenger not found';
-    }
-
-    // Lead passenger must have PAN card
-    if (!leadPassenger.panCardPhoto) {
-      return 'Lead passenger PAN card is required';
-    }
-
-    // Check accommodation-specific documents
-    if (step3Data.accommodationType === 'hotel') {
-      if (!leadPassenger.ticketCopy) {
-        return 'Ticket copy is required for lead passenger';
-      }
-      if (!leadPassenger.hotelBooking) {
-        return 'Hotel copy is required for lead passenger';
-      }
-    } else if (step3Data.accommodationType === 'iqama') {
-      if (!leadPassenger.iqamaPhoto) {
-        return 'Iqama copy is required for lead passenger';
-      }
-    }
-
-    // For group number bookings, other passengers don't need any documents
-    return null;
-  }
-
-  // Individual booking WITHOUT group number: All passengers need passport, lead needs PAN
-  for (const passenger of data.passengers) {
-    if (!passenger.passportFront) {
-      return `Passport front is required for ${passenger.fullName || 'passenger'}`;
-    }
-    if (!passenger.passportBack) {
-      return `Passport back is required for ${passenger.fullName || 'passenger'}`;
-    }
-
-    if (passenger.isLeadPassenger && !passenger.panCardPhoto) {
-      return 'Lead passenger PAN card is required';
-    }
-  }
-
-  return null;
+  
+  return null; // All validations passed
 };
