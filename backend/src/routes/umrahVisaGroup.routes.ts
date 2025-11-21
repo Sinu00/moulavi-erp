@@ -931,6 +931,9 @@ router.post('/group/add-to-existing-booking', authenticate, upload.single('panCa
       );
 
       return { booking: updatedBooking, document };
+    }, {
+      maxWait: 10000,  // 10 seconds max wait
+      timeout: 30000,  // 30 seconds timeout
     });
 
     res.status(200).json({
