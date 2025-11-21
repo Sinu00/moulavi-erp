@@ -29,16 +29,7 @@ export const useUmrahBooking = () => {
       selectedTransport: undefined,
     },
     step5Data: {
-      passengers: [{ 
-        fullName: '', 
-        isLeadPassenger: true, 
-        panCardPhoto: null, 
-        passportFront: null, 
-        passportBack: null, 
-        iqamaPhoto: null, 
-        hotelBooking: null, 
-        ticketCopy: null 
-      }]
+      panCardZipFile: null, // ZIP file upload for individual bookings
     },
   });
 
@@ -130,18 +121,14 @@ export const useUmrahBooking = () => {
             payload = bookingState.step3Data;
             break;
           case 4:
-            // Step 4 is transport - validate only, no API call needed
-            // Transport validation is done in the component
-            setBookingState(prev => ({
-              ...prev,
-              completedSteps: [...prev.completedSteps, stepNumber],
-              currentStep: stepNumber + 1
-            }));
-            toast.success(`Step ${stepNumber} completed successfully`);
-            return true;
+            payload = {
+              selectedTransport: bookingState.step4Data.selectedTransport,
+              selectedTransports: bookingState.step4Data.selectedTransports,
+            };
+            break;
         }
 
-        if (stepNumber < 4) {
+        if (stepNumber <= 4) {
           const response = await fetch(endpoint, {
             method: 'POST',
             headers: {

@@ -5,3 +5,35 @@ voucher
 bill
 booking_success
 cancelled
+
+Individual Umrah Visa Booking Flow
+Flow verification
+Step 1 - Booking Mode
+Default: travel_details (correct for individual)
+Validates group_number fields if selected
+Loads Umrah visa providers when needed
+Status: OK
+Step 2 - Travel Details
+Collects passengerCount (required, validated)
+Collects arrival/departure dates, times, airports, flight numbers
+Validates flight number format (XX-1234)
+Validates travel duration (max 80 days)
+Status: OK
+Step 3 - Accommodation
+User selects hotel or iqama
+Hotel: can add multiple hotel bookings with coverage validation
+Iqama: validates max 5 passengers, requires iqama details
+Status: OK
+Step 4 - Transport (Optional)
+Can skip by clicking Next without selection
+Only required if: Jeddah arrival + hotel accommodation
+Validation allows skipping in other cases
+Loading is inline (not full-page)
+No backend API call (validates locally and moves forward)
+Status: OK
+Step 5 - Documents
+Only ZIP file upload required
+Validates file type (.zip) and size (50MB max)
+Uses toast notifications (not alerts)
+Backend creates UmrahPassenger entries from passengerCount
+Status: OK

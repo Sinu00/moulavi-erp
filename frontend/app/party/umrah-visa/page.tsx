@@ -18,8 +18,6 @@ import { TransportVehicleSelectionStep } from '@/components/umrah-booking/steps/
 import { DocumentsStep } from '@/components/umrah-booking/steps/DocumentsStep';
 import { validateStep1, validateStep2, validateStep3, validateStep4, validateStep5 } from '@/lib/umrah/validation';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
 export default function UmrahVisaNewPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -43,7 +41,6 @@ export default function UmrahVisaNewPage() {
   const {
     masterData,
     loadInitialData,
-    loadTransportOptions,
     loadHotels,
     getHotelsForLocation,
   } = useMasterData();

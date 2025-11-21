@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { UploadCloud, File, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 import { Step5Data, Step1Data, Step3Data } from '@/lib/umrah/types';
 
 interface DocumentsStepProps {
@@ -33,19 +34,19 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
     const isValidZip = file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip');
     
     if (!isValidZip) {
-      alert('Please upload a ZIP file (.zip) containing all documents');
+      toast.error('Please upload a ZIP file (.zip) containing all documents');
       return;
     }
 
     // Validate file size (e.g., max 50MB for ZIP)
     const maxSize = 50 * 1024 * 1024; // 50MB
     if (file.size > maxSize) {
-      alert('File size exceeds 50MB limit. Please compress your files.');
+      toast.error('File size exceeds 50MB limit. Please compress your files.');
       return;
     }
 
     // Store the file in step5Data
-    onChange({ panCardZipFile: file } as any);
+    onChange({ panCardZipFile: file });
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -76,7 +77,7 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
   };
 
   const handleRemoveFile = () => {
-    onChange({ panCardZipFile: null } as any);
+    onChange({ panCardZipFile: null });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }

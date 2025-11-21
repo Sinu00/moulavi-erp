@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TransportRouteMaster, TransportMaster, RouteType } from '@/types';
 
 interface TransportVehicleSelectionStepProps {
@@ -129,8 +130,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     }) || null;
   };
 
-  // Load all active routes
+  // Load all active routes - only when step is accessed (lazy loading)
   useEffect(() => {
+    // Only load if we have the minimum required data (at least 2 cities in route)
+    if (determinedRoute.length < 2) {
+      return;
+    }
+
     const loadRoutes = async () => {
       setLoadingRoutes(true);
       try {
@@ -139,11 +145,9 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
         setAvailableRoutes(routes);
 
         // Auto-select determined route if it exists
-        if (determinedRoute.length >= 2) {
-          const matchingRoute = findRouteByCities(routes, determinedRoute);
-          if (matchingRoute) {
-            setSelectedRouteId(matchingRoute.id);
-          }
+        const matchingRoute = findRouteByCities(routes, determinedRoute);
+        if (matchingRoute) {
+          setSelectedRouteId(matchingRoute.id);
         }
       } catch (error: any) {
         console.error('Error loading routes:', error);
@@ -154,7 +158,8 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
     };
 
     loadRoutes();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [determinedRoute.join(',')]); // Use stringified version to avoid unnecessary re-renders
 
   // Filter routes by routeType
   const filteredRoutes = useMemo(() => {
@@ -266,15 +271,6 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   };
 
 
-  if (loadingRoutes) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        <span className="ml-3 text-gray-600">Loading routes...</span>
-      </div>
-    );
-  }
-
   if (determinedRoute.length < 2) {
     return (
       <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -307,58 +303,71 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-700">Filter by Route Type</label>
-          <Select
-            value={routeTypeFilter}
-            onValueChange={(value) => setRouteTypeFilter(value as RouteType | 'all')}
-            disabled={disabled || loadingRoutes}
-          >
-            <SelectTrigger className="w-full border-gray-300">
-              <SelectValue placeholder="Select route type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Route Types</SelectItem>
-              <SelectItem value="fulltrip">Full Trip</SelectItem>
-              <SelectItem value="airporttocity">Airport to City</SelectItem>
-              <SelectItem value="citytocity">City to City</SelectItem>
-              <SelectItem value="citytoairport">City to Airport</SelectItem>
-            </SelectContent>
-          </Select>
+      {loadingRoutes ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Filter by Route Type</label>
+            <Select
+              value={routeTypeFilter}
+              onValueChange={(value) => setRouteTypeFilter(value as RouteType | 'all')}
+              disabled={disabled || loadingRoutes}
+            >
+              <SelectTrigger className="w-full border-gray-300">
+                <SelectValue placeholder="Select route type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Route Types</SelectItem>
+                <SelectItem value="fulltrip">Full Trip</SelectItem>
+                <SelectItem value="airporttocity">Airport to City</SelectItem>
+                <SelectItem value="citytocity">City to City</SelectItem>
+                <SelectItem value="citytoairport">City to Airport</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-gray-700">Select Route</label>
-          <Select
-            value={selectedRouteId || ''}
-            onValueChange={(value) => setSelectedRouteId(value || null)}
-            disabled={disabled || loadingRoutes || filteredRoutes.length === 0}
-          >
-            <SelectTrigger className="w-full border-gray-300">
-              <SelectValue placeholder="Select a route" />
-            </SelectTrigger>
-            <SelectContent>
-              {filteredRoutes.length === 0 ? (
-                <SelectItem value="__no_routes__" disabled>
-                  No routes available
-                </SelectItem>
-              ) : (
-                filteredRoutes.map((route) => (
-                  <SelectItem key={route.id} value={route.id}>
-                    {formatRouteDisplay(route)}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-700">Select Route</label>
+            <Select
+              value={selectedRouteId || ''}
+              onValueChange={(value) => setSelectedRouteId(value || null)}
+              disabled={disabled || loadingRoutes || filteredRoutes.length === 0}
+            >
+              <SelectTrigger className="w-full border-gray-300">
+                <SelectValue placeholder="Select a route" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredRoutes.length === 0 ? (
+                  <SelectItem value="__no_routes__" disabled>
+                    No routes available
                   </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-          {routeNotFound && (
-            <p className="text-xs text-red-600 mt-1">
-              No exact route found. Please select a route from the dropdown above.
-            </p>
-          )}
+                ) : (
+                  filteredRoutes.map((route) => (
+                    <SelectItem key={route.id} value={route.id}>
+                      {formatRouteDisplay(route)}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            {routeNotFound && (
+              <p className="text-xs text-red-600 mt-1">
+                No exact route found. Please select a route from the dropdown above.
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Transport Table */}
       {selectedRouteId && (

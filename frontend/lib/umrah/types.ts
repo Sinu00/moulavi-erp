@@ -55,8 +55,8 @@ export interface Step4Data {
 }
 
 export interface Step5Data {
-  passengers: Passenger[];
-  panCardZipFile?: File | null; // ZIP file containing all PAN cards for group bookings
+  passengers?: Passenger[]; // Optional - not used for individual/group bookings (backend creates from passengerCount)
+  panCardZipFile?: File | null; // ZIP file containing all required documents
 }
 
 export interface TransportBooking {

@@ -127,6 +127,39 @@ router.post('/step3', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/umrah-visa/step4 - Step 4: Validation Only (No DB writes)
+router.post('/step4', authenticate, async (req, res) => {
+  try {
+    // Step 4 is transport selection - optional for individual bookings
+    // Allow empty/undefined data since transport is optional
+    const step4Data = req.body;
+    
+    // If step4Data is empty or undefined, it's valid (transport is optional)
+    if (!step4Data || Object.keys(step4Data).length === 0) {
+      return res.status(200).json({
+        message: 'Step 4 validation successful (no transport selected)',
+        valid: true,
+      });
+    }
+
+    // Validate using step4Schema if data is provided
+    const validatedData = step4Schema.parse(step4Data);
+
+    // Only validate - no database writes
+    // Data will be saved only when all steps are completed in create-booking endpoint
+    res.status(200).json({
+      message: 'Step 4 validation successful',
+      valid: true,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Validation failed', details: error.issues });
+    }
+    console.error('Error in step 4 validation:', error);
+    res.status(500).json({ error: 'Failed to validate step 4' });
+  }
+});
+
 // POST /api/umrah-visa/create-booking - Create complete booking (all steps in one transaction)
 router.post('/create-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
   try {
