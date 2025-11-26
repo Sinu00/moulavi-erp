@@ -30,8 +30,6 @@ import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
 import { voucherAPI } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ViewVoucherDialog } from '@/components/voucher/ViewVoucherDialog';
-import { EditVoucherDialog } from '@/components/voucher/EditVoucherDialog';
 import { UpdateMovementDialog } from '@/components/voucher/UpdateMovementDialog';
 import { QuickVoucherForm } from '@/components/voucher/QuickVoucherForm';
 
@@ -119,10 +117,7 @@ export default function VoucherServicePage() {
   const [loadingMovements, setLoadingMovements] = useState(false);
   
   // Dialog states
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [updateMovementDialogOpen, setUpdateMovementDialogOpen] = useState(false);
-  const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
   const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null);
 
   const loadStats = async () => {
@@ -454,8 +449,7 @@ export default function VoucherServicePage() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                          setSelectedVoucherId(voucher.id);
-                                          setViewDialogOpen(true);
+                                          router.push(`/dashboard/services/voucher/view/${voucher.id}`);
                                         }}
                                       >
                                         <Eye className="h-4 w-4" />
@@ -464,8 +458,7 @@ export default function VoucherServicePage() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                          setSelectedVoucherId(voucher.id);
-                                          setEditDialogOpen(true);
+                                          router.push(`/dashboard/services/voucher/edit/${voucher.id}`);
                                         }}
                                       >
                                         <Edit className="h-4 w-4" />
@@ -667,22 +660,6 @@ export default function VoucherServicePage() {
       </div>
 
       {/* Dialogs */}
-      <ViewVoucherDialog
-        open={viewDialogOpen}
-        onOpenChange={setViewDialogOpen}
-        voucherId={selectedVoucherId}
-      />
-      
-      <EditVoucherDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        voucherId={selectedVoucherId}
-        onSuccess={() => {
-          loadVouchers();
-          loadStats();
-        }}
-      />
-      
       <UpdateMovementDialog
         open={updateMovementDialogOpen}
         onOpenChange={setUpdateMovementDialogOpen}

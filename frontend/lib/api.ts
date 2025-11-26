@@ -385,6 +385,7 @@ export const voucherAPI = {
   getTomorrowMovements: () => api.get('/vouchers/movements/tomorrow'),
   createQuickVoucher: (data: any) => api.post('/vouchers/quick', data),
   getVoucherById: (id: string) => api.get(`/vouchers/${id}`),
+  updateVoucher: (id: string, data: any) => api.put(`/vouchers/${id}`, data),
   updateMovementDetails: (voucherId: string, movementIndex: number, data: any) =>
     api.put(`/vouchers/${voucherId}/movement/${movementIndex}`, data),
   notifyMovementUpdate: (voucherId: string, movementIndex: number) =>

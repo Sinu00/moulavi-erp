@@ -529,9 +529,6 @@ model Voucher {
   groupCode           String?          @map("group_code") @db.VarChar(100)
   umrahVisaProviderId String?          @map("umrah_visa_provider_id") @db.Uuid
   paxCount            Int              @map("pax_count")
-  hotelSchedules      Json             @map("hotel_schedules")
-  movementDetails     Json             @map("movement_details")
-  flightDetails       Json             @map("flight_details")
   version             Int              @default(1)
   generatedAt         DateTime         @default(now()) @map("generated_at") @db.Timestamp(6)
   generatedBy         String           @map("generated_by") @db.Uuid
@@ -539,6 +536,9 @@ model Voucher {
   updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   booking             UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   generatedByUser     User             @relation("VoucherGeneratedBy", fields: [generatedBy], references: [id])
+  movements           VoucherMovement[]
+  hotels              VoucherHotel[]
+  flights             VoucherFlight[]
 
   @@unique([voucherNumber])
   @@index([bookingId])
@@ -546,6 +546,77 @@ model Voucher {
   @@index([generatedAt])
   @@index([generatedBy])
   @@map("vouchers")
+}
+
+model VoucherMovement {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  voucherId           String   @map("voucher_id") @db.Uuid
+  sr                  Int
+  route               String?  @db.VarChar(20)
+  date                DateTime  @db.Date
+  time                String   @db.VarChar(10)
+  from                String   @db.VarChar(100)
+  fromLocation        String   @map("from_location") @db.VarChar(255)
+  fromLocationId      String?  @map("from_location_id") @db.Uuid
+  to                  String   @db.VarChar(100)
+  toLocation          String   @map("to_location") @db.VarChar(255)
+  toLocationId        String?  @map("to_location_id") @db.Uuid
+  driverDetails1      String?  @map("driver_details_1") @db.VarChar(255)
+  driverDetails2      String?  @map("driver_details_2") @db.VarChar(255)
+  vehicleNumber       String?  @map("vehicle_number") @db.VarChar(50)
+  paxCount            Int?     @map("pax_count")
+  price               Decimal? @db.Decimal(10, 2)
+  vehicleType         String?  @map("vehicle_type") @db.VarChar(100)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  voucher             Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  @@index([voucherId])
+  @@index([date])
+  @@index([fromLocationId])
+  @@index([toLocationId])
+  @@map("voucher_movements")
+}
+
+model VoucherHotel {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  voucherId           String   @map("voucher_id") @db.Uuid
+  number              Int
+  location            String   @db.VarChar(255)
+  hotelName           String   @map("hotel_name") @db.VarChar(255)
+  checkIn             DateTime @map("check_in") @db.Date
+  checkOut            DateTime @map("check_out") @db.Date
+  days                Int
+  brn                 String?  @db.VarChar(100)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  voucher             Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  @@index([voucherId])
+  @@index([checkIn])
+  @@index([checkOut])
+  @@map("voucher_hotels")
+}
+
+model VoucherFlight {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  voucherId           String   @map("voucher_id") @db.Uuid
+  type                String   @db.VarChar(2)
+  carrier             String   @db.VarChar(10)
+  number              String   @db.VarChar(20)
+  date                DateTime @db.Date
+  from                String   @db.VarChar(10)
+  to                  String   @db.VarChar(10)
+  etd                 String?  @db.VarChar(10)
+  eta                 String?  @db.VarChar(10)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  voucher             Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  @@index([voucherId])
+  @@index([date])
+  @@index([type])
+  @@map("voucher_flights")
 }
 
 enum UserRole {
