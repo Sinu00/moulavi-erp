@@ -166,4 +166,38 @@ export const sendCustomWhatsApp = async (
 };
 
 // Export utility functions
+// Send movement update WhatsApp message
+export const sendMovementUpdateWhatsApp = async (
+  phoneNumber: string,
+  partyName: string,
+  voucherNumber: string,
+  movementDetails: {
+    date: string;
+    time: string;
+    fromLocation: string;
+    toLocation: string;
+    driverDetails1: string;
+    driverDetails2: string;
+    vehicleNumber: string;
+  }
+): Promise<void> => {
+  const message = `🚗 *Movement Update - Voucher ${voucherNumber}*
+
+Dear ${partyName},
+
+Your movement details have been updated:
+
+📅 *Date:* ${movementDetails.date}
+⏰ *Time:* ${movementDetails.time || 'N/A'}
+📍 *From:* ${movementDetails.fromLocation || 'N/A'}
+📍 *To:* ${movementDetails.toLocation || 'N/A'}
+👤 *Driver 1:* ${movementDetails.driverDetails1 || 'N/A'}
+👤 *Driver 2:* ${movementDetails.driverDetails2 || 'N/A'}
+🚗 *Vehicle Number:* ${movementDetails.vehicleNumber || 'N/A'}
+
+Thank you for choosing our services!`;
+
+  await sendWhatsAppMessage(phoneNumber, message);
+};
+
 export { sendWhatsAppMessage, formatPhoneNumber };

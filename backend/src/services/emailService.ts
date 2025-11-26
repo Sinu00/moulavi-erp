@@ -388,4 +388,59 @@ export const sendBillEmail = async (
 };
 
 // Export transporter for testing purposes
+// Send movement update email
+export const sendMovementUpdateEmail = async (
+  to: string,
+  partyName: string,
+  voucherNumber: string,
+  movementDetails: {
+    date: string;
+    time: string;
+    fromLocation: string;
+    toLocation: string;
+    driverDetails1: string;
+    driverDetails2: string;
+    vehicleNumber: string;
+  }
+): Promise<void> => {
+  const emailSubject = `Movement Update - Voucher ${voucherNumber}`;
+  const emailHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Movement Update - Moulavi ERP</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #E3000F;">Movement Details Updated</h2>
+        <p>Dear ${partyName},</p>
+        <p>Your movement details have been updated for voucher <strong>${voucherNumber}</strong>.</p>
+        <h3 style="color: #E3000F; margin-top: 20px;">Movement Details:</h3>
+        <ul style="list-style: none; padding: 0;">
+          <li style="margin: 10px 0;"><strong>Date:</strong> ${movementDetails.date}</li>
+          <li style="margin: 10px 0;"><strong>Time:</strong> ${movementDetails.time || 'N/A'}</li>
+          <li style="margin: 10px 0;"><strong>From:</strong> ${movementDetails.fromLocation || 'N/A'}</li>
+          <li style="margin: 10px 0;"><strong>To:</strong> ${movementDetails.toLocation || 'N/A'}</li>
+          <li style="margin: 10px 0;"><strong>Driver 1:</strong> ${movementDetails.driverDetails1 || 'N/A'}</li>
+          <li style="margin: 10px 0;"><strong>Driver 2:</strong> ${movementDetails.driverDetails2 || 'N/A'}</li>
+          <li style="margin: 10px 0;"><strong>Vehicle Number:</strong> ${movementDetails.vehicleNumber || 'N/A'}</li>
+        </ul>
+        <p style="margin-top: 20px;">Thank you for choosing our services.</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const mailOptions: nodemailer.SendMailOptions = {
+    from: EMAIL_CONFIG.from,
+    to,
+    subject: emailSubject,
+    html: emailHtml,
+  };
+
+  await sendEmail(mailOptions);
+};
+
 export { transporter };

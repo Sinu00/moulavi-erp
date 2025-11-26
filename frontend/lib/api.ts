@@ -377,3 +377,17 @@ export const umrahVisaMasterAPI = {
   getAirports: (params?: any) => api.get('/umrah-visa/masters/airports', { params }),
 };
 
+// Voucher API
+export const voucherAPI = {
+  getAllVouchers: (params?: any) => api.get('/vouchers', { params }),
+  getVoucherStats: () => api.get('/vouchers/stats'),
+  getTodayMovements: () => api.get('/vouchers/movements/today'),
+  getTomorrowMovements: () => api.get('/vouchers/movements/tomorrow'),
+  createQuickVoucher: (data: any) => api.post('/vouchers/quick', data),
+  getVoucherById: (id: string) => api.get(`/vouchers/${id}`),
+  updateMovementDetails: (voucherId: string, movementIndex: number, data: any) =>
+    api.put(`/vouchers/${voucherId}/movement/${movementIndex}`, data),
+  notifyMovementUpdate: (voucherId: string, movementIndex: number) =>
+    api.post(`/vouchers/${voucherId}/movement/${movementIndex}/notify`),
+};
+

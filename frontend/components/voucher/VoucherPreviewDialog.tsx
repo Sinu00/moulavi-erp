@@ -57,6 +57,9 @@ interface MovementDetail {
   toLocation: string; // Specific location (Airport, Hotel, Ziyarat)
   fromLocationId?: string;
   toLocationId?: string;
+  driverDetails1?: string;
+  driverDetails2?: string;
+  vehicleNumber?: string;
 }
 
 interface FlightDetail {
@@ -192,6 +195,9 @@ export function VoucherPreviewDialog({
             fromLocation: m.fromLocation || '',
             to: m.to || '',
             toLocation: m.toLocation || '',
+            driverDetails1: m.driverDetails1 || '',
+            driverDetails2: m.driverDetails2 || '',
+            vehicleNumber: m.vehicleNumber || '',
           };
         }),
         flightDetails: (data.flightDetails || []).map((fd: any) => ({
@@ -407,6 +413,9 @@ export function VoucherPreviewDialog({
       fromLocation: '',
       to: '',
       toLocation: '',
+      driverDetails1: '',
+      driverDetails2: '',
+      vehicleNumber: '',
     };
     setVoucherData({
       ...voucherData,
@@ -648,6 +657,9 @@ export function VoucherPreviewDialog({
                         <TableHead>From Location</TableHead>
                         <TableHead>To City</TableHead>
                         <TableHead>To Location</TableHead>
+                        <TableHead>Driver Details 1</TableHead>
+                        <TableHead>Driver Details 2</TableHead>
+                        <TableHead>Vehicle Number</TableHead>
                         <TableHead>Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -690,6 +702,30 @@ export function VoucherPreviewDialog({
                           </TableCell>
                           <TableCell>
                             <div className="text-sm text-gray-600">{movement.toLocation || 'N/A'}</div>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={movement.driverDetails1 || ''}
+                              onChange={(e) => handleMovementChange(idx, 'driverDetails1', e.target.value)}
+                              className="w-32"
+                              placeholder="Driver 1"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={movement.driverDetails2 || ''}
+                              onChange={(e) => handleMovementChange(idx, 'driverDetails2', e.target.value)}
+                              className="w-32"
+                              placeholder="Driver 2"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={movement.vehicleNumber || ''}
+                              onChange={(e) => handleMovementChange(idx, 'vehicleNumber', e.target.value)}
+                              className="w-32"
+                              placeholder="Vehicle No"
+                            />
                           </TableCell>
                           <TableCell>
                             <Button

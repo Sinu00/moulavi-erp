@@ -30,7 +30,8 @@ import {
   Shield,
   Truck,
   Car,
-  Route
+  Route,
+  Ticket
 } from 'lucide-react';
 import { getUser, removeUser } from '@/lib/auth';
 import { authAPI } from '@/lib/api';
@@ -102,6 +103,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   ];
 
   const serviceItems = [
+    { name: 'Voucher Management', icon: Ticket, path: '/dashboard/services/voucher' },
     { name: 'Bus Booking', icon: Award, path: '/dashboard/services/bus-booking' },
   ];
 
@@ -326,7 +328,13 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                   return (
                     <button
                       key={item.name}
-                      onClick={() => toast.info(`${item.name} coming soon`)}
+                      onClick={() => {
+                        if (item.path === '/dashboard/services/voucher') {
+                          router.push(item.path);
+                        } else {
+                          toast.info(`${item.name} coming soon`);
+                        }
+                      }}
                       className={cn(
                         'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
                         isActive
