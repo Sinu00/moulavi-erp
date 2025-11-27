@@ -103,7 +103,6 @@ model UmrahVisaBooking {
   transportBookings         UmrahTransportBooking[]
   movementDetails           UmrahMovementDetail[]
   travelDetails             UmrahTravelDetails?
-  voucher                   Voucher?
   documents                 Document[]
   party                     Party                     @relation("BookingParty", fields: [partyId], references: [id], onDelete: Cascade)
   umrahVisaProvider         Party?                    @relation("UmrahVisaProvider", fields: [umrahVisaProviderId], references: [id])
@@ -477,7 +476,6 @@ model UmrahTransportBooking {
 model UmrahMovementDetail {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   bookingId      String   @map("booking_id") @db.Uuid
-  routeNumber    String?  @map("route_number") @db.VarChar(5)
   travelDateTime DateTime @map("travel_datetime") @db.Timestamp(6)
   fromCityId     String   @map("from_city_id") @db.Uuid
   fromLocationId String   @map("from_location_id") @db.Uuid
@@ -493,7 +491,6 @@ model UmrahMovementDetail {
   toLocation   LocationMaster   @relation("MovementToLocation", fields: [toLocationId], references: [id])
 
   @@index([bookingId])
-  @@index([routeNumber])
   @@index([travelDateTime])
   @@index([fromCityId])
   @@index([toCityId])
@@ -521,12 +518,12 @@ model PassengerDocument {
 
 model Voucher {
   id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bookingId           String           @unique @map("booking_id") @db.Uuid
   voucherNumber       String           @map("voucher_number") @db.VarChar(20)
   reservationDate     DateTime         @map("reservation_date") @db.Date
   guestName           String           @map("guest_name") @db.VarChar(255)
   guestMobile         String?          @map("guest_mobile") @db.VarChar(20)
   groupCode           String?          @map("group_code") @db.VarChar(100)
+  groupName           String?          @map("group_name") @db.VarChar(255)
   umrahVisaProviderId String?          @map("umrah_visa_provider_id") @db.Uuid
   paxCount            Int              @map("pax_count")
   version             Int              @default(1)
@@ -534,14 +531,12 @@ model Voucher {
   generatedBy         String           @map("generated_by") @db.Uuid
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  booking             UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   generatedByUser     User             @relation("VoucherGeneratedBy", fields: [generatedBy], references: [id])
   movements           VoucherMovement[]
   hotels              VoucherHotel[]
   flights             VoucherFlight[]
 
   @@unique([voucherNumber])
-  @@index([bookingId])
   @@index([voucherNumber])
   @@index([generatedAt])
   @@index([generatedBy])

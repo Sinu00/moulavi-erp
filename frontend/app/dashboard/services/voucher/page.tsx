@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableBody,
@@ -30,8 +31,8 @@ import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
 import { voucherAPI } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { UpdateMovementDialog } from '@/components/voucher/UpdateMovementDialog';
 import { QuickVoucherForm } from '@/components/voucher/QuickVoucherForm';
+import { Loader2, Save } from 'lucide-react';
 
 interface Voucher {
   id: string;
@@ -63,6 +64,7 @@ interface Movement {
   voucherId: string;
   voucherNumber: string;
   movementIndex: number;
+  movementId?: string;
   routeNumber: string;
   date: string;
   time: string;
@@ -70,8 +72,12 @@ interface Movement {
   guestName: string;
   mobile: string;
   pax: number;
+  from: string;
   fromLocation: string;
+  fromLocationId?: string | null;
+  to: string;
   toLocation: string;
+  toLocationId?: string | null;
   driverDetails1: string;
   driverDetails2: string;
   vehicleNumber: string;
@@ -116,9 +122,15 @@ export default function VoucherServicePage() {
   const [tomorrowMovements, setTomorrowMovements] = useState<Movement[]>([]);
   const [loadingMovements, setLoadingMovements] = useState(false);
   
-  // Dialog states
-  const [updateMovementDialogOpen, setUpdateMovementDialogOpen] = useState(false);
-  const [selectedMovement, setSelectedMovement] = useState<Movement | null>(null);
+  // Master Data
+  const [cities, setCities] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [locationsByCity, setLocationsByCity] = useState<Map<string, any[]>>(new Map());
+  
+  // Editing states
+  const [editingMovements, setEditingMovements] = useState<Map<string, Movement>>(new Map());
+  const [savingMovementId, setSavingMovementId] = useState<string | null>(null);
+
 
   const loadStats = async () => {
     try {
@@ -185,6 +197,64 @@ export default function VoucherServicePage() {
       toast.error('Failed to load tomorrow movements');
     } finally {
       setLoadingMovements(false);
+    }
+  };
+
+  // Update movement field in editing state
+  const updateMovementField = (movementId: string, field: string, value: any) => {
+    setEditingMovements(prev => {
+      const updated = new Map(prev);
+      const current = updated.get(movementId) || 
+                     todayMovements.find(m => (m.movementId || `${m.voucherId}-${m.movementIndex}`) === movementId) || 
+                     tomorrowMovements.find(m => (m.movementId || `${m.voucherId}-${m.movementIndex}`) === movementId);
+      if (current) {
+        updated.set(movementId, { ...current, [field]: value });
+      } else {
+        // If not found, try to get from current movements
+        const allMovements = [...todayMovements, ...tomorrowMovements];
+        const found = allMovements.find(m => (m.movementId || `${m.voucherId}-${m.movementIndex}`) === movementId);
+        if (found) {
+          updated.set(movementId, { ...found, [field]: value });
+        }
+      }
+      return updated;
+    });
+  };
+
+  // Save movement changes
+  const saveMovement = async (movement: Movement) => {
+    const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
+    const editedMovement = editingMovements.get(movementId) || movement;
+    
+    try {
+      setSavingMovementId(movementId);
+      await voucherAPI.updateMovementDetails(movement.voucherId, movement.movementIndex, {
+        driverDetails1: editedMovement.driverDetails1,
+        driverDetails2: editedMovement.driverDetails2,
+        vehicleNumber: editedMovement.vehicleNumber,
+      });
+      
+      toast.success('Movement updated successfully');
+      
+      // Remove from editing state
+      setEditingMovements(prev => {
+        const updated = new Map(prev);
+        updated.delete(movementId);
+        return updated;
+      });
+      
+      // Reload movements
+      if (activeTab === 'today') {
+        loadTodayMovements();
+      } else if (activeTab === 'tomorrow') {
+        loadTomorrowMovements();
+      }
+      loadStats();
+    } catch (error: any) {
+      console.error('Error saving movement:', error);
+      toast.error(error?.response?.data?.error || 'Failed to update movement');
+    } finally {
+      setSavingMovementId(null);
     }
   };
 
@@ -540,8 +610,8 @@ export default function VoucherServicePage() {
                               <TableHead>Guest Name</TableHead>
                               <TableHead>Mobile</TableHead>
                               <TableHead>Pax</TableHead>
-                              <TableHead>From Location</TableHead>
-                              <TableHead>To Location</TableHead>
+                              <TableHead>From</TableHead>
+                              <TableHead>To</TableHead>
                               <TableHead>Driver Details 1</TableHead>
                               <TableHead>Driver Details 2</TableHead>
                               <TableHead>Vehicle Number</TableHead>
@@ -549,34 +619,75 @@ export default function VoucherServicePage() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {todayMovements.map((movement, idx) => (
-                              <TableRow key={`${movement.voucherId}-${movement.movementIndex}`}>
-                                <TableCell>{movement.routeNumber}</TableCell>
-                                <TableCell>{movement.date}</TableCell>
-                                <TableCell>{movement.time}</TableCell>
-                                <TableCell>{movement.agentName}</TableCell>
-                                <TableCell>{movement.guestName}</TableCell>
-                                <TableCell>{movement.mobile}</TableCell>
-                                <TableCell>{movement.pax}</TableCell>
-                                <TableCell>{movement.fromLocation}</TableCell>
-                                <TableCell>{movement.toLocation}</TableCell>
-                                <TableCell>{movement.driverDetails1 || 'N/A'}</TableCell>
-                                <TableCell>{movement.driverDetails2 || 'N/A'}</TableCell>
-                                <TableCell>{movement.vehicleNumber || 'N/A'}</TableCell>
-                                <TableCell>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedMovement(movement);
-                                      setUpdateMovementDialogOpen(true);
-                                    }}
-                                  >
-                                    Update
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
+                            {todayMovements.map((movement, idx) => {
+                              const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
+                              const editedMovement = editingMovements.get(movementId) || movement;
+                              
+                              return (
+                                <TableRow key={movementId}>
+                                  <TableCell>{movement.routeNumber}</TableCell>
+                                  <TableCell>{movement.date}</TableCell>
+                                  <TableCell>{movement.time}</TableCell>
+                                  <TableCell>{movement.agentName}</TableCell>
+                                  <TableCell>{movement.guestName}</TableCell>
+                                  <TableCell>{movement.mobile}</TableCell>
+                                  <TableCell>{movement.pax}</TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      <div className="font-medium">{movement.from || 'N/A'}</div>
+                                      <div className="text-gray-500">{movement.fromLocation || ''}</div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      <div className="font-medium">{movement.to || 'N/A'}</div>
+                                      <div className="text-gray-500">{movement.toLocation || ''}</div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={editedMovement.driverDetails1 || ''}
+                                      onChange={(e) => updateMovementField(movementId, 'driverDetails1', e.target.value)}
+                                      className="w-40 min-h-[60px] resize-none"
+                                      placeholder="Driver 1"
+                                      rows={3}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={editedMovement.driverDetails2 || ''}
+                                      onChange={(e) => updateMovementField(movementId, 'driverDetails2', e.target.value)}
+                                      className="w-40 min-h-[60px] resize-none"
+                                      placeholder="Driver 2"
+                                      rows={3}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={editedMovement.vehicleNumber || ''}
+                                      onChange={(e) => updateMovementField(movementId, 'vehicleNumber', e.target.value)}
+                                      className="w-40 min-h-[60px] resize-none"
+                                      placeholder="Vehicle No"
+                                      rows={3}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => saveMovement(movement)}
+                                      disabled={savingMovementId === movementId}
+                                    >
+                                      {savingMovementId === movementId ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Save className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
@@ -610,8 +721,8 @@ export default function VoucherServicePage() {
                               <TableHead>Guest Name</TableHead>
                               <TableHead>Mobile</TableHead>
                               <TableHead>Pax</TableHead>
-                              <TableHead>From Location</TableHead>
-                              <TableHead>To Location</TableHead>
+                              <TableHead>From</TableHead>
+                              <TableHead>To</TableHead>
                               <TableHead>Driver Details 1</TableHead>
                               <TableHead>Driver Details 2</TableHead>
                               <TableHead>Vehicle Number</TableHead>
@@ -619,34 +730,75 @@ export default function VoucherServicePage() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {tomorrowMovements.map((movement, idx) => (
-                              <TableRow key={`${movement.voucherId}-${movement.movementIndex}`}>
-                                <TableCell>{movement.routeNumber}</TableCell>
-                                <TableCell>{movement.date}</TableCell>
-                                <TableCell>{movement.time}</TableCell>
-                                <TableCell>{movement.agentName}</TableCell>
-                                <TableCell>{movement.guestName}</TableCell>
-                                <TableCell>{movement.mobile}</TableCell>
-                                <TableCell>{movement.pax}</TableCell>
-                                <TableCell>{movement.fromLocation}</TableCell>
-                                <TableCell>{movement.toLocation}</TableCell>
-                                <TableCell>{movement.driverDetails1 || 'N/A'}</TableCell>
-                                <TableCell>{movement.driverDetails2 || 'N/A'}</TableCell>
-                                <TableCell>{movement.vehicleNumber || 'N/A'}</TableCell>
-                                <TableCell>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedMovement(movement);
-                                      setUpdateMovementDialogOpen(true);
-                                    }}
-                                  >
-                                    Update
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
+                            {tomorrowMovements.map((movement, idx) => {
+                              const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
+                              const editedMovement = editingMovements.get(movementId) || movement;
+                              
+                              return (
+                                <TableRow key={movementId}>
+                                  <TableCell>{movement.routeNumber}</TableCell>
+                                  <TableCell>{movement.date}</TableCell>
+                                  <TableCell>{movement.time}</TableCell>
+                                  <TableCell>{movement.agentName}</TableCell>
+                                  <TableCell>{movement.guestName}</TableCell>
+                                  <TableCell>{movement.mobile}</TableCell>
+                                  <TableCell>{movement.pax}</TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      <div className="font-medium">{movement.from || 'N/A'}</div>
+                                      <div className="text-gray-500">{movement.fromLocation || ''}</div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      <div className="font-medium">{movement.to || 'N/A'}</div>
+                                      <div className="text-gray-500">{movement.toLocation || ''}</div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={editedMovement.driverDetails1 || ''}
+                                      onChange={(e) => updateMovementField(movementId, 'driverDetails1', e.target.value)}
+                                      className="w-40 min-h-[60px] resize-none"
+                                      placeholder="Driver 1"
+                                      rows={3}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={editedMovement.driverDetails2 || ''}
+                                      onChange={(e) => updateMovementField(movementId, 'driverDetails2', e.target.value)}
+                                      className="w-40 min-h-[60px] resize-none"
+                                      placeholder="Driver 2"
+                                      rows={3}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Textarea
+                                      value={editedMovement.vehicleNumber || ''}
+                                      onChange={(e) => updateMovementField(movementId, 'vehicleNumber', e.target.value)}
+                                      className="w-40 min-h-[60px] resize-none"
+                                      placeholder="Vehicle No"
+                                      rows={3}
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => saveMovement(movement)}
+                                      disabled={savingMovementId === movementId}
+                                    >
+                                      {savingMovementId === movementId ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Save className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
@@ -659,21 +811,6 @@ export default function VoucherServicePage() {
         </div>
       </div>
 
-      {/* Dialogs */}
-      <UpdateMovementDialog
-        open={updateMovementDialogOpen}
-        onOpenChange={setUpdateMovementDialogOpen}
-        movement={selectedMovement}
-        onSuccess={() => {
-          if (activeTab === 'today') {
-            loadTodayMovements();
-          } else if (activeTab === 'tomorrow') {
-            loadTomorrowMovements();
-          }
-          loadStats();
-        }}
-      />
     </div>
   );
 }
-

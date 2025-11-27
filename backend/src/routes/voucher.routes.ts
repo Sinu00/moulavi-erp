@@ -3,7 +3,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { AuthRequest } from '../types';
 import { prisma } from '../config/database';
 import { asyncHandler } from '../middleware/errorHandler';
-import { generateVoucherNumber } from '../services/voucherService';
+import { generateVoucherNumber, generateRouteNumbersForVoucher } from '../services/voucherService';
 import { sendMovementUpdateEmail } from '../services/emailService';
 import { sendMovementUpdateWhatsApp } from '../services/whatsappService';
 
@@ -43,20 +43,6 @@ router.get(
               id: true,
               name: true,
               email: true,
-            },
-          },
-          booking: {
-            select: {
-              id: true,
-              party: {
-                select: {
-                  id: true,
-                  partyName: true,
-                  email: true,
-                  contactNumber: true,
-                  whatsappNumber: true,
-                },
-              },
             },
           },
           movements: {
@@ -149,23 +135,7 @@ router.get(
         },
       },
       include: {
-        voucher: {
-          include: {
-            booking: {
-              select: {
-                id: true,
-                party: {
-                  select: {
-                    partyName: true,
-                    email: true,
-                    contactNumber: true,
-                    whatsappNumber: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+        voucher: true,
       },
       orderBy: {
         date: 'asc',
@@ -198,17 +168,21 @@ router.get(
         routeNumber: movement.route || '',
         date: movement.date.toISOString().split('T')[0],
         time: movement.time || '',
-        agentName: movement.voucher.booking.party.partyName,
+        agentName: movement.voucher.guestName || 'N/A',
         guestName: movement.voucher.guestName,
         mobile: movement.voucher.guestMobile || '',
         pax: movement.voucher.paxCount,
+        from: movement.from || '',
         fromLocation: movement.fromLocation || '',
+        fromLocationId: movement.fromLocationId || null,
+        to: movement.to || '',
         toLocation: movement.toLocation || '',
+        toLocationId: movement.toLocationId || null,
         driverDetails1: movement.driverDetails1 || '',
         driverDetails2: movement.driverDetails2 || '',
         vehicleNumber: movement.vehicleNumber || '',
-        partyEmail: movement.voucher.booking.party.email,
-        partyWhatsApp: movement.voucher.booking.party.whatsappNumber || movement.voucher.booking.party.contactNumber || '',
+        partyEmail: '', // Vouchers are standalone, no booking connection
+        partyWhatsApp: '', // Vouchers are standalone, no booking connection
       };
     });
 
@@ -236,23 +210,7 @@ router.get(
         },
       },
       include: {
-        voucher: {
-          include: {
-            booking: {
-              select: {
-                id: true,
-                party: {
-                  select: {
-                    partyName: true,
-                    email: true,
-                    contactNumber: true,
-                    whatsappNumber: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+        voucher: true,
       },
       orderBy: {
         date: 'asc',
@@ -285,17 +243,21 @@ router.get(
         routeNumber: movement.route || '',
         date: movement.date.toISOString().split('T')[0],
         time: movement.time || '',
-        agentName: movement.voucher.booking.party.partyName,
+        agentName: movement.voucher.guestName || 'N/A',
         guestName: movement.voucher.guestName,
         mobile: movement.voucher.guestMobile || '',
         pax: movement.voucher.paxCount,
+        from: movement.from || '',
         fromLocation: movement.fromLocation || '',
+        fromLocationId: movement.fromLocationId || null,
+        to: movement.to || '',
         toLocation: movement.toLocation || '',
+        toLocationId: movement.toLocationId || null,
         driverDetails1: movement.driverDetails1 || '',
         driverDetails2: movement.driverDetails2 || '',
         vehicleNumber: movement.vehicleNumber || '',
-        partyEmail: movement.voucher.booking.party.email,
-        partyWhatsApp: movement.voucher.booking.party.whatsappNumber || movement.voucher.booking.party.contactNumber || '',
+        partyEmail: '', // Vouchers are standalone, no booking connection
+        partyWhatsApp: '', // Vouchers are standalone, no booking connection
       };
     });
 
@@ -319,20 +281,6 @@ router.get(
             id: true,
             name: true,
             email: true,
-          },
-        },
-        booking: {
-          select: {
-            id: true,
-            party: {
-              select: {
-                id: true,
-                partyName: true,
-                email: true,
-                contactNumber: true,
-                whatsappNumber: true,
-              },
-            },
           },
         },
         movements: {
@@ -419,43 +367,26 @@ router.post(
       hotelSchedules,
       movementDetails,
       flightDetails,
-      bookingId,
+      transportOptions, // Optional - for reference, not stored in voucher
     } = req.body;
 
     if (!guestName || !paxCount) {
       return res.status(400).json({ error: 'Guest name and passenger count are required' });
     }
 
-    if (!bookingId) {
-      return res.status(400).json({ error: 'Booking ID is required' });
-    }
+    const voucherNumber = await generateVoucherNumber(); // Voucher number is used as reservation number
 
-    // Check if booking exists
-    const booking = await prisma.umrahVisaBooking.findUnique({
-      where: { id: bookingId },
-    });
-
-    if (!booking) {
-      return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    // Check if voucher already exists for this booking
-    const existingVoucher = await prisma.voucher.findUnique({
-      where: { bookingId },
-    });
-
-    if (existingVoucher) {
-      return res.status(400).json({ error: 'Voucher already exists for this booking' });
-    }
-
-    const voucherNumber = await generateVoucherNumber();
+    // Generate route numbers dynamically from the last route number in database
+    const movementCount = movementDetails && Array.isArray(movementDetails) ? movementDetails.length : 0;
+    const routeNumbers = movementCount > 0 
+      ? await generateRouteNumbersForVoucher(movementCount)
+      : [];
 
     const voucher = await prisma.$transaction(async (tx) => {
       // Create voucher
       const newVoucher = await tx.voucher.create({
         data: {
-          bookingId,
-          voucherNumber,
+          voucherNumber, // Voucher number is used as reservation number
           reservationDate: reservationDate ? new Date(reservationDate) : new Date(),
           guestName,
           guestMobile: guestMobile || null,
@@ -465,15 +396,15 @@ router.post(
         },
       });
 
-      // Create movements
+      // Create movements with dynamically generated route numbers
       if (movementDetails && Array.isArray(movementDetails)) {
         await Promise.all(
-          movementDetails.map((movement: any) =>
+          movementDetails.map((movement: any, index: number) =>
             tx.voucherMovement.create({
               data: {
                 voucherId: newVoucher.id,
-                sr: movement.sr || 0,
-                route: movement.route || null,
+                sr: movement.sr || index + 1,
+                route: routeNumbers[index] || null, // Use generated route number
                 date: new Date(movement.date),
                 time: movement.time || '',
                 from: movement.from || '',
@@ -531,14 +462,14 @@ router.post(
             tx.voucherFlight.create({
               data: {
                 voucherId: newVoucher.id,
-                type: flight.type || 'AA',
-                carrier: flight.carrier || '',
-                number: flight.number || '',
+                type: String(flight.type || 'AA').substring(0, 2),
+                carrier: String(flight.carrier || '').substring(0, 10),
+                number: String(flight.number || '').substring(0, 20),
                 date: new Date(flight.date),
-                from: flight.from || '',
-                to: flight.to || '',
-                etd: flight.etd || null,
-                eta: flight.eta || null,
+                from: String(flight.from || '').substring(0, 10),
+                to: String(flight.to || '').substring(0, 10),
+                etd: flight.etd ? String(flight.etd).substring(0, 10) : null,
+                eta: flight.eta ? String(flight.eta).substring(0, 10) : null,
               },
             })
           )
@@ -667,14 +598,14 @@ router.put(
             tx.voucherFlight.create({
               data: {
                 voucherId: id,
-                type: flight.type || 'AA',
-                carrier: flight.carrier || '',
-                number: flight.number || '',
+                type: String(flight.type || 'AA').substring(0, 2),
+                carrier: String(flight.carrier || '').substring(0, 10),
+                number: String(flight.number || '').substring(0, 20),
                 date: new Date(flight.date),
-                from: flight.from || '',
-                to: flight.to || '',
-                etd: flight.etd || null,
-                eta: flight.eta || null,
+                from: String(flight.from || '').substring(0, 10),
+                to: String(flight.to || '').substring(0, 10),
+                etd: flight.etd ? String(flight.etd).substring(0, 10) : null,
+                eta: flight.eta ? String(flight.eta).substring(0, 10) : null,
               },
             })
           )
@@ -695,7 +626,17 @@ router.put(
   authorize('admin', 'staff'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { id, movementIndex } = req.params;
-    const { driverDetails1, driverDetails2, vehicleNumber } = req.body;
+    const { 
+      driverDetails1, 
+      driverDetails2, 
+      vehicleNumber,
+      from,
+      fromLocation,
+      fromLocationId,
+      to,
+      toLocation,
+      toLocationId,
+    } = req.body;
 
     const voucher = await prisma.voucher.findUnique({
       where: { id },
@@ -703,17 +644,6 @@ router.put(
         movements: {
           orderBy: {
             sr: 'asc',
-          },
-        },
-        booking: {
-          select: {
-            party: {
-              select: {
-                email: true,
-                whatsappNumber: true,
-                contactNumber: true,
-              },
-            },
           },
         },
       },
@@ -737,6 +667,12 @@ router.put(
         driverDetails1: driverDetails1 !== undefined ? driverDetails1 : movement.driverDetails1,
         driverDetails2: driverDetails2 !== undefined ? driverDetails2 : movement.driverDetails2,
         vehicleNumber: vehicleNumber !== undefined ? vehicleNumber : movement.vehicleNumber,
+        from: from !== undefined ? from : movement.from,
+        fromLocation: fromLocation !== undefined ? fromLocation : movement.fromLocation,
+        fromLocationId: fromLocationId !== undefined ? fromLocationId : movement.fromLocationId,
+        to: to !== undefined ? to : movement.to,
+        toLocation: toLocation !== undefined ? toLocation : movement.toLocation,
+        toLocationId: toLocationId !== undefined ? toLocationId : movement.toLocationId,
       },
     });
 
@@ -748,7 +684,9 @@ router.put(
       },
     });
 
-    res.json({ voucher: { ...voucher, movements: voucher.movements.map(m => m.id === movement.id ? updatedMovement : m) } });
+    // Return updated voucher with updated movement
+    const updatedMovements = voucher.movements.map(m => m.id === movement.id ? updatedMovement : m);
+    res.json({ voucher: { ...voucher, movements: updatedMovements } });
   })
 );
 
@@ -768,18 +706,6 @@ router.post(
             sr: 'asc',
           },
         },
-        booking: {
-          select: {
-            party: {
-              select: {
-                partyName: true,
-                email: true,
-                whatsappNumber: true,
-                contactNumber: true,
-              },
-            },
-          },
-        },
       },
     });
 
@@ -794,54 +720,8 @@ router.post(
       return res.status(400).json({ error: 'Invalid movement index' });
     }
 
-    const party = voucher.booking.party;
-
-    // Send email
-    if (party.email) {
-      try {
-        await sendMovementUpdateEmail(
-          party.email,
-          party.partyName,
-          voucher.voucherNumber,
-          {
-            date: movement.date.toISOString().split('T')[0],
-            time: movement.time || '',
-            fromLocation: movement.fromLocation || '',
-            toLocation: movement.toLocation || '',
-            driverDetails1: movement.driverDetails1 || '',
-            driverDetails2: movement.driverDetails2 || '',
-            vehicleNumber: movement.vehicleNumber || '',
-          }
-        );
-      } catch (error) {
-        console.error('Failed to send email:', error);
-      }
-    }
-
-    // Send WhatsApp
-    const phoneNumber = party.whatsappNumber || party.contactNumber;
-    if (phoneNumber) {
-      try {
-        await sendMovementUpdateWhatsApp(
-          phoneNumber,
-          party.partyName,
-          voucher.voucherNumber,
-          {
-            date: movement.date.toISOString().split('T')[0],
-            time: movement.time || '',
-            fromLocation: movement.fromLocation || '',
-            toLocation: movement.toLocation || '',
-            driverDetails1: movement.driverDetails1 || '',
-            driverDetails2: movement.driverDetails2 || '',
-            vehicleNumber: movement.vehicleNumber || '',
-          }
-        );
-      } catch (error) {
-        console.error('Failed to send WhatsApp:', error);
-      }
-    }
-
-    res.json({ message: 'Notifications sent successfully' });
+    // Vouchers are standalone - notifications removed as they required booking connection
+    res.json({ message: 'Movement updated successfully' });
   })
 );
 

@@ -331,7 +331,7 @@ function generateVoucherHTML(data: VoucherPdfData): string {
       <div class="details-content">
         <div class="info-item">
           <div class="info-label">RESERVATION NUMBER</div>
-          <div class="info-value">${data.reservationNumber || data.voucherNumber || 'N/A'}</div>
+          <div class="info-value">${data.voucherNumber || 'N/A'}</div>
         </div>
         <div class="info-item">
           <div class="info-label">RESERVATION DATE</div>

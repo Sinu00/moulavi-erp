@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { prisma } from './umrahVisa/shared';
 import { syncBookingStatus, syncBookingStatusInTx } from '../services/statusSyncService';
-import { generateVoucherNumber, generateRouteNumbers, formatTime, formatDate, assignRouteNumbersToMovementDetails } from '../services/voucherService';
+import { generateVoucherNumber, formatTime, formatDate, generateRouteNumbersForVoucher } from '../services/voucherService';
 import { generateVoucherPDF } from '../services/pdfService';
 import { VoucherPdfData } from '../types/voucher';
 
@@ -374,11 +374,6 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
             email: true,
           },
         },
-        voucher: {
-          select: {
-            voucherNumber: true,
-          },
-        },
         travelDetails: {
           include: {
             arrivalAirport: true,
@@ -439,27 +434,6 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
     }
 
 
-    // Assign route numbers to movement details before generating voucher data
-    await assignRouteNumbersToMovementDetails(bookingId);
-
-    // Re-fetch booking to get movement details with assigned route numbers
-    const bookingWithMovements = await prisma.umrahVisaBooking.findUnique({
-      where: { id: bookingId },
-      include: {
-        movementDetails: {
-          include: {
-            fromCity: true,
-            fromLocation: true,
-            toCity: true,
-            toLocation: true,
-          },
-          orderBy: {
-            travelDateTime: 'asc',
-          },
-        },
-      },
-    });
-
     // Handle multiple groups - combine group numbers and sum passengers
     let groupCode = booking.groupNumber || '';
     let paxCount = booking.passengerCount;
@@ -497,10 +471,11 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
     }
 
     // Format data for voucher preview
+    // Note: Reservation number and route numbers are NOT included in preview
+    // They will be generated only when the voucher is actually created
     const voucherData = {
       bookingId: booking.id,
       reservationDate: booking.createdAt,
-      reservationNumber: booking.voucher?.voucherNumber || '', // Use voucher number as reservation number (empty if voucher not generated yet)
       guestName: booking.party.partyName,
       guestMobile: booking.party.contactNumber || booking.party.whatsappNumber || '',
       groupCode: groupCode,
@@ -523,23 +498,23 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         days: Math.ceil((new Date(hb.checkOutDate).getTime() - new Date(hb.checkInDate).getTime()) / (1000 * 60 * 60 * 24)),
         brn: hb.brn && Array.isArray(hb.brn) ? hb.brn : null, // Include BRN if available
       })) || [],
-      movementDetails: (bookingWithMovements?.movementDetails || []).map((md: any, idx: number) => ({
+      movementDetails: (booking.movementDetails || []).map((md: any, idx: number) => ({
         sr: idx + 1,
-        route: md.routeNumber || '', // 5-digit route number assigned during voucher generation
-        date: formatDate(md.travelDateTime), // DD-MM-YYYY format
-        time: formatTime(md.travelDateTime), // HH:MM format
-        from: md.fromCity?.name || '',
-        fromLocation: md.fromLocation?.name || '',
-        fromLocationId: md.fromLocationId,
-        fromSpecificLocationId: '', // Not used in new schema
-        to: md.toCity?.name || '',
-        toLocation: md.toLocation?.name || '',
-        toLocationId: md.toLocationId,
-        toSpecificLocationId: '', // Not used in new schema
-        vehicleType: '', // Not stored in movement details (only in transport bookings)
-        paxCount: 0, // Not stored in movement details (only in transport bookings)
-        price: 0, // Not stored in movement details (only in transport bookings)
-      })),
+        route: '', // Empty - will be generated when voucher is created
+          date: formatDate(md.travelDateTime), // DD-MM-YYYY format
+          time: formatTime(md.travelDateTime), // HH:MM format
+          from: md.fromCity?.name || '',
+          fromLocation: md.fromLocation?.name || '',
+          fromLocationId: md.fromLocationId,
+          fromSpecificLocationId: '', // Not used in new schema
+          to: md.toCity?.name || '',
+          toLocation: md.toLocation?.name || '',
+          toLocationId: md.toLocationId,
+          toSpecificLocationId: '', // Not used in new schema
+          vehicleType: '', // Not stored in movement details (only in transport bookings)
+          paxCount: 0, // Not stored in movement details (only in transport bookings)
+          price: 0, // Not stored in movement details (only in transport bookings)
+        })),
       flightDetails: booking.travelDetails ? [
         {
           type: 'AA', // Arrival
@@ -634,12 +609,6 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
             partyName: true,
           },
         },
-        voucher: {
-          select: {
-            id: true,
-            voucherNumber: true,
-          },
-        },
       },
     });
 
@@ -658,16 +627,13 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
     // Fetch full booking details
     const fullBooking = await prisma.umrahVisaBooking.findUnique({
       where: { id: bookingId },
-      include: {
-        voucher: true,
-      },
     });
 
     if (!fullBooking) {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Generate voucher number
+    // Generate voucher number (used as reservation number, only when creating voucher, not in preview)
     const voucherNumber = await generateVoucherNumber();
 
     // Handle multiple groups - combine group numbers as comma-separated string
@@ -702,86 +668,42 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       }
     }
 
-    // Create or update voucher record with normalized tables
-    // If voucher exists and hasMultipleGroup is true, only update groupCode and paxCount
-    const isUpdateOnly = fullBooking.voucher && fullBooking.hasMultipleGroup;
-    
+    // Create new voucher (standalone, no booking connection)
+    // Since vouchers are now standalone, we always create a new voucher
     const voucher = await prisma.$transaction(async (tx) => {
-      let newVoucher;
+      const voucherDataToCreate: any = {
+        voucherNumber, // Voucher number is used as reservation number
+        reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
+        guestName: voucherData.guestName || booking!.party?.partyName || '',
+        guestMobile: voucherData.guestMobile || '',
+        groupCode,
+        umrahVisaProviderId: booking!.umrahVisaProviderId || null,
+        paxCount,
+        generatedBy: user.id,
+      };
       
-      if (fullBooking.voucher) {
-        if (isUpdateOnly) {
-          // Only update groupCode and paxCount for multiple group bookings
-          // Use optimistic locking to prevent race conditions
-          try {
-            newVoucher = await tx.voucher.update({
-              where: { 
-                id: fullBooking.voucher.id,
-                version: fullBooking.voucher.version, // Optimistic locking
-              },
-              data: {
-                groupCode,
-                paxCount,
-                version: fullBooking.voucher.version + 1,
-              },
-            });
-          } catch (error: any) {
-            // If version mismatch, voucher was updated by another process
-            if (error.code === 'P2025') {
-              throw new Error('Voucher was modified by another process. Please try again.');
-            }
-            throw error;
-          }
-        } else {
-          // Delete existing related records and regenerate everything
-          await tx.voucherMovement.deleteMany({ where: { voucherId: fullBooking.voucher.id } });
-          await tx.voucherHotel.deleteMany({ where: { voucherId: fullBooking.voucher.id } });
-          await tx.voucherFlight.deleteMany({ where: { voucherId: fullBooking.voucher.id } });
-          
-          // Update existing voucher
-          newVoucher = await tx.voucher.update({
-            where: { id: fullBooking.voucher.id },
-            data: {
-              voucherNumber,
-              reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
-              guestName: voucherData.guestName || booking!.party?.partyName || '',
-              guestMobile: voucherData.guestMobile || '',
-              groupCode,
-              umrahVisaProviderId: booking!.umrahVisaProviderId || null,
-              paxCount,
-              generatedBy: user.id,
-              version: fullBooking.voucher.version + 1,
-            },
-          });
-        }
-      } else {
-        // Create new voucher
-        newVoucher = await tx.voucher.create({
-          data: {
-            bookingId,
-            voucherNumber,
-            reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
-            guestName: voucherData.guestName || booking!.party?.partyName || '',
-            guestMobile: voucherData.guestMobile || '',
-            groupCode,
-            umrahVisaProviderId: booking!.umrahVisaProviderId || null,
-            paxCount,
-            generatedBy: user.id,
-          },
-        });
-      }
+      const newVoucher = await tx.voucher.create({
+        data: voucherDataToCreate,
+      });
 
-      // Only create/regenerate movements, hotels, flights if not update-only
-      if (!isUpdateOnly) {
+      // Create movements, hotels, flights
+      // Generate route numbers when creating voucher (not in preview)
+      const movementCount = voucherData.movementDetails && Array.isArray(voucherData.movementDetails) 
+        ? voucherData.movementDetails.length 
+        : 0;
+      const routeNumbers = movementCount > 0 
+        ? await generateRouteNumbersForVoucher(movementCount)
+        : [];
+
         // Create VoucherMovement records
         if (voucherData.movementDetails && Array.isArray(voucherData.movementDetails)) {
           await Promise.all(
-            voucherData.movementDetails.map((movement: any) =>
+            voucherData.movementDetails.map((movement: any, index: number) =>
               tx.voucherMovement.create({
                 data: {
                   voucherId: newVoucher.id,
-                  sr: movement.sr || 0,
-                  route: movement.route || null,
+                  sr: movement.sr || index + 1,
+                  route: routeNumbers[index] || null, // Use generated route number
                   date: new Date(movement.date),
                   time: movement.time || '',
                   from: movement.from || '',
@@ -840,20 +762,19 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
               tx.voucherFlight.create({
                 data: {
                   voucherId: newVoucher.id,
-                  type: flight.type || 'AA',
-                  carrier: flight.carrier || '',
-                  number: flight.number || '',
+                  type: String(flight.type || 'AA').substring(0, 2),
+                  carrier: String(flight.carrier || '').substring(0, 10),
+                  number: String(flight.number || '').substring(0, 20),
                   date: new Date(flight.date),
-                  from: flight.from || '',
-                  to: flight.to || '',
-                  etd: flight.etd || null,
-                  eta: flight.eta || null,
+                  from: String(flight.from || '').substring(0, 10),
+                  to: String(flight.to || '').substring(0, 10),
+                  etd: flight.etd ? String(flight.etd).substring(0, 10) : null,
+                  eta: flight.eta ? String(flight.eta).substring(0, 10) : null,
                 },
               })
             )
           );
         }
-      }
 
       // Update booking with voucher metadata
       await tx.umrahVisaBooking.update({
@@ -867,17 +788,150 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       // Sync status using helper (updates booking status + history)
       await syncBookingStatusInTx(bookingId, 'bill', user.id, 'Voucher generated', tx);
 
-      return newVoucher;
+      return newVoucher.id;
     }, {
       maxWait: 10000, // Maximum time to wait for a transaction slot
       timeout: 20000, // Maximum time the transaction can run (increased for safety)
       isolationLevel: 'ReadCommitted', // Prevent dirty reads
     });
 
+    // ========== DEBUG LOGGING: BOOKING DATA ==========
+    const bookingWithMovements = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        movementDetails: {
+          include: {
+            fromCity: true,
+            toCity: true,
+          },
+          orderBy: {
+            travelDateTime: 'asc',
+          },
+        },
+      },
+    });
+    
+    console.log('========== VOUCHER GENERATION DEBUG ==========');
+    console.log('📋 FROM BOOKING (UmrahVisaBooking):');
+    console.log('  - Booking ID:', bookingId);
+    console.log('  - Reservation Number: N/A (not stored in booking)');
+    console.log('  - Route Numbers: N/A (route numbers removed from UmrahMovementDetail)');
+    console.log('  - Movement Details Count:', bookingWithMovements?.movementDetails?.length || 0);
+    if (bookingWithMovements?.movementDetails) {
+      bookingWithMovements.movementDetails.forEach((md, idx) => {
+        console.log(`    Movement ${idx + 1}: From ${md.fromCity?.name || 'N/A'} to ${md.toCity?.name || 'N/A'}`);
+      });
+    }
+
+    // Fetch the complete voucher with all relations for PDF generation
+    const fullVoucher = await prisma.voucher.findUnique({
+      where: { id: voucher },
+      include: {
+        movements: {
+          orderBy: {
+            sr: 'asc',
+          },
+        },
+        hotels: {
+          orderBy: {
+            number: 'asc',
+          },
+        },
+        flights: {
+          orderBy: {
+            date: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!fullVoucher) {
+      return res.status(500).json({ error: 'Failed to fetch created voucher' });
+    }
+
+    // ========== DEBUG LOGGING: VOUCHER DATA ==========
+    console.log('📄 FROM VOUCHER TABLE:');
+    console.log('  - Voucher ID:', fullVoucher.id);
+    console.log('  - Voucher Number (Reservation Number):', fullVoucher.voucherNumber);
+    const voucherRouteNumbers = fullVoucher.movements
+      .map(m => m.route)
+      .filter((r): r is string => !!r);
+    console.log('  - Route Numbers:', voucherRouteNumbers.length > 0 ? voucherRouteNumbers : 'NONE');
+    console.log('  - Movement Details Count:', fullVoucher.movements.length);
+    fullVoucher.movements.forEach((m, idx) => {
+      console.log(`    Movement ${idx + 1} (SR: ${m.sr}): Route="${m.route || 'NULL'}", From="${m.from}", To="${m.to}"`);
+    });
+
+    // Fetch umrah visa provider separately if needed
+    let umrahVisaProvider = null;
+    if (fullVoucher.umrahVisaProviderId) {
+      const provider = await prisma.party.findUnique({
+        where: { id: fullVoucher.umrahVisaProviderId },
+        select: {
+          partyName: true,
+          address: true,
+          contactNumber: true,
+          whatsappNumber: true,
+          email: true,
+        },
+      });
+      umrahVisaProvider = provider;
+    }
+
+    // Transform voucher data to match PDF format
+    const voucherForPdf = {
+      ...fullVoucher,
+      reservationNumber: fullVoucher.voucherNumber, // Use voucherNumber as reservation number
+      reservationDate: fullVoucher.reservationDate.toISOString().split('T')[0],
+      umrahVisaProvider,
+      movementDetails: fullVoucher.movements.map((m) => ({
+        sr: m.sr,
+        route: m.route || '',
+        date: m.date.toISOString().split('T')[0],
+        time: m.time,
+        from: m.from,
+        fromLocation: m.fromLocation,
+        to: m.to,
+        toLocation: m.toLocation,
+      })),
+      hotelSchedules: fullVoucher.hotels.map((h) => ({
+        number: h.number,
+        location: h.location,
+        hotelName: h.hotelName,
+        checkIn: h.checkIn.toISOString().split('T')[0],
+        checkOut: h.checkOut.toISOString().split('T')[0],
+        days: h.days,
+        brn: h.brn ? (h.brn.includes(',') ? h.brn.split(', ') : [h.brn]) : null,
+      })),
+      flightDetails: fullVoucher.flights.map((f) => ({
+        type: f.type,
+        carrier: f.carrier,
+        number: f.number,
+        date: f.date.toISOString().split('T')[0],
+        from: f.from,
+        to: f.to,
+        etd: f.etd || '',
+        eta: f.eta || '',
+      })),
+    };
+
+    // ========== DEBUG LOGGING: PDF DATA ==========
+    console.log('📑 FROM PDF DATA (voucherForPdf):');
+    console.log('  - Reservation Number (Voucher Number):', voucherForPdf.reservationNumber || 'NULL');
+    const pdfRouteNumbers = voucherForPdf.movementDetails
+      .map(m => m.route)
+      .filter((r): r is string => !!r && r !== '');
+    console.log('  - Route Numbers:', pdfRouteNumbers.length > 0 ? pdfRouteNumbers : 'NONE');
+    console.log('  - Movement Details Count:', voucherForPdf.movementDetails.length);
+    voucherForPdf.movementDetails.forEach((m, idx) => {
+      console.log(`    Movement ${idx + 1} (SR: ${m.sr}): Route="${m.route || 'NULL'}", From="${m.from}", To="${m.to}"`);
+    });
+    console.log('==========================================');
+
     res.json({
       message: 'Voucher generated successfully',
       data: {
-        voucher,
+        voucher: voucherForPdf,
       },
     });
   } catch (error) {
@@ -890,6 +944,21 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
 router.post('/generate-pdf', authenticate, async (req, res) => {
   try {
     const voucherData: VoucherPdfData = req.body;
+
+    // ========== DEBUG LOGGING: PDF GENERATION ==========
+    console.log('========== PDF GENERATION DEBUG ==========');
+    console.log('📑 PDF GENERATION - Received Data:');
+    console.log('  - Voucher Number (Reservation Number):', voucherData.voucherNumber);
+    console.log('  - Reservation Number:', voucherData.reservationNumber || voucherData.voucherNumber || 'NULL');
+    const pdfRouteNumbers = voucherData.movementDetails
+      .map(m => m.route)
+      .filter((r): r is string => !!r && r !== '');
+    console.log('  - Route Numbers:', pdfRouteNumbers.length > 0 ? pdfRouteNumbers : 'NONE');
+    console.log('  - Movement Details Count:', voucherData.movementDetails.length);
+    voucherData.movementDetails.forEach((m, idx) => {
+      console.log(`    Movement ${idx + 1} (SR: ${m.sr}): Route="${m.route || 'NULL'}", From="${m.from}", To="${m.to}"`);
+    });
+    console.log('==========================================');
 
     // Validate required fields
     if (!voucherData.voucherNumber || !voucherData.reservationDate || !voucherData.guestName) {
