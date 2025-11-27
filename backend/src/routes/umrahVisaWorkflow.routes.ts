@@ -633,11 +633,9 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
-    // Generate voucher number (used as reservation number, only when creating voucher, not in preview)
-    const voucherNumber = await generateVoucherNumber();
-
     // Handle multiple groups - combine group numbers as comma-separated string
     let groupCode = voucherData.groupCode || booking!.groupNumber || '';
+    let groupName = voucherData.groupName || booking!.groupName || '';
     let paxCount = voucherData.paxCount || booking!.passengerCount;
     
     if (fullBooking.hasMultipleGroup && fullBooking.multipleGroupDetails) {
@@ -652,6 +650,14 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
               .join(', ');
             if (groupNumbers) {
               groupCode = groupNumbers;
+            }
+            // Combine all group names
+            const groupNames = multipleGroupDetails
+              .map((g: any) => g.groupName)
+              .filter((name: string) => name)
+              .join(', ');
+            if (groupNames) {
+              groupName = groupNames;
             }
             // Sum all passenger counts
             const totalPassengers = multipleGroupDetails.reduce(
@@ -668,32 +674,78 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
       }
     }
 
-    // Create new voucher (standalone, no booking connection)
-    // Since vouchers are now standalone, we always create a new voucher
-    const voucher = await prisma.$transaction(async (tx) => {
-      const voucherDataToCreate: any = {
-        voucherNumber, // Voucher number is used as reservation number
-        reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
-        guestName: voucherData.guestName || booking!.party?.partyName || '',
-        guestMobile: voucherData.guestMobile || '',
-        groupCode,
-        umrahVisaProviderId: booking!.umrahVisaProviderId || null,
-        paxCount,
-        generatedBy: user.id,
-      };
-      
-      const newVoucher = await tx.voucher.create({
-        data: voucherDataToCreate,
+    // Check if voucher already exists for this booking (when hasMultipleGroup is true)
+    // Find existing voucher by matching guestName, umrahVisaProviderId, and voucherGeneratedAt
+    let existingVoucher = null;
+    if (fullBooking.hasMultipleGroup && fullBooking.voucherGeneratedAt) {
+      const guestName = voucherData.guestName || booking!.party?.partyName || '';
+      existingVoucher = await prisma.voucher.findFirst({
+        where: {
+          guestName: guestName,
+          umrahVisaProviderId: booking!.umrahVisaProviderId || null,
+          generatedAt: {
+            gte: new Date(fullBooking.voucherGeneratedAt.getTime() - 60000), // Within 1 minute
+            lte: new Date(fullBooking.voucherGeneratedAt.getTime() + 60000),
+          },
+        },
+        orderBy: {
+          generatedAt: 'desc',
+        },
       });
+    }
 
-      // Create movements, hotels, flights
-      // Generate route numbers when creating voucher (not in preview)
-      const movementCount = voucherData.movementDetails && Array.isArray(voucherData.movementDetails) 
-        ? voucherData.movementDetails.length 
-        : 0;
-      const routeNumbers = movementCount > 0 
-        ? await generateRouteNumbersForVoucher(movementCount)
-        : [];
+    // Generate voucher number only if creating new voucher
+    const voucherNumber = existingVoucher 
+      ? existingVoucher.voucherNumber 
+      : await generateVoucherNumber();
+
+    // Create or update voucher (standalone, no booking connection)
+    const voucher = await prisma.$transaction(async (tx) => {
+      let voucherRecord;
+      
+      if (existingVoucher) {
+        // Update existing voucher with new group data
+        const updateData: any = {
+          groupCode,
+          groupName: groupName || null,
+          paxCount,
+          // Increment version to track updates
+          version: existingVoucher.version + 1,
+        };
+        voucherRecord = await tx.voucher.update({
+          where: { id: existingVoucher.id },
+          data: updateData,
+        });
+      } else {
+        // Create new voucher
+        const voucherDataToCreate: any = {
+          voucherNumber, // Voucher number is used as reservation number
+          reservationDate: new Date(voucherData.reservationDate || booking!.createdAt),
+          guestName: voucherData.guestName || booking!.party?.partyName || '',
+          guestMobile: voucherData.guestMobile || '',
+          groupCode,
+          groupName: groupName || null,
+          umrahVisaProviderId: booking!.umrahVisaProviderId || null,
+          paxCount,
+          generatedBy: user.id,
+        };
+        
+        voucherRecord = await tx.voucher.create({
+          data: voucherDataToCreate,
+        });
+      }
+
+      // Only create movements, hotels, flights if this is a new voucher
+      // For existing vouchers, we only update groupCode, groupName, and paxCount
+      if (!existingVoucher) {
+        // Create movements, hotels, flights
+        // Generate route numbers when creating voucher (not in preview)
+        const movementCount = voucherData.movementDetails && Array.isArray(voucherData.movementDetails) 
+          ? voucherData.movementDetails.length 
+          : 0;
+        const routeNumbers = movementCount > 0 
+          ? await generateRouteNumbersForVoucher(movementCount)
+          : [];
 
         // Create VoucherMovement records
         if (voucherData.movementDetails && Array.isArray(voucherData.movementDetails)) {
@@ -701,7 +753,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
             voucherData.movementDetails.map((movement: any, index: number) =>
               tx.voucherMovement.create({
                 data: {
-                  voucherId: newVoucher.id,
+                  voucherId: voucherRecord.id,
                   sr: movement.sr || index + 1,
                   route: routeNumbers[index] || null, // Use generated route number
                   date: new Date(movement.date),
@@ -741,7 +793,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
               
               return tx.voucherHotel.create({
                 data: {
-                  voucherId: newVoucher.id,
+                  voucherId: voucherRecord.id,
                   number: hotel.number || 0,
                   location: hotel.location || '',
                   hotelName: hotel.hotelName || '',
@@ -761,7 +813,7 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
             voucherData.flightDetails.map((flight: any) =>
               tx.voucherFlight.create({
                 data: {
-                  voucherId: newVoucher.id,
+                  voucherId: voucherRecord.id,
                   type: String(flight.type || 'AA').substring(0, 2),
                   carrier: String(flight.carrier || '').substring(0, 10),
                   number: String(flight.number || '').substring(0, 20),
@@ -775,20 +827,31 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
             )
           );
         }
+      }
 
       // Update booking with voucher metadata
-      await tx.umrahVisaBooking.update({
-        where: { id: bookingId },
-        data: {
-          voucherGeneratedAt: new Date(),
-          voucherGeneratedBy: user.id,
-        },
-      });
+      if (!existingVoucher) {
+        await tx.umrahVisaBooking.update({
+          where: { id: bookingId },
+          data: {
+            voucherGeneratedAt: new Date(),
+            voucherGeneratedBy: user.id,
+          },
+        });
+      } else {
+        // For existing voucher, just update the timestamp
+        await tx.umrahVisaBooking.update({
+          where: { id: bookingId },
+          data: {
+            voucherGeneratedAt: new Date(), // Update timestamp to reflect latest update
+          },
+        });
+      }
 
       // Sync status using helper (updates booking status + history)
-      await syncBookingStatusInTx(bookingId, 'bill', user.id, 'Voucher generated', tx);
+      await syncBookingStatusInTx(bookingId, 'bill', user.id, existingVoucher ? 'Voucher updated with additional groups' : 'Voucher generated', tx);
 
-      return newVoucher.id;
+      return voucherRecord.id;
     }, {
       maxWait: 10000, // Maximum time to wait for a transaction slot
       timeout: 20000, // Maximum time the transaction can run (increased for safety)

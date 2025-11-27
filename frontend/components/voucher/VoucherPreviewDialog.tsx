@@ -306,6 +306,7 @@ export function VoucherPreviewDialog({
 
   // Helper function to format route display
   const formatRouteDisplay = (route: any): string => {
+    if (!route) return 'No route';
     const cities = [
       route.city1?.name,
       route.city2?.name,
@@ -314,10 +315,12 @@ export function VoucherPreviewDialog({
     ].filter(Boolean);
     const routeString = cities.join(' → ');
     const routeTypeLabel = route.routeType
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .split(' ')
-      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+      ? route.routeType
+          .replace(/([a-z])([A-Z])/g, '$1 $2')
+          .split(' ')
+          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+      : 'Unknown';
     return `${routeString} (${routeTypeLabel})`;
   };
 
