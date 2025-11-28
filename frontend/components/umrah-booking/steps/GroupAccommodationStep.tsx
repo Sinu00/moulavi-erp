@@ -52,7 +52,7 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
     if (hotelBookings.length === 0) return false;
     return hotelBookings.every(
       (booking) =>
-        booking.locationId &&
+        booking.cityId &&
         booking.hotelId &&
         booking.checkInDate &&
         booking.checkOutDate

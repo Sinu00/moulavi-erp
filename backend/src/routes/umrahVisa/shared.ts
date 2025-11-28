@@ -105,7 +105,7 @@ export const step2Schema = z.object({
     travelTime: z.string().optional(), // HH:mm format
   })).optional(),
   hotelBookings: z.array(z.object({
-    locationId: z.string().uuid(),
+    cityId: z.string().uuid(),
     hotelId: z.string().uuid(),
     checkInDate: z.string().transform((str) => new Date(str)),
     checkOutDate: z.string().transform((str) => new Date(str)),
@@ -125,7 +125,7 @@ export const step3Schema = z.object({
     iqamaNationalShortAddress: z.string().optional(),
   }).optional(),
   hotelBookings: z.array(z.object({
-    locationId: z.string().uuid(),
+    cityId: z.string().uuid(),
     hotelId: z.string().uuid(),
     checkInDate: z.string().transform((str) => new Date(str)),
     checkOutDate: z.string().transform((str) => new Date(str)),

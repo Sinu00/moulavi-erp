@@ -253,15 +253,12 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
     if (step2Data.arrivalAirportId) allLocationIds.add(step2Data.arrivalAirportId);
     if (step2Data.departureAirportId) allLocationIds.add(step2Data.departureAirportId);
     
-    // Add hotel IDs and location IDs from hotel bookings
+    // Add hotel IDs and city IDs from hotel bookings
     if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings) {
       step3Data.hotelBookings.forEach((hotel: any) => {
         if (hotel.hotelId) allLocationIds.add(hotel.hotelId);
-        if (hotel.locationId) {
-          // Could be LocationMaster ID or City ID
-          allLocationIds.add(hotel.locationId);
-          allCityIds.add(hotel.locationId);
-        }
+        // Note: hotel.cityId is now a CityMaster ID (no longer needs conversion)
+        if (hotel.cityId) allCityIds.add(hotel.cityId);
       });
     }
 
@@ -374,28 +371,23 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
                 throw new Error(`Missing checkOutDate in hotel booking`);
               }
 
-              // Get hotel's LocationMaster from pre-fetched map
+              // Get hotel's LocationMaster to find its cityId
               const hotelLocation = locationMap.get(hotel.hotelId);
               if (!hotelLocation) {
                 throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel LocationMaster not found`);
               }
 
-              // Resolve locationId using pre-fetched maps
-              let locationMasterId: string | null = null;
-
-              // First, try to resolve hotel.locationId (could be LocationMaster ID or City ID)
-              if (hotel.locationId) {
-                locationMasterId = resolveLocationId(hotel.locationId, 'OTHERS');
-              }
-
-              // If not resolved, use hotel's city to find a LocationMaster
-              if (!locationMasterId && hotelLocation.cityId) {
-                locationMasterId = resolveLocationId(hotelLocation.cityId, 'OTHERS');
+              // Get cityId - use hotel.cityId if provided, otherwise use hotel's cityId from LocationMaster
+              let cityId: string | null = null;
+              if (hotel.cityId) {
+                cityId = hotel.cityId;
+              } else if (hotelLocation.cityId) {
+                cityId = hotelLocation.cityId;
               }
 
               // If still not found, throw error
-              if (!locationMasterId) {
-                throw new Error(`No LocationMaster found for hotel booking. Hotel: ${hotel.hotelId}, Location: ${hotel.locationId}`);
+              if (!cityId) {
+                throw new Error(`No cityId found for hotel booking. Hotel: ${hotel.hotelId}, City: ${hotel.cityId}`);
               }
               
               // Ensure dates are Date objects
@@ -417,10 +409,13 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
               return tx.umrahHotelBooking.create({
                 data: {
                   bookingId: booking.id,
-                  locationId: locationMasterId,
+                  cityId: cityId,
                   hotelId: hotel.hotelId,
                   checkInDate,
                   checkOutDate,
+                  brn: hotel.brn && Array.isArray(hotel.brn) && hotel.brn.length > 0 
+                    ? hotel.brn 
+                    : null,
                 },
               });
             })
@@ -760,7 +755,7 @@ router.patch('/:bookingId/accommodation', authenticate, async (req, res) => {
 
       const refreshed = await prisma.umrahHotelBooking.findMany({
         where: { bookingId },
-        include: { hotel: true, location: true },
+        include: { hotel: true, city: true },
         orderBy: { checkInDate: 'asc' },
       });
 

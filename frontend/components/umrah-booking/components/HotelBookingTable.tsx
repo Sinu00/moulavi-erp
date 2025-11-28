@@ -9,7 +9,7 @@ interface HotelBookingTableProps {
   hotelBookings: HotelBooking[];
   locations: Location[];
   hotels: HotelType[];
-  getHotelsForLocation: (locationId: string) => HotelType[];
+  getHotelsForLocation: (cityId: string) => HotelType[];
   onUpdateBooking: (index: number, field: keyof HotelBooking, value: string | string[]) => void;
   onRemoveBooking?: (index: number) => void;
   onAddBooking?: () => void;
@@ -75,7 +75,7 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
               #
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Location
+              City
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               Hotel
@@ -101,7 +101,7 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
         </thead>
         <tbody>
           {hotelBookings.map((booking, index) => {
-            const location = locations.find((l) => l.id === booking.locationId);
+            const location = locations.find((l) => l.id === booking.cityId);
             const hotel = hotels.find((h) => h.id === booking.hotelId);
             const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
             const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
@@ -117,12 +117,12 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                 </td>
                 <td className="border border-gray-200 p-3">
                   <Select
-                    value={booking.locationId || undefined}
-                    onValueChange={(value) => onUpdateBooking(index, 'locationId', value)}
+                    value={booking.cityId || undefined}
+                    onValueChange={(value) => onUpdateBooking(index, 'cityId', value)}
                     disabled={disabled}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select location" />
+                      <SelectValue placeholder="Select city" />
                     </SelectTrigger>
                     <SelectContent>
                       {locations
@@ -139,17 +139,17 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                   <Select
                     value={booking.hotelId || undefined}
                     onValueChange={(value) => onUpdateBooking(index, 'hotelId', value)}
-                    disabled={disabled || !booking.locationId}
+                    disabled={disabled || !booking.cityId}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select hotel" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getHotelsForLocation(booking.locationId)
+                      {getHotelsForLocation(booking.cityId)
                         .filter((hotel) => hotel.id && hotel.id.trim() !== '')
                         .map((hotel) => (
                           <SelectItem key={hotel.id} value={hotel.id}>
-                            {hotel.hotelName}
+                            {hotel.name || hotel.hotelName}
                           </SelectItem>
                         ))}
                     </SelectContent>

@@ -383,7 +383,7 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
         hotelBookings: {
           include: {
             hotel: true,
-            location: true,
+            city: true,
           },
           orderBy: {
             checkInDate: 'asc',
@@ -491,7 +491,7 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       } : null,
       hotelSchedules: booking.hotelBookings?.map((hb: any, idx: number) => ({
         number: idx + 1,
-        location: hb.location.name,
+        location: hb.city.name,
         hotelName: hb.hotel.name,
         checkIn: hb.checkInDate,
         checkOut: hb.checkOutDate,
@@ -1337,7 +1337,7 @@ router.delete('/transport-bookings/:id', authenticate, async (req, res) => {
 router.post('/:bookingId/hotel-bookings', authenticate, async (req, res) => {
   try {
     const { bookingId } = req.params;
-    const { locationId, hotelId, checkInDate, checkOutDate } = req.body || {};
+    const { cityId, hotelId, checkInDate, checkOutDate } = req.body || {};
     
     // Verify booking exists and has hotel accommodation type
     const booking = await prisma.umrahVisaBooking.findUnique({
@@ -1356,12 +1356,12 @@ router.post('/:bookingId/hotel-bookings', authenticate, async (req, res) => {
     const created = await prisma.umrahHotelBooking.create({
       data: {
         bookingId,
-        locationId,
+        cityId,
         hotelId,
         checkInDate: checkInDate ? new Date(checkInDate) : new Date(),
         checkOutDate: checkOutDate ? new Date(checkOutDate) : new Date(),
       },
-      include: { hotel: true, location: true },
+      include: { hotel: true, city: true },
     });
     res.json({ hotelBooking: created });
   } catch (error) {

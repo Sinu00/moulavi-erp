@@ -296,6 +296,7 @@ model CityMaster {
   transportRoutesAsCity4 TransportRouteMaster[] @relation("TransportRouteCity4")
   movementDetailsFrom    UmrahMovementDetail[]  @relation("MovementFromCity")
   movementDetailsTo      UmrahMovementDetail[]  @relation("MovementToCity")
+  hotelBookingCities     UmrahHotelBooking[]    @relation("HotelBookingCities")
 
   @@unique([name, countryId])
   @@index([name])
@@ -319,7 +320,6 @@ model LocationMaster {
   country               CountryMaster         @relation(fields: [countryId], references: [id])
   cityMaster            CityMaster            @relation(fields: [cityId], references: [id])
   hotelBookings         UmrahHotelBooking[]   @relation("HotelBookings")
-  hotelBookingLocations UmrahHotelBooking[]   @relation("HotelBookingLocations")
   arrivalFlights        UmrahTravelDetails[]  @relation("ArrivalAirport")
   departureFlights      UmrahTravelDetails[]  @relation("DepartureAirport")
   movementDetailsFrom   UmrahMovementDetail[] @relation("MovementFromLocation")
@@ -419,7 +419,7 @@ model UmrahTravelDetails {
 model UmrahHotelBooking {
   id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   bookingId    String           @map("booking_id") @db.Uuid
-  locationId   String           @map("location_id") @db.Uuid
+  cityId       String           @map("city_id") @db.Uuid
   hotelId      String           @map("hotel_id") @db.Uuid
   checkInDate  DateTime         @map("checkin_date") @db.Date
   checkOutDate DateTime         @map("checkout_date") @db.Date
@@ -428,10 +428,10 @@ model UmrahHotelBooking {
   updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
   booking      UmrahVisaBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   hotel        LocationMaster   @relation("HotelBookings", fields: [hotelId], references: [id])
-  location     LocationMaster   @relation("HotelBookingLocations", fields: [locationId], references: [id])
+  city         CityMaster       @relation("HotelBookingCities", fields: [cityId], references: [id])
 
   @@index([bookingId])
-  @@index([locationId])
+  @@index([cityId])
   @@index([hotelId])
   @@index([checkInDate])
   @@index([checkOutDate])

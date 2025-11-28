@@ -72,7 +72,7 @@ export interface TransportBooking {
 }
 
 export interface HotelBooking {
-  locationId: string;
+  cityId: string;
   hotelId: string;
   checkInDate: string;
   checkOutDate: string;

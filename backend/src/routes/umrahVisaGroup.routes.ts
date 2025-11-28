@@ -206,11 +206,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
     // Collect hotel IDs
     hotelBookingsData.forEach((hotel: any) => {
       if (hotel.hotelId) allLocationIds.add(hotel.hotelId);
-      if (hotel.locationId) {
-        // Could be LocationMaster ID or City ID - we'll check both
-        allLocationIds.add(hotel.locationId);
-        allCityIds.add(hotel.locationId);
-      }
+      // Note: hotel.cityId is now a CityMaster ID (no longer needs conversion)
+      if (hotel.cityId) allCityIds.add(hotel.cityId);
     });
 
     // Collect airport IDs
@@ -350,22 +347,17 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
               throw new Error(`Invalid hotelId ${hotel.hotelId} - hotel LocationMaster not found`);
             }
 
-            // Resolve locationId using pre-fetched maps
-            let locationMasterId: string | null = null;
-
-            // First, try to resolve hotel.locationId (could be LocationMaster ID or City ID)
-            if (hotel.locationId) {
-              locationMasterId = resolveLocationId(hotel.locationId, 'OTHERS');
-            }
-
-            // If not resolved, use hotel's city to find a LocationMaster
-            if (!locationMasterId && hotelLocation.cityId) {
-              locationMasterId = resolveLocationId(hotelLocation.cityId, 'OTHERS');
+            // Get cityId - use hotel.cityId if provided, otherwise use hotel's cityId from LocationMaster
+            let cityId: string | null = null;
+            if (hotel.cityId) {
+              cityId = hotel.cityId;
+            } else if (hotelLocation.cityId) {
+              cityId = hotelLocation.cityId;
             }
 
             // If still not found, throw error
-            if (!locationMasterId) {
-              throw new Error(`No LocationMaster found for hotel booking. Hotel: ${hotel.hotelId}, Location: ${hotel.locationId}`);
+            if (!cityId) {
+              throw new Error(`No cityId found for hotel booking. Hotel: ${hotel.hotelId}, City: ${hotel.cityId}`);
             }
 
             // Ensure dates are Date objects
@@ -387,7 +379,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
             return tx.umrahHotelBooking.create({
               data: {
                 bookingId: booking.id,
-                locationId: locationMasterId,
+                cityId: cityId,
                 hotelId: hotel.hotelId,
                 checkInDate,
                 checkOutDate,

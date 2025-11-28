@@ -122,7 +122,7 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
   // Hotel bookings validation for group bookings (hotels moved to Step 2)
   if (data.hotelBookings && data.hotelBookings.length > 0) {
     for (const booking of data.hotelBookings) {
-      if (!booking.locationId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
+      if (!booking.cityId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
         return 'Please fill in all hotel booking details';
       }
       
@@ -185,7 +185,7 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
     } else if (data.hotelBookings && data.hotelBookings.length > 0) {
       // Individual booking with hotels in step 3 (backward compatibility)
       for (const booking of data.hotelBookings) {
-        if (!booking.locationId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
+        if (!booking.cityId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
           return 'Please fill in all hotel booking details';
         }
         

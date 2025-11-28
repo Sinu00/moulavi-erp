@@ -55,7 +55,7 @@ export const TravelDetailsStep: React.FC<TravelDetailsStepProps> = ({
     if (!isGroupBooking || hotelBookings.length === 0) return false;
     return hotelBookings.every(
       (booking: any) =>
-        booking.locationId &&
+        booking.cityId &&
         booking.hotelId &&
         booking.checkInDate &&
         booking.checkOutDate
@@ -90,7 +90,7 @@ export const TravelDetailsStep: React.FC<TravelDetailsStepProps> = ({
       const updatedBookings = [...hotelBookings];
       updatedBookings[index] = { ...updatedBookings[index], [field]: value };
 
-      if (field === 'locationId' && onLoadHotels) {
+      if (field === 'cityId' && onLoadHotels) {
         updatedBookings[index].hotelId = '';
         onLoadHotels(value as string);
       }

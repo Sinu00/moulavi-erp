@@ -350,8 +350,12 @@ export const useMasterData = () => {
   }, [masterData.hotelsByLocation]);
 
   const getHotelsForLocation = useCallback((cityId: string) => {
-    return masterData.hotelsByLocation[cityId] || [];
-  }, [masterData.hotelsByLocation]);
+    // Filter hotels by cityId from LocationMaster's cityId field
+    if (!cityId) return [];
+    return masterData.locationMasters?.filter((lm: any) => 
+      lm.locationType === 'HOTEL' && lm.cityId === cityId
+    ) || [];
+  }, [masterData.locationMasters]);
 
   const loadAllLocationMasters = useCallback(async () => {
     try {

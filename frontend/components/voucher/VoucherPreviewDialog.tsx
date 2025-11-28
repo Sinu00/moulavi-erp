@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   Table,
@@ -20,11 +21,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus, Minus, Trash2, Truck, Users, MapPin, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { umrahVisaAPI, transportMasterAPI, transportRouteMasterAPI } from '@/lib/api';
+import { umrahVisaAPI, transportMasterAPI, transportRouteMasterAPI, cityMasterAPI, locationMasterAPI } from '@/lib/api';
 import api from '@/lib/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,6 +44,9 @@ interface HotelSchedule {
   checkIn: string;
   checkOut: string;
   days: number;
+  brn?: string | null;
+  cityId?: string;
+  city?: string;
 }
 
 interface MovementDetail {
@@ -53,13 +56,18 @@ interface MovementDetail {
   time: string;
   from: string; // City name
   fromLocation: string; // Specific location (Airport, Hotel, Ziyarat)
+  fromCityId?: string;
+  fromLocationId?: string;
   to: string; // City name
   toLocation: string; // Specific location (Airport, Hotel, Ziyarat)
-  fromLocationId?: string;
+  toCityId?: string;
   toLocationId?: string;
   driverDetails1?: string;
   driverDetails2?: string;
   vehicleNumber?: string;
+  paxCount?: number | null;
+  price?: number | null;
+  vehicleType?: string | null;
 }
 
 interface FlightDetail {
@@ -101,6 +109,15 @@ export function VoucherPreviewDialog({
 }: VoucherPreviewDialogProps) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingMasters, setLoadingMasters] = useState(false);
+  
+  // Master Data
+  const [cities, setCities] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [locationsByCity, setLocationsByCity] = useState<Map<string, any[]>>(new Map());
+  const [hotelsByCity, setHotelsByCity] = useState<Map<string, any[]>>(new Map());
+  const [airportsByCity, setAirportsByCity] = useState<Map<string, any[]>>(new Map());
+  
   const [voucherData, setVoucherData] = useState({
     reservationDate: '',
     guestName: '',
@@ -130,10 +147,68 @@ export function VoucherPreviewDialog({
   const [routeTransports, setRouteTransports] = useState<any[]>([]);
 
   useEffect(() => {
-    if (open && bookingId) {
-      loadVoucherData();
+    if (open) {
+      const loadData = async () => {
+        await loadMasterData();
+        if (bookingId) {
+          await loadVoucherData();
+        }
+      };
+      loadData();
     }
   }, [open, bookingId]);
+
+  const loadMasterData = async () => {
+    try {
+      setLoadingMasters(true);
+      const [citiesRes, locationsRes] = await Promise.all([
+        cityMasterAPI.getActive(),
+        locationMasterAPI.getActive(),
+      ]);
+      
+      const citiesData = citiesRes.data?.cityMasters || citiesRes.data || [];
+      const locationsData = locationsRes.data?.locationMasters || locationsRes.data || [];
+      
+      setCities(citiesData);
+      setLocations(locationsData);
+      
+      // Group locations by city and type
+      const locationsByCityMap = new Map<string, any[]>();
+      const hotelsByCityMap = new Map<string, any[]>();
+      const airportsByCityMap = new Map<string, any[]>();
+      
+      locationsData.forEach((loc: any) => {
+        const cityKey = (loc.city || loc.cityMaster?.name || '').toLowerCase();
+        if (!cityKey) return;
+        
+        if (!locationsByCityMap.has(cityKey)) {
+          locationsByCityMap.set(cityKey, []);
+        }
+        locationsByCityMap.get(cityKey)!.push(loc);
+        
+        if (loc.locationType === 'hotel') {
+          if (!hotelsByCityMap.has(cityKey)) {
+            hotelsByCityMap.set(cityKey, []);
+          }
+          hotelsByCityMap.get(cityKey)!.push(loc);
+        } else if (loc.locationType === 'airport') {
+          if (!airportsByCityMap.has(cityKey)) {
+            airportsByCityMap.set(cityKey, []);
+          }
+          airportsByCityMap.get(cityKey)!.push(loc);
+        }
+      });
+      
+      setLocationsByCity(locationsByCityMap);
+      setHotelsByCity(hotelsByCityMap);
+      setAirportsByCity(airportsByCityMap);
+    } catch (error: any) {
+      console.error('Error loading master data:', error);
+      toast.error('Failed to load master data');
+    } finally {
+      setLoadingMasters(false);
+    }
+  };
 
   const loadVoucherData = async () => {
     try {
@@ -143,6 +218,19 @@ export function VoucherPreviewDialog({
       
       console.log('Voucher data loaded:', data); // Debug log
       
+      // Helper function to find city and location IDs
+      const findCityId = (cityName: string) => {
+        if (cityName) {
+          const foundCity = cities.find((c: any) => 
+            c.name?.toLowerCase() === cityName.toLowerCase()
+          );
+          if (foundCity) {
+            return foundCity.id;
+          }
+        }
+        return '';
+      };
+      
       setVoucherData({
         reservationDate: data.reservationDate ? new Date(data.reservationDate).toISOString().split('T')[0] : '',
         guestName: data.guestName || '',
@@ -150,15 +238,21 @@ export function VoucherPreviewDialog({
         groupCode: data.groupCode || '',
         paxCount: data.paxCount || 0,
         umrahVisaProvider: data.umrahVisaProvider || null,
-        hotelSchedules: (data.hotelSchedules || []).map((hs: any) => ({
-          ...hs,
-          checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' && hs.checkIn.match(/^\d{2}-\d{2}-\d{4}/) 
-            ? (() => { const [d, m, y] = hs.checkIn.split('-'); return `${y}-${m}-${d}`; })() 
-            : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
-          checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' && hs.checkOut.match(/^\d{2}-\d{2}-\d{4}/) 
-            ? (() => { const [d, m, y] = hs.checkOut.split('-'); return `${y}-${m}-${d}`; })() 
-            : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
-        })),
+        hotelSchedules: (data.hotelSchedules || []).map((hs: any) => {
+          const cityId = findCityId(hs.location || '');
+          
+          return {
+            ...hs,
+            cityId: hs.cityId || cityId,
+            city: hs.city || hs.location || '',
+            checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' && hs.checkIn.match(/^\d{2}-\d{2}-\d{4}/) 
+              ? (() => { const [d, m, y] = hs.checkIn.split('-'); return `${y}-${m}-${d}`; })() 
+              : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
+            checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' && hs.checkOut.match(/^\d{2}-\d{2}-\d{4}/) 
+              ? (() => { const [d, m, y] = hs.checkOut.split('-'); return `${y}-${m}-${d}`; })() 
+              : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
+          };
+        }),
         movementDetails: (data.movementDetails || []).map((m: any, idx: number) => {
           // Handle date format - backend sends DD-MM-YYYY, convert to YYYY-MM-DD for date input
           let dateValue = '';
@@ -183,6 +277,9 @@ export function VoucherPreviewDialog({
             }
           }
 
+          const { cityId: fromCityId, locationId: fromLocationId } = findCityAndLocationIds(m.from || '', m.fromLocation || '');
+          const { cityId: toCityId, locationId: toLocationId } = findCityAndLocationIds(m.to || '', m.toLocation || '');
+
           return {
             ...m,
             sr: idx + 1,
@@ -191,8 +288,12 @@ export function VoucherPreviewDialog({
             // Ensure from/to and fromLocation/toLocation are properly set
             from: m.from || '',
             fromLocation: m.fromLocation || '',
+            fromCityId: m.fromCityId || fromCityId,
+            fromLocationId: m.fromLocationId || fromLocationId,
             to: m.to || '',
             toLocation: m.toLocation || '',
+            toCityId: m.toCityId || toCityId,
+            toLocationId: m.toLocationId || toLocationId,
             driverDetails1: m.driverDetails1 || '',
             driverDetails2: m.driverDetails2 || '',
             vehicleNumber: m.vehicleNumber || '',
@@ -404,6 +505,33 @@ export function VoucherPreviewDialog({
     setVoucherData({ ...voucherData, flightDetails: updated });
   };
 
+  const addHotel = () => {
+    const newHotel: HotelSchedule = {
+      number: voucherData.hotelSchedules.length + 1,
+      location: '',
+      hotelName: '',
+      checkIn: '',
+      checkOut: '',
+      days: 0,
+      brn: null,
+      cityId: '',
+      city: '',
+    };
+    setVoucherData({
+      ...voucherData,
+      hotelSchedules: [...voucherData.hotelSchedules, newHotel],
+    });
+  };
+
+  const removeHotel = (index: number) => {
+    const updated = voucherData.hotelSchedules.filter((_, i) => i !== index);
+    // Re-number hotel numbers
+    updated.forEach((h, idx) => {
+      h.number = idx + 1;
+    });
+    setVoucherData({ ...voucherData, hotelSchedules: updated });
+  };
+
   const addMovement = () => {
     const newMovement: MovementDetail = {
       sr: voucherData.movementDetails.length + 1,
@@ -412,8 +540,12 @@ export function VoucherPreviewDialog({
       time: '',
       from: '',
       fromLocation: '',
+      fromCityId: '',
+      fromLocationId: '',
       to: '',
       toLocation: '',
+      toCityId: '',
+      toLocationId: '',
       driverDetails1: '',
       driverDetails2: '',
       vehicleNumber: '',
@@ -459,12 +591,56 @@ export function VoucherPreviewDialog({
       console.log('📋 FROM BOOKING (voucherData from preview):');
       console.log('  - Booking ID:', bookingId);
       console.log('  - Reservation Number: Will be generated by backend');
-      console.log('  - Movement Details Count:', submissionData.movementDetails?.length || 0);
-      if (submissionData.movementDetails) {
-        submissionData.movementDetails.forEach((md: any, idx: number) => {
-          console.log(`    Movement ${idx + 1} (SR: ${md.sr}): Route="Will be generated", From="${md.from}", To="${md.to}"`);
+      
+      // ========== HOTEL DETAILS LOGGING ==========
+      console.log('\n🏨 HOTEL SCHEDULES DETAILS:');
+      console.log('  - Total Hotels:', submissionData.hotelSchedules?.length || 0);
+      if (submissionData.hotelSchedules && submissionData.hotelSchedules.length > 0) {
+        submissionData.hotelSchedules.forEach((hotel: any, idx: number) => {
+          console.log(`\n  Hotel #${idx + 1}:`);
+          console.log('    - Number:', hotel.number);
+          console.log('    - City ID:', hotel.cityId);
+          console.log('    - City:', hotel.city);
+          console.log('    - Location ID:', hotel.locationId);
+          console.log('    - Location:', hotel.location);
+          console.log('    - Hotel Name:', hotel.hotelName);
+          console.log('    - Check In:', hotel.checkIn);
+          console.log('    - Check Out:', hotel.checkOut);
+          console.log('    - Days:', hotel.days);
+          console.log('    - BRN:', hotel.brn);
+          console.log('    - Full Hotel Object:', JSON.stringify(hotel, null, 2));
         });
+      } else {
+        console.log('  - No hotel schedules found');
       }
+      
+      // ========== MOVEMENT DETAILS LOGGING ==========
+      console.log('\n🚗 MOVEMENT DETAILS:');
+      console.log('  - Total Movements:', submissionData.movementDetails?.length || 0);
+      if (submissionData.movementDetails && submissionData.movementDetails.length > 0) {
+        submissionData.movementDetails.forEach((md: any, idx: number) => {
+          console.log(`\n  Movement #${idx + 1}:`);
+          console.log('    - SR:', md.sr);
+          console.log('    - Date:', md.date);
+          console.log('    - Time:', md.time);
+          console.log('    - From City ID:', md.fromCityId);
+          console.log('    - From City:', md.from);
+          console.log('    - From Location ID:', md.fromLocationId);
+          console.log('    - From Location:', md.fromLocation);
+          console.log('    - To City ID:', md.toCityId);
+          console.log('    - To City:', md.to);
+          console.log('    - To Location ID:', md.toLocationId);
+          console.log('    - To Location:', md.toLocation);
+          console.log('    - Driver Details 1:', md.driverDetails1);
+          console.log('    - Driver Details 2:', md.driverDetails2);
+          console.log('    - Vehicle Number:', md.vehicleNumber);
+          console.log('    - Full Movement Object:', JSON.stringify(md, null, 2));
+        });
+      } else {
+        console.log('  - No movement details found');
+      }
+      
+      console.log('\n==========================================');
 
       const response = await umrahVisaAPI.generateVoucher(bookingId, submissionData);
       const generatedVoucher = response.data?.data?.voucher || response.data?.voucher || response.data;
@@ -569,15 +745,15 @@ export function VoucherPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4">
+      <DialogContent className="max-w-[95vw] w-full max-h-[95vh] h-[95vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0 border-b">
           <DialogTitle>Voucher Preview & Generation</DialogTitle>
           <DialogDescription>
             Review and edit voucher details before generating
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 px-6 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
           <div className="space-y-6 pb-4">
             {/* Reservation Summary */}
             <div className="space-y-4 p-4 border rounded-lg bg-white">
@@ -625,47 +801,131 @@ export function VoucherPreviewDialog({
 
             {/* Hotel Schedules */}
             <div className="space-y-4 p-4 border rounded-lg bg-white">
-              <h3 className="font-semibold text-lg">Hotel Schedules</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-lg">Hotel Schedules</h3>
+                <Button type="button" size="sm" onClick={addHotel} variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Hotel
+                </Button>
+              </div>
               {voucherData.hotelSchedules.length === 0 ? (
-                <p className="text-sm text-gray-500 py-4">No hotel bookings found for this reservation.</p>
+                <p className="text-sm text-gray-500 py-4">No hotel bookings found. Click "Add Hotel" to add one.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -mx-4 px-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>#</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead>Hotel Name</TableHead>
-                        <TableHead>Number of Days</TableHead>
-                        <TableHead>Check In</TableHead>
-                        <TableHead>Check Out</TableHead>
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead className="min-w-[150px]">City</TableHead>
+                        <TableHead className="min-w-[200px]">Hotel Name</TableHead>
+                        <TableHead className="w-32">Number of Days</TableHead>
+                        <TableHead className="w-40">Check In</TableHead>
+                        <TableHead className="w-40">Check Out</TableHead>
+                        <TableHead className="w-16">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {voucherData.hotelSchedules.map((hotel, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{hotel.number}</TableCell>
-                          <TableCell>{hotel.location}</TableCell>
-                          <TableCell>{hotel.hotelName}</TableCell>
-                          <TableCell>{hotel.days}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              value={hotel.checkIn ? new Date(hotel.checkIn).toISOString().split('T')[0] : ''}
-                              onChange={(e) => handleHotelScheduleChange(idx, 'checkIn', e.target.value)}
-                              className="w-40"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="date"
-                              value={hotel.checkOut ? new Date(hotel.checkOut).toISOString().split('T')[0] : ''}
-                              onChange={(e) => handleHotelScheduleChange(idx, 'checkOut', e.target.value)}
-                              className="w-40"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {voucherData.hotelSchedules.map((hotel, idx) => {
+                        const cityKey = hotel.city?.toLowerCase() || '';
+                        const availableHotels = hotelsByCity.get(cityKey) || [];
+                        
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell>{hotel.number}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={hotel.cityId || ''}
+                                onValueChange={(value) => {
+                                  const selectedCity = cities.find(c => c.id === value);
+                                  handleHotelScheduleChange(idx, 'cityId', value);
+                                  handleHotelScheduleChange(idx, 'city', selectedCity?.name || '');
+                                  handleHotelScheduleChange(idx, 'location', selectedCity?.name || '');
+                                  handleHotelScheduleChange(idx, 'hotelName', '');
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select City" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {cities.map((city) => (
+                                    <SelectItem key={city.id} value={city.id}>
+                                      {city.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Select
+                                value={(hotel as any).hotelId || ''}
+                                onValueChange={(value) => {
+                                  const selectedHotel = availableHotels.find(l => l.id === value);
+                                  if (selectedHotel) {
+                                    handleHotelScheduleChange(idx, 'hotelName', selectedHotel.name);
+                                    // Store hotelId in the hotel object
+                                    const updated = [...voucherData.hotelSchedules];
+                                    (updated[idx] as any).hotelId = value;
+                                    setVoucherData({ ...voucherData, hotelSchedules: updated });
+                                  }
+                                }}
+                                disabled={!hotel.cityId}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder={hotel.cityId ? "Select Hotel" : "Select city first"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableHotels.length === 0 ? (
+                                    <SelectItem value="no-hotels" disabled>
+                                      {hotel.cityId ? "No hotels in this city" : "Select city first"}
+                                    </SelectItem>
+                                  ) : (
+                                    availableHotels.map((loc) => (
+                                      <SelectItem key={loc.id} value={loc.id}>
+                                        {loc.name}
+                                      </SelectItem>
+                                    ))
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={hotel.hotelName}
+                                onChange={(e) => handleHotelScheduleChange(idx, 'hotelName', e.target.value)}
+                                placeholder="Hotel Name"
+                                className="w-full"
+                              />
+                            </TableCell>
+                            <TableCell>{hotel.days}</TableCell>
+                            <TableCell>
+                              <Input
+                                type="date"
+                                value={hotel.checkIn ? new Date(hotel.checkIn).toISOString().split('T')[0] : ''}
+                                onChange={(e) => handleHotelScheduleChange(idx, 'checkIn', e.target.value)}
+                                className="w-40"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="date"
+                                value={hotel.checkOut ? new Date(hotel.checkOut).toISOString().split('T')[0] : ''}
+                                onChange={(e) => handleHotelScheduleChange(idx, 'checkOut', e.target.value)}
+                                className="w-40"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeHotel(idx)}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -684,21 +944,21 @@ export function VoucherPreviewDialog({
               {voucherData.movementDetails.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4">No movement details found. Click "Add Movement" to add one.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -mx-4 px-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Sr</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead>From City</TableHead>
-                        <TableHead>From Location</TableHead>
-                        <TableHead>To City</TableHead>
-                        <TableHead>To Location</TableHead>
-                        <TableHead>Driver Details 1</TableHead>
-                        <TableHead>Driver Details 2</TableHead>
-                        <TableHead>Vehicle Number</TableHead>
-                        <TableHead>Action</TableHead>
+                        <TableHead className="w-12">Sr</TableHead>
+                        <TableHead className="w-32">Date</TableHead>
+                        <TableHead className="w-24">Time</TableHead>
+                        <TableHead className="min-w-[100px]">From City</TableHead>
+                        <TableHead className="min-w-[120px]">From Location</TableHead>
+                        <TableHead className="min-w-[100px]">To City</TableHead>
+                        <TableHead className="min-w-[120px]">To Location</TableHead>
+                        <TableHead className="min-w-[120px]">Driver Details 1</TableHead>
+                        <TableHead className="min-w-[120px]">Driver Details 2</TableHead>
+                        <TableHead className="min-w-[120px]">Vehicle Number</TableHead>
+                        <TableHead className="w-16">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -722,39 +982,148 @@ export function VoucherPreviewDialog({
                             />
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm font-medium">{movement.from || 'N/A'}</div>
+                            <div className="space-y-2">
+                              <Select
+                                value={movement.fromCityId || ''}
+                                onValueChange={(value) => {
+                                  const selectedCity = cities.find(c => c.id === value);
+                                  handleMovementChange(idx, 'fromCityId', value);
+                                  handleMovementChange(idx, 'from', selectedCity?.name || '');
+                                  handleMovementChange(idx, 'fromLocationId', '');
+                                  handleMovementChange(idx, 'fromLocation', '');
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="From City" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {cities.map((city) => (
+                                    <SelectItem key={city.id} value={city.id}>
+                                      {city.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm text-gray-600">{movement.fromLocation || 'N/A'}</div>
+                            <Select
+                              value={movement.fromLocationId || ''}
+                              onValueChange={(value) => {
+                                const cityKey = movement.from?.toLowerCase() || '';
+                                const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
+                                const selectedLocation = allLocations.find(l => l.id === value);
+                                handleMovementChange(idx, 'fromLocationId', value);
+                                handleMovementChange(idx, 'fromLocation', selectedLocation?.name || '');
+                              }}
+                              disabled={!movement.fromCityId}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder={movement.fromCityId ? "From Location" : "Select city first"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(() => {
+                                  const cityKey = movement.from?.toLowerCase() || '';
+                                  const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
+                                  return allLocations.length === 0 ? (
+                                    <SelectItem value="no-locations" disabled>
+                                      {movement.fromCityId ? "No locations in this city" : "Select city first"}
+                                    </SelectItem>
+                                  ) : (
+                                    allLocations.map((loc) => (
+                                      <SelectItem key={loc.id} value={loc.id}>
+                                        {loc.name}
+                                      </SelectItem>
+                                    ))
+                                  );
+                                })()}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm font-medium">{movement.to || 'N/A'}</div>
+                            <div className="space-y-2">
+                              <Select
+                                value={movement.toCityId || ''}
+                                onValueChange={(value) => {
+                                  const selectedCity = cities.find(c => c.id === value);
+                                  handleMovementChange(idx, 'toCityId', value);
+                                  handleMovementChange(idx, 'to', selectedCity?.name || '');
+                                  handleMovementChange(idx, 'toLocationId', '');
+                                  handleMovementChange(idx, 'toLocation', '');
+                                }}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="To City" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {cities.map((city) => (
+                                    <SelectItem key={city.id} value={city.id}>
+                                      {city.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </TableCell>
                           <TableCell>
-                            <div className="text-sm text-gray-600">{movement.toLocation || 'N/A'}</div>
+                            <Select
+                              value={movement.toLocationId || ''}
+                              onValueChange={(value) => {
+                                const cityKey = movement.to?.toLowerCase() || '';
+                                const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
+                                const selectedLocation = allLocations.find(l => l.id === value);
+                                handleMovementChange(idx, 'toLocationId', value);
+                                handleMovementChange(idx, 'toLocation', selectedLocation?.name || '');
+                              }}
+                              disabled={!movement.toCityId}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder={movement.toCityId ? "To Location" : "Select city first"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(() => {
+                                  const cityKey = movement.to?.toLowerCase() || '';
+                                  const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
+                                  return allLocations.length === 0 ? (
+                                    <SelectItem value="no-locations" disabled>
+                                      {movement.toCityId ? "No locations in this city" : "Select city first"}
+                                    </SelectItem>
+                                  ) : (
+                                    allLocations.map((loc) => (
+                                      <SelectItem key={loc.id} value={loc.id}>
+                                        {loc.name}
+                                      </SelectItem>
+                                    ))
+                                  );
+                                })()}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
-                          <TableCell>
-                            <Input
+                          <TableCell className="p-2">
+                            <Textarea
                               value={movement.driverDetails1 || ''}
                               onChange={(e) => handleMovementChange(idx, 'driverDetails1', e.target.value)}
-                              className="w-32"
+                              className="min-w-[120px] min-h-[60px] resize-none text-sm"
                               placeholder="Driver 1"
+                              rows={2}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Input
+                          <TableCell className="p-2">
+                            <Textarea
                               value={movement.driverDetails2 || ''}
                               onChange={(e) => handleMovementChange(idx, 'driverDetails2', e.target.value)}
-                              className="w-32"
+                              className="min-w-[120px] min-h-[60px] resize-none text-sm"
                               placeholder="Driver 2"
+                              rows={2}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Input
+                          <TableCell className="p-2">
+                            <Textarea
                               value={movement.vehicleNumber || ''}
                               onChange={(e) => handleMovementChange(idx, 'vehicleNumber', e.target.value)}
-                              className="w-32"
+                              className="min-w-[120px] min-h-[60px] resize-none text-sm"
                               placeholder="Vehicle No"
+                              rows={2}
                             />
                           </TableCell>
                           <TableCell>
@@ -781,18 +1150,18 @@ export function VoucherPreviewDialog({
               {voucherData.flightDetails.length === 0 ? (
                 <p className="text-sm text-gray-500 py-4">No flight details found for this reservation.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -mx-4 px-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Carrier</TableHead>
-                        <TableHead>Number</TableHead>
-                        <TableHead>From</TableHead>
-                        <TableHead>To</TableHead>
-                        <TableHead>ETD</TableHead>
-                        <TableHead>ETA</TableHead>
+                        <TableHead className="w-16">Type</TableHead>
+                        <TableHead className="w-32">Date</TableHead>
+                        <TableHead className="w-24">Carrier</TableHead>
+                        <TableHead className="w-24">Number</TableHead>
+                        <TableHead className="w-20">From</TableHead>
+                        <TableHead className="w-20">To</TableHead>
+                        <TableHead className="w-28">ETD</TableHead>
+                        <TableHead className="w-28">ETA</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -816,8 +1185,22 @@ export function VoucherPreviewDialog({
                               className="w-20"
                             />
                           </TableCell>
-                          <TableCell>{flight.from}</TableCell>
-                          <TableCell>{flight.to}</TableCell>
+                          <TableCell>
+                            <Input
+                              value={flight.from}
+                              onChange={(e) => handleFlightChange(idx, 'from', e.target.value)}
+                              placeholder="From"
+                              className="w-20"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={flight.to}
+                              onChange={(e) => handleFlightChange(idx, 'to', e.target.value)}
+                              placeholder="To"
+                              className="w-20"
+                            />
+                          </TableCell>
                           <TableCell>
                             <Input
                               type="time"
@@ -1020,9 +1403,9 @@ export function VoucherPreviewDialog({
               )}
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="px-6 pb-6 pt-4 border-t">
+        <DialogFooter className="px-6 pb-6 pt-4 border-t flex-shrink-0 bg-white">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>

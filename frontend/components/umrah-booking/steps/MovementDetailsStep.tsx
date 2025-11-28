@@ -58,12 +58,143 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     if (hotelBookings.length === 0) return false;
     return hotelBookings.every(
       (booking) =>
-        booking.locationId &&
+        booking.cityId &&
         booking.hotelId &&
         booking.checkInDate &&
         booking.checkOutDate
     );
   }, [hotelBookings]);
+
+  // Helper: Get city name from LocationMaster by ID
+  const getCityNameFromLocationMaster = React.useCallback((locationMasterId: string): string | null => {
+    if (!locationMasterId) return null;
+    const location = locationMasters.find((lm: any) => lm.id === locationMasterId);
+    const cityName = location?.city || location?.cityMaster?.name || null;
+    console.log('[getCityNameFromLocationMaster]', { locationMasterId, cityName, location });
+    return cityName;
+  }, [locationMasters]);
+
+  // Helper: Get city name from city ID (Location format)
+  const getCityNameFromCityId = React.useCallback((cityId: string): string | null => {
+    if (!cityId) return null;
+    const city = locations.find((loc: any) => loc.id === cityId);
+    const cityName = city?.destinationName || city?.name || null;
+    console.log('[getCityNameFromCityId]', { cityId, cityName, city });
+    return cityName;
+  }, [locations]);
+
+  // Helper: Calculate default time and date adjustment based on route
+  const calculateDefaultTime = React.useCallback((
+    fromLocationId: string,
+    toLocationId: string,
+    fromHotelId: string,
+    toHotelId: string,
+    isLastMovement: boolean
+  ): { time: string; dateAdjustment: number } | null => {
+    // Get city names - prioritize LocationMaster (hotels/airports) over city IDs
+    let fromCity: string | null = null;
+    let toCity: string | null = null;
+
+    // Try to get from LocationMaster first (hotels/airports) - these have more accurate city info
+    if (fromHotelId) {
+      fromCity = getCityNameFromLocationMaster(fromHotelId);
+    }
+    if (toHotelId) {
+      toCity = getCityNameFromLocationMaster(toHotelId);
+    }
+
+    // Fallback to city IDs if LocationMaster didn't work
+    if (!fromCity && fromLocationId) {
+      fromCity = getCityNameFromCityId(fromLocationId);
+    }
+    if (!toCity && toLocationId) {
+      toCity = getCityNameFromCityId(toLocationId);
+    }
+
+    if (!fromCity || !toCity) {
+      console.log('[calculateDefaultTime] Missing city info:', { fromCity, toCity, fromLocationId, toLocationId, fromHotelId, toHotelId });
+      return null;
+    }
+
+    const fromCityLower = fromCity.toLowerCase().trim();
+    const toCityLower = toCity.toLowerCase().trim();
+
+    console.log('[calculateDefaultTime] Calculating time for:', { fromCityLower, toCityLower, isLastMovement, departureTime });
+
+    // Last movement (back to departure flight) - calculate from departure time
+    if (isLastMovement && departureTime) {
+      const [hours, minutes] = departureTime.split(':').map(Number);
+      
+      // Create a date object and subtract hours (handles day rollover correctly)
+      let resultHours = hours;
+      let resultMinutes = minutes;
+      let dateAdjustment = 0; // Days to subtract from departure date
+
+      // Madinah to Jeddah: departure time - 12 hours
+      if ((fromCityLower === 'madinah' || fromCityLower === 'medina') && 
+          (toCityLower === 'jeddah' || toCityLower === 'jiddah')) {
+        resultHours = hours - 12;
+        if (resultHours < 0) {
+          resultHours += 24;
+          dateAdjustment = 1; // Move to previous day
+        }
+        return {
+          time: `${String(resultHours).padStart(2, '0')}:${String(resultMinutes).padStart(2, '0')}`,
+          dateAdjustment
+        };
+      }
+
+      // Madinah to Madinah: departure time - 5 hours
+      if ((fromCityLower === 'madinah' || fromCityLower === 'medina') && 
+          (toCityLower === 'madinah' || toCityLower === 'medina')) {
+        resultHours = hours - 5;
+        if (resultHours < 0) {
+          resultHours += 24;
+          dateAdjustment = 1;
+        }
+        return {
+          time: `${String(resultHours).padStart(2, '0')}:${String(resultMinutes).padStart(2, '0')}`,
+          dateAdjustment
+        };
+      }
+
+      // Makkah to Jeddah: departure time - 6 hours
+      if ((fromCityLower === 'makkah' || fromCityLower === 'mecca') && 
+          (toCityLower === 'jeddah' || toCityLower === 'jiddah')) {
+        resultHours = hours - 6;
+        if (resultHours < 0) {
+          resultHours += 24;
+          dateAdjustment = 1;
+        }
+        return {
+          time: `${String(resultHours).padStart(2, '0')}:${String(resultMinutes).padStart(2, '0')}`,
+          dateAdjustment
+        };
+      }
+
+      // Makkah to Madinah (last movement): departure time - 12 hours
+      if ((fromCityLower === 'makkah' || fromCityLower === 'mecca') && 
+          (toCityLower === 'madinah' || toCityLower === 'medina')) {
+        resultHours = hours - 12;
+        if (resultHours < 0) {
+          resultHours += 24;
+          dateAdjustment = 1;
+        }
+        return {
+          time: `${String(resultHours).padStart(2, '0')}:${String(resultMinutes).padStart(2, '0')}`,
+          dateAdjustment
+        };
+      }
+    }
+
+    // Makkah to Madinah: 02:00 (for non-last movements)
+    if ((fromCityLower === 'makkah' || fromCityLower === 'mecca') && 
+        (toCityLower === 'madinah' || toCityLower === 'medina')) {
+      return { time: '02:00', dateAdjustment: 0 };
+    }
+
+    return null;
+  }, [getCityNameFromLocationMaster, getCityNameFromCityId, departureTime]);
 
   // Helper: Calculate ziyarath date (checkInDate + 2 days, skip Fridays)
   const calculateZiyarathDate = (checkInDate: string): string => {
@@ -138,11 +269,18 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
       });
     });
 
-    // Only update if ziyaraths are not already set or if they're different
+    // Only auto-generate if ziyaraths are empty (preserve user edits)
     const currentZiyaraths = data.ziyaraths || [];
-    if (currentZiyaraths.length === 0 || JSON.stringify(currentZiyaraths) !== JSON.stringify(ziyarathEntries)) {
+    if (currentZiyaraths.length === 0) {
       console.log('[MovementDetailsStep] Auto-generating ziyaraths:', ziyarathEntries);
       onChange({ ziyaraths: ziyarathEntries });
+    } else {
+      // Merge: keep existing entries, add new ones for cities that don't have ziyaraths yet
+      const existingCityIds = new Set(currentZiyaraths.map(z => z.ziyarathId));
+      const newEntries = ziyarathEntries.filter(z => !existingCityIds.has(z.ziyarathId));
+      if (newEntries.length > 0) {
+        onChange({ ziyaraths: [...currentZiyaraths, ...newEntries] });
+      }
     }
   }, [
     areHotelsValid,
@@ -151,6 +289,66 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     data.ziyaraths,
     onChange,
   ]);
+
+  // Helper: Adjust date by subtracting days
+  const adjustDate = (dateStr: string, daysToSubtract: number): string => {
+    if (!dateStr) return dateStr;
+    const date = new Date(dateStr);
+    date.setDate(date.getDate() - daysToSubtract);
+    return date.toISOString().split('T')[0];
+  };
+
+  // Recalculate default times when segments or departure time changes
+  React.useEffect(() => {
+    const segments = data.transportSegments || [];
+    if (segments.length === 0) return;
+
+    let updated = false;
+    const updatedSegments = segments.map((seg, index) => {
+      const isLastMovement = index === segments.length - 1;
+      
+      // Only calculate if both from and to are set
+      if ((seg.fromLocationId || seg.fromHotelId) && (seg.toLocationId || seg.toHotelId)) {
+        const defaultTimeResult = calculateDefaultTime(
+          seg.fromLocationId || '',
+          seg.toLocationId || '',
+          seg.fromHotelId || '',
+          seg.toHotelId || '',
+          isLastMovement
+        );
+        
+        // Always set default time and date if calculated (user can still edit it)
+        if (defaultTimeResult) {
+          const needsTimeUpdate = seg.travelTime !== defaultTimeResult.time;
+          const needsDateUpdate = isLastMovement && departureDate && defaultTimeResult.dateAdjustment > 0 && 
+                                 seg.travelDate === departureDate;
+          
+          if (needsTimeUpdate || needsDateUpdate) {
+            updated = true;
+            const newSeg = { ...seg };
+            
+            if (needsTimeUpdate) {
+              newSeg.travelTime = defaultTimeResult.time;
+              console.log('[MovementDetailsStep] Setting default time:', defaultTimeResult.time, 'for segment', index);
+            }
+            
+            if (needsDateUpdate) {
+              newSeg.travelDate = adjustDate(departureDate, defaultTimeResult.dateAdjustment);
+              console.log('[MovementDetailsStep] Adjusting date by', defaultTimeResult.dateAdjustment, 'days for segment', index, 'from', departureDate, 'to', newSeg.travelDate);
+            }
+            
+            return newSeg;
+          }
+        }
+      }
+      return seg;
+    });
+
+    if (updated) {
+      console.log('[MovementDetailsStep] Recalculating default times and dates for segments');
+      onChange({ transportSegments: updatedSegments });
+    }
+  }, [data.transportSegments, departureTime, departureDate, calculateDefaultTime, onChange]);
 
   // Auto-generate transport segments from hotel bookings (regenerates every time step 3 is reached)
   React.useEffect(() => {
@@ -334,6 +532,32 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     (index: number, field: keyof TransportBooking, value: any) => {
       const segments = [...(data.transportSegments || [])];
       segments[index] = { ...segments[index], [field]: value };
+      
+      // Calculate default time when from/to locations change
+      if (field === 'fromLocationId' || field === 'toLocationId' || field === 'fromHotelId' || field === 'toHotelId') {
+        const isLastMovement = index === segments.length - 1;
+        const defaultTimeResult = calculateDefaultTime(
+          segments[index].fromLocationId || '',
+          segments[index].toLocationId || '',
+          segments[index].fromHotelId || '',
+          segments[index].toHotelId || '',
+          isLastMovement
+        );
+        
+        // Always set default time and date if calculated (even if time already exists, user can change it)
+        if (defaultTimeResult) {
+          segments[index].travelTime = defaultTimeResult.time;
+          console.log('[updateMovementSegment] Setting default time:', defaultTimeResult.time, 'for segment', index);
+          
+          // Adjust date if needed (for last movement with day rollover)
+          if (isLastMovement && departureDate && defaultTimeResult.dateAdjustment > 0) {
+            const adjustedDate = adjustDate(departureDate, defaultTimeResult.dateAdjustment);
+            segments[index].travelDate = adjustedDate;
+            console.log('[updateMovementSegment] Adjusting date by', defaultTimeResult.dateAdjustment, 'days for segment', index, 'from', departureDate, 'to', adjustedDate);
+          }
+        }
+      }
+      
       onChange({ transportSegments: segments });
 
       // Reload transport options when from/to location changes
@@ -341,7 +565,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
         loadOptionsForRow(index, segments[index].fromLocationId, segments[index].toLocationId);
       }
     },
-    [data.transportSegments, onChange, loadOptionsForRow]
+    [data.transportSegments, onChange, loadOptionsForRow, locationMasters, locations, departureTime, departureDate, calculateDefaultTime]
   );
 
   // Ziyarath handlers
@@ -353,6 +577,17 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     },
     [data.ziyaraths, onChange]
   );
+
+  const addZiyarath = React.useCallback(() => {
+    const ziyaraths = data.ziyaraths || [];
+    const newZiyarath: ZiyarathEntry = {
+      id: `ziyarath-${Date.now()}`,
+      ziyarathId: '',
+      date: '',
+      time: '',
+    };
+    onChange({ ziyaraths: [...ziyaraths, newZiyarath] });
+  }, [data.ziyaraths, onChange]);
 
   const removeZiyarath = React.useCallback(
     (index: number) => {
@@ -404,11 +639,23 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
       {/* Ziyarath Table */}
       <Card className="p-6">
         <div className="space-y-4">
-          <div>
-            <h4 className="font-medium text-gray-900">Ziyarath Details</h4>
-            <p className="text-sm text-gray-600 mt-1">
-              Ziyarath visits are auto-generated based on your hotel bookings in Makkah and Madinah. Dates are calculated as 2 days after hotel check-in. All fields are editable.
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Ziyarath Details</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Ziyarath visits are auto-generated based on your hotel bookings in Makkah and Madinah. Dates are calculated as 2 days after hotel check-in. All fields are editable.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addZiyarath}
+              disabled={disabled}
+            >
+              <Table2 className="h-4 w-4 mr-2" />
+              Add Ziyarath
+            </Button>
           </div>
 
           <ZiyarathTable

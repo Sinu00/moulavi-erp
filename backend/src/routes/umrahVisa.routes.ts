@@ -80,7 +80,7 @@ router.get('/bookings', authenticate, async (req, res) => {
           hotelBookings: {
             include: {
               hotel: true,
-              location: true,
+              city: true,
             },
           },
           sponsorIqamaDetails: true,
@@ -152,19 +152,10 @@ router.get('/:bookingId', authenticate, async (req, res) => {
         },
         hotelBookings: {
           include: {
-            location: {
+            city: {
               select: {
                 id: true,
                 name: true,
-                city: true,
-                cityId: true,
-                locationType: true,
-                cityMaster: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
               },
             },
             hotel: {
