@@ -47,20 +47,12 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
   const router = useRouter();
   const user = getUser();
   const [mastersOpen, setMastersOpen] = useState(false);
-  const [servicesOpen, setServicesOpen] = useState(false);
   const [umrahVisaOpen, setUmrahVisaOpen] = useState(false);
 
   // Auto-expand Masters tab when on any masters page
   useEffect(() => {
     if (pathname.startsWith('/dashboard/masters/')) {
       setMastersOpen(true);
-    }
-  }, [pathname]);
-
-  // Auto-expand Services tab when on any services page
-  useEffect(() => {
-    if (pathname.startsWith('/dashboard/services/')) {
-      setServicesOpen(true);
     }
   }, [pathname]);
 
@@ -102,11 +94,6 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Income Master', icon: TrendingUp, path: '/dashboard/masters/income' },
   ];
 
-  const serviceItems = [
-    { name: 'Voucher Management', icon: Ticket, path: '/dashboard/services/voucher' },
-    { name: 'Bus Booking', icon: Award, path: '/dashboard/services/bus-booking' },
-  ];
-
   // Umrah Visa items organized into two sections
   const umrahVisaCreateItems = [
     { name: 'Create Individual Booking', icon: FileText, path: '/dashboard/umrah-visa/create-individual' },
@@ -128,6 +115,12 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
       icon: LayoutDashboard,
       path: '/dashboard',
       onClick: () => router.push('/dashboard'),
+    },
+    {
+      name: 'Voucher Management',
+      icon: Ticket,
+      path: '/dashboard/services/voucher',
+      onClick: () => router.push('/dashboard/services/voucher'),
     },
   ];
 
@@ -283,70 +276,6 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Services Section */}
-          <div className="pt-2">
-            <button
-              onClick={() => {
-                if (collapsed) {
-                  toast.info('Expand sidebar to access Services');
-                } else {
-                  setServicesOpen(!servicesOpen);
-                }
-              }}
-              className={cn(
-                "flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                collapsed ? 'justify-center' : 'justify-between',
-                pathname.startsWith('/dashboard/services/')
-                  ? 'bg-indigo-50 text-indigo-600 shadow-sm border-l-2 border-indigo-600'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900',
-                servicesOpen && !collapsed && !pathname.startsWith('/dashboard/services/') && 'bg-gray-50'
-              )}
-              title={collapsed ? "Services" : undefined}
-            >
-              <div className={cn("flex items-center", collapsed ? '' : 'space-x-3')}>
-                <FileText className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>Services</span>}
-              </div>
-              {!collapsed && (
-                <div className={cn("transition-transform duration-200", servicesOpen && "rotate-90")}>
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-              )}
-            </button>
-
-            {/* Services Submenu */}
-            {(servicesOpen || pathname.startsWith('/dashboard/services/')) && !collapsed && (
-              <div className="ml-4 mt-1 space-y-1 border-l-2 border-indigo-200 pl-2 animate-in slide-in-from-top-2 duration-200">
-                {serviceItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.path;
-                  
-                  return (
-                    <button
-                      key={item.name}
-                      onClick={() => {
-                        if (item.path === '/dashboard/services/voucher') {
-                          router.push(item.path);
-                        } else {
-                          toast.info(`${item.name} coming soon`);
-                        }
-                      }}
-                      className={cn(
-                        'flex w-full items-center space-x-2 rounded-md px-3 py-2 text-xs font-medium transition-all duration-200',
-                        isActive
-                          ? 'bg-indigo-50 text-indigo-600 border-l-2 border-indigo-600 shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:border-l-2 hover:border-gray-300'
-                      )}
-                    >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
-                      <span>{item.name}</span>
-                    </button>
-                  );
-                })}
               </div>
             )}
           </div>
