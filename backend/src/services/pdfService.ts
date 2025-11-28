@@ -429,25 +429,30 @@ function generateVoucherHTML(data: VoucherPdfData): string {
             <th>Date</th>
             <th>Carrier</th>
             <th>Number</th>
-            <th>From</th>
-            <th>To</th>
+            <th>Airport</th>
             <th>ETD</th>
             <th>ETA</th>
           </tr>
         </thead>
         <tbody>
-          ${data.flightDetails.map((flight) => `
+          ${data.flightDetails.map((flight) => {
+            // For arrival (AA), show arrival airport; for departure (AD), show departure airport
+            const airport = flight.type === 'AA' 
+              ? (flight.arrivalAirport || flight.from || 'N/A')
+              : (flight.departureAirport || flight.to || 'N/A');
+            
+            return `
             <tr>
               <td>${flight.type || 'N/A'}</td>
               <td>${formatDate(flight.date)}</td>
               <td>${flight.carrier || 'N/A'}</td>
               <td>${flight.number || 'N/A'}</td>
-              <td>${flight.from || 'N/A'}</td>
-              <td>${flight.to || 'N/A'}</td>
+              <td>${airport}</td>
               <td>${formatTime(flight.etd)}</td>
               <td>${formatTime(flight.eta)}</td>
             </tr>
-          `).join('')}
+            `;
+          }).join('')}
         </tbody>
       </table>
     </div>

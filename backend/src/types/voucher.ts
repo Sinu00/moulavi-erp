@@ -40,6 +40,8 @@ export interface VoucherPdfData {
     number: string;
     from: string;
     to: string;
+    arrivalAirport?: string;
+    departureAirport?: string;
     etd: string;
     eta: string;
   }>;

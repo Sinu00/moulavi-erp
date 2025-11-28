@@ -492,7 +492,9 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
       hotelSchedules: booking.hotelBookings?.map((hb: any, idx: number) => ({
         number: idx + 1,
         location: hb.city.name,
+        cityId: hb.cityId, // Include city ID
         hotelName: hb.hotel.name,
+        hotelId: hb.hotelId, // Include hotel ID (LocationMaster ID)
         checkIn: hb.checkInDate,
         checkOut: hb.checkOutDate,
         days: Math.ceil((new Date(hb.checkOutDate).getTime() - new Date(hb.checkInDate).getTime()) / (1000 * 60 * 60 * 24)),
@@ -504,10 +506,12 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
           date: formatDate(md.travelDateTime), // DD-MM-YYYY format
           time: formatTime(md.travelDateTime), // HH:MM format
           from: md.fromCity?.name || '',
+          fromCityId: md.fromCityId, // Include city ID
           fromLocation: md.fromLocation?.name || '',
           fromLocationId: md.fromLocationId,
           fromSpecificLocationId: '', // Not used in new schema
           to: md.toCity?.name || '',
+          toCityId: md.toCityId, // Include city ID
           toLocation: md.toLocation?.name || '',
           toLocationId: md.toLocationId,
           toSpecificLocationId: '', // Not used in new schema
@@ -521,8 +525,8 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
           date: booking.travelDetails.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : '',
           carrier: booking.travelDetails.arrivalFlightNumber?.split('-')[0] || '',
           number: booking.travelDetails.arrivalFlightNumber?.split('-')[1] || '',
-          from: booking.travelDetails.arrivalAirport.code,
-          to: 'JED',
+          arrivalAirportId: booking.travelDetails.arrivalAirportId,
+          arrivalAirport: booking.travelDetails.arrivalAirport.name || booking.travelDetails.arrivalAirport.code || '',
           etd: '',
           eta: booking.travelDetails.arrivalDateTime ? formatTime(booking.travelDetails.arrivalDateTime) : '',
         },
@@ -531,8 +535,8 @@ router.get('/:bookingId/voucher-data', authenticate, async (req, res) => {
           date: booking.travelDetails.departureDateTime ? formatDate(booking.travelDetails.departureDateTime) : '',
           carrier: booking.travelDetails.departureFlightNumber?.split('-')[0] || '',
           number: booking.travelDetails.departureFlightNumber?.split('-')[1] || '',
-          from: 'JED',
-          to: booking.travelDetails.departureAirport.code,
+          departureAirportId: booking.travelDetails.departureAirportId,
+          departureAirport: booking.travelDetails.departureAirport.name || booking.travelDetails.departureAirport.code || '',
           etd: booking.travelDetails.departureDateTime ? formatTime(booking.travelDetails.departureDateTime) : '',
           eta: '',
         },
@@ -810,21 +814,28 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
         // Create VoucherFlight records
         if (voucherData.flightDetails && Array.isArray(voucherData.flightDetails)) {
           await Promise.all(
-            voucherData.flightDetails.map((flight: any) =>
-              tx.voucherFlight.create({
+            voucherData.flightDetails.map((flight: any) => {
+              // For arrival (AA), airport is in arrivalAirport (or from as fallback)
+              // For departure (AD), airport is in departureAirport (or to as fallback)
+              const airport = flight.type === 'AA' 
+                ? (flight.arrivalAirport || flight.from || '')
+                : (flight.departureAirport || flight.to || '');
+              
+              return tx.voucherFlight.create({
                 data: {
                   voucherId: voucherRecord.id,
                   type: String(flight.type || 'AA').substring(0, 2),
                   carrier: String(flight.carrier || '').substring(0, 10),
                   number: String(flight.number || '').substring(0, 20),
                   date: new Date(flight.date),
-                  from: String(flight.from || '').substring(0, 10),
-                  to: String(flight.to || '').substring(0, 10),
+                  // Store airport in 'from' for AA, in 'to' for AD (for PDF display)
+                  from: flight.type === 'AA' ? String(airport).substring(0, 10) : 'JED',
+                  to: flight.type === 'AD' ? String(airport).substring(0, 10) : 'JED',
                   etd: flight.etd ? String(flight.etd).substring(0, 10) : null,
                   eta: flight.eta ? String(flight.eta).substring(0, 10) : null,
                 },
-              })
-            )
+              });
+            })
           );
         }
       }
@@ -971,8 +982,11 @@ router.post('/:bookingId/generate-voucher', authenticate, async (req, res) => {
         carrier: f.carrier,
         number: f.number,
         date: f.date.toISOString().split('T')[0],
-        from: f.from,
-        to: f.to,
+        // For arrival (AA), use 'from' as arrivalAirport; for departure (AD), use 'to' as departureAirport
+        arrivalAirport: f.type === 'AA' ? (f.from || 'N/A') : undefined,
+        departureAirport: f.type === 'AD' ? (f.to || 'N/A') : undefined,
+        from: f.from, // Keep for backward compatibility
+        to: f.to, // Keep for backward compatibility
         etd: f.etd || '',
         eta: f.eta || '',
       })),

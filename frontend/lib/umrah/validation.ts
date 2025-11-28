@@ -211,10 +211,8 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
         }
       }
 
-      const coverage = calculateHotelCoverage(arrivalDate, departureDate, data.hotelBookings);
-      if (coverage.remainingDays > 0) {
-        return `You have ${coverage.remainingDays} day${coverage.remainingDays > 1 ? 's' : ''} without accommodation coverage`;
-      }
+      // Note: Hotel coverage validation (all days covered) is NOT required for individual bookings
+      // Individual bookings don't need to cover all days between arrival and departure
 
       // Ziyarah basic validations
       if (data.ziyarah && data.ziyarah.length) {

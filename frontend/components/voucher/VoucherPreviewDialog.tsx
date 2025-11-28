@@ -29,6 +29,7 @@ import api from '@/lib/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RouteType } from '@/types';
+import { formatFlightNumber } from '@/lib/umrah/validation';
 
 interface VoucherPreviewDialogProps {
   open: boolean;
@@ -47,6 +48,7 @@ interface HotelSchedule {
   brn?: string | null;
   cityId?: string;
   city?: string;
+  hotelId?: string; // LocationMaster ID for the hotel
 }
 
 interface MovementDetail {
@@ -75,8 +77,12 @@ interface FlightDetail {
   date: string;
   carrier: string;
   number: string;
-  from: string;
-  to: string;
+  arrivalAirportId?: string;
+  arrivalAirport?: string;
+  departureAirportId?: string;
+  departureAirport?: string;
+  from?: string; // Legacy field, kept for backward compatibility
+  to?: string; // Legacy field, kept for backward compatibility
   etd: string;
   eta: string;
 }
@@ -186,12 +192,14 @@ export function VoucherPreviewDialog({
         }
         locationsByCityMap.get(cityKey)!.push(loc);
         
-        if (loc.locationType === 'hotel') {
+        // Check for both uppercase and lowercase location types
+        const locationType = (loc.locationType || '').toUpperCase();
+        if (locationType === 'HOTEL') {
           if (!hotelsByCityMap.has(cityKey)) {
             hotelsByCityMap.set(cityKey, []);
           }
           hotelsByCityMap.get(cityKey)!.push(loc);
-        } else if (loc.locationType === 'airport') {
+        } else if (locationType === 'AIRPORT') {
           if (!airportsByCityMap.has(cityKey)) {
             airportsByCityMap.set(cityKey, []);
           }
@@ -218,18 +226,8 @@ export function VoucherPreviewDialog({
       
       console.log('Voucher data loaded:', data); // Debug log
       
-      // Helper function to find city and location IDs
-      const findCityId = (cityName: string) => {
-        if (cityName) {
-          const foundCity = cities.find((c: any) => 
-            c.name?.toLowerCase() === cityName.toLowerCase()
-          );
-          if (foundCity) {
-            return foundCity.id;
-          }
-        }
-        return '';
-      };
+      // Get current cities state (use functional update to ensure we have latest)
+      const currentCities = cities.length > 0 ? cities : (await cityMasterAPI.getActive()).data?.cityMasters || (await cityMasterAPI.getActive()).data || [];
       
       setVoucherData({
         reservationDate: data.reservationDate ? new Date(data.reservationDate).toISOString().split('T')[0] : '',
@@ -239,12 +237,15 @@ export function VoucherPreviewDialog({
         paxCount: data.paxCount || 0,
         umrahVisaProvider: data.umrahVisaProvider || null,
         hotelSchedules: (data.hotelSchedules || []).map((hs: any) => {
-          const cityId = findCityId(hs.location || '');
+          // Get city name from cities array if cityId is present
+          const cityObj = currentCities.find((c: any) => c.id === hs.cityId);
+          const cityName = cityObj?.name || hs.city || hs.location || '';
           
           return {
             ...hs,
-            cityId: hs.cityId || cityId,
-            city: hs.city || hs.location || '',
+            cityId: hs.cityId || '', // Use ID directly from backend
+            city: cityName, // Use city name from cities array or fallback to backend value
+            hotelId: hs.hotelId || '', // Use ID directly from backend
             checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' && hs.checkIn.match(/^\d{2}-\d{2}-\d{4}/) 
               ? (() => { const [d, m, y] = hs.checkIn.split('-'); return `${y}-${m}-${d}`; })() 
               : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
@@ -277,23 +278,27 @@ export function VoucherPreviewDialog({
             }
           }
 
-          const { cityId: fromCityId, locationId: fromLocationId } = findCityAndLocationIds(m.from || '', m.fromLocation || '');
-          const { cityId: toCityId, locationId: toLocationId } = findCityAndLocationIds(m.to || '', m.toLocation || '');
-
+          // Get city names from cities array if cityIds are present
+          const fromCityObj = currentCities.find((c: any) => c.id === m.fromCityId);
+          const fromCityName = fromCityObj?.name || m.from || '';
+          const toCityObj = currentCities.find((c: any) => c.id === m.toCityId);
+          const toCityName = toCityObj?.name || m.to || '';
+          
           return {
             ...m,
             sr: idx + 1,
             date: dateValue,
             time: m.time ? (typeof m.time === 'string' && m.time.includes('T') ? m.time.split('T')[1].slice(0, 5) : m.time.slice(0, 5)) : '',
+            // Use IDs directly from backend
+            fromCityId: m.fromCityId || '',
+            fromLocationId: m.fromLocationId || '',
+            toCityId: m.toCityId || '',
+            toLocationId: m.toLocationId || '',
             // Ensure from/to and fromLocation/toLocation are properly set
-            from: m.from || '',
+            from: fromCityName, // Use city name from cities array or fallback to backend value
             fromLocation: m.fromLocation || '',
-            fromCityId: m.fromCityId || fromCityId,
-            fromLocationId: m.fromLocationId || fromLocationId,
-            to: m.to || '',
+            to: toCityName, // Use city name from cities array or fallback to backend value
             toLocation: m.toLocation || '',
-            toCityId: m.toCityId || toCityId,
-            toLocationId: m.toLocationId || toLocationId,
             driverDetails1: m.driverDetails1 || '',
             driverDetails2: m.driverDetails2 || '',
             vehicleNumber: m.vehicleNumber || '',
@@ -301,6 +306,10 @@ export function VoucherPreviewDialog({
         }),
         flightDetails: (data.flightDetails || []).map((fd: any) => ({
           ...fd,
+          arrivalAirportId: fd.arrivalAirportId || '',
+          arrivalAirport: fd.arrivalAirport || fd.from || '',
+          departureAirportId: fd.departureAirportId || '',
+          departureAirport: fd.departureAirport || fd.to || '',
           date: fd.date ? (typeof fd.date === 'string' && fd.date.match(/^\d{2}-\d{2}-\d{4}/) 
             ? (() => { const [d, m, y] = fd.date.split('-'); return `${y}-${m}-${d}`; })() 
             : new Date(fd.date).toISOString().split('T')[0]) : '',
@@ -572,8 +581,14 @@ export function VoucherPreviewDialog({
       const submissionData = {
         ...voucherData,
         hotelSchedules: voucherData.hotelSchedules.map((hs, idx) => ({
-          ...hs,
           number: idx + 1,
+          location: hs.city || hs.location || '', // Send city name as location (backend expects this)
+          hotelName: hs.hotelName || '',
+          checkIn: hs.checkIn,
+          checkOut: hs.checkOut,
+          days: hs.days || 0,
+          brn: hs.brn || null,
+          // Note: cityId and hotelId are not sent to backend - backend only stores display names
         })),
         movementDetails: voucherData.movementDetails.map((md) => {
           const { route, ...rest } = md; // Remove route - will be generated by backend
@@ -601,8 +616,8 @@ export function VoucherPreviewDialog({
           console.log('    - Number:', hotel.number);
           console.log('    - City ID:', hotel.cityId);
           console.log('    - City:', hotel.city);
-          console.log('    - Location ID:', hotel.locationId);
-          console.log('    - Location:', hotel.location);
+          console.log('    - Hotel ID:', (hotel as any).hotelId);
+          console.log('    - Location (City Name):', hotel.location);
           console.log('    - Hotel Name:', hotel.hotelName);
           console.log('    - Check In:', hotel.checkIn);
           console.log('    - Check Out:', hotel.checkOut);
@@ -826,7 +841,10 @@ export function VoucherPreviewDialog({
                     </TableHeader>
                     <TableBody>
                       {voucherData.hotelSchedules.map((hotel, idx) => {
-                        const cityKey = hotel.city?.toLowerCase() || '';
+                        // Get city name from cities array using cityId, fallback to hotel.city
+                        const cityObj = cities.find(c => c.id === hotel.cityId);
+                        const cityName = cityObj?.name || hotel.city || '';
+                        const cityKey = cityName.toLowerCase();
                         const availableHotels = hotelsByCity.get(cityKey) || [];
                         
                         return (
@@ -841,6 +859,10 @@ export function VoucherPreviewDialog({
                                   handleHotelScheduleChange(idx, 'city', selectedCity?.name || '');
                                   handleHotelScheduleChange(idx, 'location', selectedCity?.name || '');
                                   handleHotelScheduleChange(idx, 'hotelName', '');
+                                  // Clear hotelId when city changes
+                                  const updated = [...voucherData.hotelSchedules];
+                                  (updated[idx] as any).hotelId = '';
+                                  setVoucherData({ ...voucherData, hotelSchedules: updated });
                                 }}
                               >
                                 <SelectTrigger className="w-full">
@@ -887,14 +909,6 @@ export function VoucherPreviewDialog({
                                   )}
                                 </SelectContent>
                               </Select>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={hotel.hotelName}
-                                onChange={(e) => handleHotelScheduleChange(idx, 'hotelName', e.target.value)}
-                                placeholder="Hotel Name"
-                                className="w-full"
-                              />
                             </TableCell>
                             <TableCell>{hotel.days}</TableCell>
                             <TableCell>
@@ -1010,7 +1024,10 @@ export function VoucherPreviewDialog({
                             <Select
                               value={movement.fromLocationId || ''}
                               onValueChange={(value) => {
-                                const cityKey = movement.from?.toLowerCase() || '';
+                                // Get city name from cities array using fromCityId
+                                const cityObj = cities.find(c => c.id === movement.fromCityId);
+                                const cityName = cityObj?.name || movement.from || '';
+                                const cityKey = cityName.toLowerCase();
                                 const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
                                 const selectedLocation = allLocations.find(l => l.id === value);
                                 handleMovementChange(idx, 'fromLocationId', value);
@@ -1023,7 +1040,10 @@ export function VoucherPreviewDialog({
                               </SelectTrigger>
                               <SelectContent>
                                 {(() => {
-                                  const cityKey = movement.from?.toLowerCase() || '';
+                                  // Get city name from cities array using fromCityId
+                                  const cityObj = cities.find(c => c.id === movement.fromCityId);
+                                  const cityName = cityObj?.name || movement.from || '';
+                                  const cityKey = cityName.toLowerCase();
                                   const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
                                   return allLocations.length === 0 ? (
                                     <SelectItem value="no-locations" disabled>
@@ -1069,7 +1089,10 @@ export function VoucherPreviewDialog({
                             <Select
                               value={movement.toLocationId || ''}
                               onValueChange={(value) => {
-                                const cityKey = movement.to?.toLowerCase() || '';
+                                // Get city name from cities array using toCityId
+                                const cityObj = cities.find(c => c.id === movement.toCityId);
+                                const cityName = cityObj?.name || movement.to || '';
+                                const cityKey = cityName.toLowerCase();
                                 const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
                                 const selectedLocation = allLocations.find(l => l.id === value);
                                 handleMovementChange(idx, 'toLocationId', value);
@@ -1078,11 +1101,16 @@ export function VoucherPreviewDialog({
                               disabled={!movement.toCityId}
                             >
                               <SelectTrigger className="w-full">
-                                <SelectValue placeholder={movement.toCityId ? "To Location" : "Select city first"} />
+                                <SelectValue placeholder={movement.toCityId ? "To Location" : "Select city first"}>
+                                  {movement.toLocation || (movement.toCityId ? "To Location" : "Select city first")}
+                                </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {(() => {
-                                  const cityKey = movement.to?.toLowerCase() || '';
+                                  // Get city name from cities array using toCityId
+                                  const cityObj = cities.find(c => c.id === movement.toCityId);
+                                  const cityName = cityObj?.name || movement.to || '';
+                                  const cityKey = cityName.toLowerCase();
                                   const allLocations = [...(hotelsByCity.get(cityKey) || []), ...(airportsByCity.get(cityKey) || [])];
                                   return allLocations.length === 0 ? (
                                     <SelectItem value="no-locations" disabled>
@@ -1158,8 +1186,8 @@ export function VoucherPreviewDialog({
                         <TableHead className="w-32">Date</TableHead>
                         <TableHead className="w-24">Carrier</TableHead>
                         <TableHead className="w-24">Number</TableHead>
-                        <TableHead className="w-20">From</TableHead>
-                        <TableHead className="w-20">To</TableHead>
+                        <TableHead className="w-20">Airport</TableHead>
+                        <TableHead className="w-20">Destination</TableHead>
                         <TableHead className="w-28">ETD</TableHead>
                         <TableHead className="w-28">ETA</TableHead>
                       </TableRow>
@@ -1181,25 +1209,65 @@ export function VoucherPreviewDialog({
                           <TableCell>
                             <Input
                               value={flight.number}
-                              onChange={(e) => handleFlightChange(idx, 'number', e.target.value)}
+                              onChange={(e) => {
+                                const formatted = formatFlightNumber(e.target.value);
+                                handleFlightChange(idx, 'number', formatted);
+                              }}
                               className="w-20"
                             />
                           </TableCell>
                           <TableCell>
-                            <Input
-                              value={flight.from}
-                              onChange={(e) => handleFlightChange(idx, 'from', e.target.value)}
-                              placeholder="From"
-                              className="w-20"
-                            />
+                            {flight.type === 'AA' ? (
+                              // Arrival: Show arrival airport dropdown
+                              <Select
+                                value={flight.arrivalAirportId || ''}
+                                onValueChange={(value) => {
+                                  const selectedAirport = locations.find((loc: any) => loc.id === value && (loc.locationType || '').toUpperCase() === 'AIRPORT');
+                                  handleFlightChange(idx, 'arrivalAirportId', value);
+                                  handleFlightChange(idx, 'arrivalAirport', selectedAirport?.name || '');
+                                }}
+                              >
+                                <SelectTrigger className="w-20">
+                                  <SelectValue placeholder="Airport" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {locations
+                                    .filter((loc: any) => (loc.locationType || '').toUpperCase() === 'AIRPORT')
+                                    .map((airport: any) => (
+                                      <SelectItem key={airport.id} value={airport.id}>
+                                        {airport.name || airport.code}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              // Departure: Show departure airport dropdown
+                              <Select
+                                value={flight.departureAirportId || ''}
+                                onValueChange={(value) => {
+                                  const selectedAirport = locations.find((loc: any) => loc.id === value && (loc.locationType || '').toUpperCase() === 'AIRPORT');
+                                  handleFlightChange(idx, 'departureAirportId', value);
+                                  handleFlightChange(idx, 'departureAirport', selectedAirport?.name || '');
+                                }}
+                              >
+                                <SelectTrigger className="w-20">
+                                  <SelectValue placeholder="Airport" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {locations
+                                    .filter((loc: any) => (loc.locationType || '').toUpperCase() === 'AIRPORT')
+                                    .map((airport: any) => (
+                                      <SelectItem key={airport.id} value={airport.id}>
+                                        {airport.name || airport.code}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </TableCell>
                           <TableCell>
-                            <Input
-                              value={flight.to}
-                              onChange={(e) => handleFlightChange(idx, 'to', e.target.value)}
-                              placeholder="To"
-                              className="w-20"
-                            />
+                            {/* For arrival: destination is always JED, for departure: origin is always JED */}
+                            <span className="text-sm text-gray-600">JED</span>
                           </TableCell>
                           <TableCell>
                             <Input
