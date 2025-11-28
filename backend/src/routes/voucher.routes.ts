@@ -458,21 +458,28 @@ router.post(
       // Create flights
       if (flightDetails && Array.isArray(flightDetails)) {
         await Promise.all(
-          flightDetails.map((flight: any) =>
-            tx.voucherFlight.create({
+          flightDetails.map((flight: any) => {
+            // For arrival (AA), airport is in arrivalAirport (or from as fallback)
+            // For departure (AD), airport is in departureAirport (or to as fallback)
+            const airport = flight.type === 'AA' 
+              ? (flight.arrivalAirport || flight.from || '')
+              : (flight.departureAirport || flight.to || '');
+            
+            return tx.voucherFlight.create({
               data: {
                 voucherId: newVoucher.id,
                 type: String(flight.type || 'AA').substring(0, 2),
                 carrier: String(flight.carrier || '').substring(0, 10),
                 number: String(flight.number || '').substring(0, 20),
                 date: new Date(flight.date),
-                from: String(flight.from || '').substring(0, 10),
-                to: String(flight.to || '').substring(0, 10),
+                // Store airport in 'from' for AA, in 'to' for AD (for PDF display)
+                from: flight.type === 'AA' ? String(airport).substring(0, 10) : 'JED',
+                to: flight.type === 'AD' ? String(airport).substring(0, 10) : 'JED',
                 etd: flight.etd ? String(flight.etd).substring(0, 10) : null,
                 eta: flight.eta ? String(flight.eta).substring(0, 10) : null,
               },
-            })
-          )
+            });
+          })
         );
       }
 

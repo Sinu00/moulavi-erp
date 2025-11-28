@@ -196,8 +196,8 @@ export default function ViewVoucherPage() {
                         <thead>
                           <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
                             <th className="py-3 px-4">#</th>
-                            <th className="py-3 px-4">Location</th>
-                            <th className="py-3 px-4">Hotel Name</th>
+                            <th className="py-3 px-4">City</th>
+                            <th className="py-3 px-4">Hotel</th>
                             <th className="py-3 px-4">Check-In</th>
                             <th className="py-3 px-4">Check-Out</th>
                             <th className="py-3 px-4">Days</th>
@@ -380,14 +380,18 @@ export default function ViewVoucherPage() {
                             </div>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-200">
-                            <div>
-                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">From</p>
-                              <p className="text-sm text-gray-900">{flight.from || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">To</p>
-                              <p className="text-sm text-gray-900">{flight.to || 'N/A'}</p>
-                            </div>
+                            {flight.type === 'AA' && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Arrival Airport</p>
+                                <p className="text-sm text-gray-900">{flight.from || 'N/A'}</p>
+                              </div>
+                            )}
+                            {flight.type === 'AD' && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Departure Airport</p>
+                                <p className="text-sm text-gray-900">{flight.to || 'N/A'}</p>
+                              </div>
+                            )}
                             {flight.etd && (
                               <div>
                                 <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">ETD</p>

@@ -348,19 +348,19 @@ export default function EditVoucherPage() {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <label className="text-xs text-gray-600 mb-1 block">Location</label>
+                              <label className="text-xs text-gray-600 mb-1 block">City</label>
                               <Input
                                 value={hotel.location || ''}
                                 onChange={(e) => updateHotelSchedule(index, 'location', e.target.value)}
-                                placeholder="Location"
+                                placeholder="City"
                               />
                             </div>
                             <div>
-                              <label className="text-xs text-gray-600 mb-1 block">Hotel Name</label>
+                              <label className="text-xs text-gray-600 mb-1 block">Hotel</label>
                               <Input
                                 value={hotel.hotelName || ''}
                                 onChange={(e) => updateHotelSchedule(index, 'hotelName', e.target.value)}
-                                placeholder="Hotel Name"
+                                placeholder="Hotel"
                               />
                             </div>
                             <div>
@@ -601,22 +601,26 @@ export default function EditVoucherPage() {
                                 onChange={(e) => updateFlight(index, 'date', e.target.value)}
                               />
                             </div>
-                            <div>
-                              <label className="text-xs text-gray-600 mb-1 block">From</label>
-                              <Input
-                                value={flight.from || ''}
-                                onChange={(e) => updateFlight(index, 'from', e.target.value)}
-                                placeholder="From Airport Code"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-600 mb-1 block">To</label>
-                              <Input
-                                value={flight.to || ''}
-                                onChange={(e) => updateFlight(index, 'to', e.target.value)}
-                                placeholder="To Airport Code"
-                              />
-                            </div>
+                            {flight.type === 'AA' && (
+                              <div>
+                                <label className="text-xs text-gray-600 mb-1 block">Arrival Airport</label>
+                                <Input
+                                  value={flight.from || ''}
+                                  onChange={(e) => updateFlight(index, 'from', e.target.value)}
+                                  placeholder="Arrival Airport"
+                                />
+                              </div>
+                            )}
+                            {flight.type === 'AD' && (
+                              <div>
+                                <label className="text-xs text-gray-600 mb-1 block">Departure Airport</label>
+                                <Input
+                                  value={flight.to || ''}
+                                  onChange={(e) => updateFlight(index, 'to', e.target.value)}
+                                  placeholder="Departure Airport"
+                                />
+                              </div>
+                            )}
                             {flight.type === 'AD' && (
                               <div>
                                 <label className="text-xs text-gray-600 mb-1 block">ETD</label>

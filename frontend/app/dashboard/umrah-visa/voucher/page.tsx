@@ -115,6 +115,7 @@ export default function VoucherPage() {
       toast.error('Booking ID not found');
       return;
     }
+    // Set both states - React will batch these updates
     setSelectedBooking(booking);
     setShowGenerateDialog(true);
   };

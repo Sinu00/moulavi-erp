@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
 import { Plus, Minus, Trash2, Truck, Users, MapPin, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { umrahVisaAPI, transportMasterAPI, transportRouteMasterAPI, cityMasterAPI, locationMasterAPI } from '@/lib/api';
@@ -115,12 +114,10 @@ export function VoucherPreviewDialog({
 }: VoucherPreviewDialogProps) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [loadingMasters, setLoadingMasters] = useState(false);
   
   // Master Data
   const [cities, setCities] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  const [locationsByCity, setLocationsByCity] = useState<Map<string, any[]>>(new Map());
   const [hotelsByCity, setHotelsByCity] = useState<Map<string, any[]>>(new Map());
   const [airportsByCity, setAirportsByCity] = useState<Map<string, any[]>>(new Map());
   
@@ -151,22 +148,41 @@ export function VoucherPreviewDialog({
   const [routeTypeFilter, setRouteTypeFilter] = useState<RouteType | 'all'>('all');
   const [availableRoutes, setAvailableRoutes] = useState<any[]>([]);
   const [routeTransports, setRouteTransports] = useState<any[]>([]);
+  const isLoadingRef = useRef(false);
+  const loadedBookingIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (open) {
+    // Load data when dialog opens (only once per bookingId, prevent concurrent loads)
+    if (open && bookingId && loadedBookingIdRef.current !== bookingId && !isLoadingRef.current) {
+      isLoadingRef.current = true;
+      loadedBookingIdRef.current = bookingId;
+      
       const loadData = async () => {
-        await loadMasterData();
-        if (bookingId) {
+        try {
+          await loadMasterData();
           await loadVoucherData();
+        } catch (error) {
+          // Reset on error so it can retry
+          loadedBookingIdRef.current = null;
+        } finally {
+          isLoadingRef.current = false;
         }
       };
       loadData();
     }
+    
+    // Reset when dialog closes
+    if (!open) {
+      loadedBookingIdRef.current = null;
+      isLoadingRef.current = false;
+    }
   }, [open, bookingId]);
 
   const loadMasterData = async () => {
+    // Skip if already loaded
+    if (cities.length > 0 && locations.length > 0) return;
+    
     try {
-      setLoadingMasters(true);
       const [citiesRes, locationsRes] = await Promise.all([
         cityMasterAPI.getActive(),
         locationMasterAPI.getActive(),
@@ -179,7 +195,6 @@ export function VoucherPreviewDialog({
       setLocations(locationsData);
       
       // Group locations by city and type
-      const locationsByCityMap = new Map<string, any[]>();
       const hotelsByCityMap = new Map<string, any[]>();
       const airportsByCityMap = new Map<string, any[]>();
       
@@ -187,12 +202,6 @@ export function VoucherPreviewDialog({
         const cityKey = (loc.city || loc.cityMaster?.name || '').toLowerCase();
         if (!cityKey) return;
         
-        if (!locationsByCityMap.has(cityKey)) {
-          locationsByCityMap.set(cityKey, []);
-        }
-        locationsByCityMap.get(cityKey)!.push(loc);
-        
-        // Check for both uppercase and lowercase location types
         const locationType = (loc.locationType || '').toUpperCase();
         if (locationType === 'HOTEL') {
           if (!hotelsByCityMap.has(cityKey)) {
@@ -207,24 +216,21 @@ export function VoucherPreviewDialog({
         }
       });
       
-      setLocationsByCity(locationsByCityMap);
       setHotelsByCity(hotelsByCityMap);
       setAirportsByCity(airportsByCityMap);
     } catch (error: any) {
       console.error('Error loading master data:', error);
       toast.error('Failed to load master data');
-    } finally {
-      setLoadingMasters(false);
     }
   };
 
   const loadVoucherData = async () => {
+    if (loading) return;
+    
     try {
       setLoading(true);
       const response = await umrahVisaAPI.getVoucherData(bookingId);
       const data = response.data;
-      
-      console.log('Voucher data loaded:', data); // Debug log
       
       // Get current cities state (use functional update to ensure we have latest)
       const currentCities = cities.length > 0 ? cities : (await cityMasterAPI.getActive()).data?.cityMasters || (await cityMasterAPI.getActive()).data || [];
@@ -242,16 +248,16 @@ export function VoucherPreviewDialog({
           const cityName = cityObj?.name || hs.city || hs.location || '';
           
           return {
-            ...hs,
+          ...hs,
             cityId: hs.cityId || '', // Use ID directly from backend
             city: cityName, // Use city name from cities array or fallback to backend value
             hotelId: hs.hotelId || '', // Use ID directly from backend
-            checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' && hs.checkIn.match(/^\d{2}-\d{2}-\d{4}/) 
-              ? (() => { const [d, m, y] = hs.checkIn.split('-'); return `${y}-${m}-${d}`; })() 
-              : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
-            checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' && hs.checkOut.match(/^\d{2}-\d{2}-\d{4}/) 
-              ? (() => { const [d, m, y] = hs.checkOut.split('-'); return `${y}-${m}-${d}`; })() 
-              : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
+          checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' && hs.checkIn.match(/^\d{2}-\d{2}-\d{4}/) 
+            ? (() => { const [d, m, y] = hs.checkIn.split('-'); return `${y}-${m}-${d}`; })() 
+            : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
+          checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' && hs.checkOut.match(/^\d{2}-\d{2}-\d{4}/) 
+            ? (() => { const [d, m, y] = hs.checkOut.split('-'); return `${y}-${m}-${d}`; })() 
+            : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
           };
         }),
         movementDetails: (data.movementDetails || []).map((m: any, idx: number) => {
@@ -283,7 +289,7 @@ export function VoucherPreviewDialog({
           const fromCityName = fromCityObj?.name || m.from || '';
           const toCityObj = currentCities.find((c: any) => c.id === m.toCityId);
           const toCityName = toCityObj?.name || m.to || '';
-          
+
           return {
             ...m,
             sr: idx + 1,
@@ -426,26 +432,13 @@ export function VoucherPreviewDialog({
     const routeString = cities.join(' → ');
     const routeTypeLabel = route.routeType
       ? route.routeType
-          .replace(/([a-z])([A-Z])/g, '$1 $2')
-          .split(' ')
-          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .split(' ')
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ')
       : 'Unknown';
     return `${routeString} (${routeTypeLabel})`;
   };
-
-  const getRouteString = (route: TransportOption['route'] | null) => {
-    if (!route) return 'No route';
-    const cities = [
-      route.city1?.name,
-      route.city2?.name,
-      route.city3?.name,
-      route.city4?.name,
-    ].filter(Boolean);
-    if (cities.length === 0) return 'No route';
-    return cities.map(city => city?.toLowerCase() || '').join(' - ');
-  };
-
 
   const handleTransportQuantityChange = (transportId: string, delta: number) => {
     const existingIndex = voucherData.transportOptions.findIndex(t => t.transportId === transportId);
@@ -594,68 +587,13 @@ export function VoucherPreviewDialog({
           const { route, ...rest } = md; // Remove route - will be generated by backend
           return {
             ...rest,
-            // Convert date and time strings back to proper format
-            date: md.date,
-            time: md.time,
+          // Convert date and time strings back to proper format
+          date: md.date,
+          time: md.time,
           };
         }),
       };
 
-      // ========== DEBUG LOGGING: FRONTEND - BEFORE GENERATION ==========
-      console.log('========== FRONTEND: VOUCHER GENERATION DEBUG ==========');
-      console.log('📋 FROM BOOKING (voucherData from preview):');
-      console.log('  - Booking ID:', bookingId);
-      console.log('  - Reservation Number: Will be generated by backend');
-      
-      // ========== HOTEL DETAILS LOGGING ==========
-      console.log('\n🏨 HOTEL SCHEDULES DETAILS:');
-      console.log('  - Total Hotels:', submissionData.hotelSchedules?.length || 0);
-      if (submissionData.hotelSchedules && submissionData.hotelSchedules.length > 0) {
-        submissionData.hotelSchedules.forEach((hotel: any, idx: number) => {
-          console.log(`\n  Hotel #${idx + 1}:`);
-          console.log('    - Number:', hotel.number);
-          console.log('    - City ID:', hotel.cityId);
-          console.log('    - City:', hotel.city);
-          console.log('    - Hotel ID:', (hotel as any).hotelId);
-          console.log('    - Location (City Name):', hotel.location);
-          console.log('    - Hotel Name:', hotel.hotelName);
-          console.log('    - Check In:', hotel.checkIn);
-          console.log('    - Check Out:', hotel.checkOut);
-          console.log('    - Days:', hotel.days);
-          console.log('    - BRN:', hotel.brn);
-          console.log('    - Full Hotel Object:', JSON.stringify(hotel, null, 2));
-        });
-      } else {
-        console.log('  - No hotel schedules found');
-      }
-      
-      // ========== MOVEMENT DETAILS LOGGING ==========
-      console.log('\n🚗 MOVEMENT DETAILS:');
-      console.log('  - Total Movements:', submissionData.movementDetails?.length || 0);
-      if (submissionData.movementDetails && submissionData.movementDetails.length > 0) {
-        submissionData.movementDetails.forEach((md: any, idx: number) => {
-          console.log(`\n  Movement #${idx + 1}:`);
-          console.log('    - SR:', md.sr);
-          console.log('    - Date:', md.date);
-          console.log('    - Time:', md.time);
-          console.log('    - From City ID:', md.fromCityId);
-          console.log('    - From City:', md.from);
-          console.log('    - From Location ID:', md.fromLocationId);
-          console.log('    - From Location:', md.fromLocation);
-          console.log('    - To City ID:', md.toCityId);
-          console.log('    - To City:', md.to);
-          console.log('    - To Location ID:', md.toLocationId);
-          console.log('    - To Location:', md.toLocation);
-          console.log('    - Driver Details 1:', md.driverDetails1);
-          console.log('    - Driver Details 2:', md.driverDetails2);
-          console.log('    - Vehicle Number:', md.vehicleNumber);
-          console.log('    - Full Movement Object:', JSON.stringify(md, null, 2));
-        });
-      } else {
-        console.log('  - No movement details found');
-      }
-      
-      console.log('\n==========================================');
 
       const response = await umrahVisaAPI.generateVoucher(bookingId, submissionData);
       const generatedVoucher = response.data?.data?.voucher || response.data?.voucher || response.data;
@@ -664,26 +602,10 @@ export function VoucherPreviewDialog({
         throw new Error('Voucher was created but data was not returned');
       }
       
-      // ========== DEBUG LOGGING: FRONTEND - AFTER GENERATION ==========
-      console.log('📄 FROM VOUCHER (generatedVoucher response):');
-      console.log('  - Voucher Number:', generatedVoucher.voucherNumber);
-      console.log('  - Reservation Number:', generatedVoucher.reservationNumber || 'NULL');
-      const voucherRouteNumbers = generatedVoucher.movementDetails
-        ?.map((m: any) => m.route)
-        .filter((r: string) => r && r !== '') || [];
-      console.log('  - Route Numbers:', voucherRouteNumbers.length > 0 ? voucherRouteNumbers : 'NONE');
-      console.log('  - Movement Details Count:', generatedVoucher.movementDetails?.length || 0);
-      if (generatedVoucher.movementDetails) {
-        generatedVoucher.movementDetails.forEach((m: any, idx: number) => {
-          console.log(`    Movement ${idx + 1} (SR: ${m.sr}): Route="${m.route || 'NULL'}", From="${m.from}", To="${m.to}"`);
-        });
-      }
-      
       toast.success('Voucher generated successfully!');
       
-      // Generate and download PDF using ONLY the voucher data (with correct route numbers and reservation numbers)
+      // Generate and download PDF using the voucher data returned from backend
       try {
-        // Use ONLY the voucher data returned from backend - this has the actual route numbers and reservation numbers
         const pdfData = {
           voucherNumber: generatedVoucher.voucherNumber,
           reservationNumber: generatedVoucher.reservationNumber || '',
@@ -697,19 +619,6 @@ export function VoucherPreviewDialog({
           movementDetails: generatedVoucher.movementDetails || [],
           flightDetails: generatedVoucher.flightDetails || [],
         };
-
-        // ========== DEBUG LOGGING: FRONTEND - PDF DATA ==========
-        console.log('📑 FROM PDF DATA (pdfData being sent to backend):');
-        console.log('  - Reservation Number:', pdfData.reservationNumber || 'NULL');
-        const pdfRouteNumbers = pdfData.movementDetails
-          .map((m: any) => m.route)
-          .filter((r: string) => r && r !== '') || [];
-        console.log('  - Route Numbers:', pdfRouteNumbers.length > 0 ? pdfRouteNumbers : 'NONE');
-        console.log('  - Movement Details Count:', pdfData.movementDetails.length);
-        pdfData.movementDetails.forEach((m: any, idx: number) => {
-          console.log(`    Movement ${idx + 1} (SR: ${m.sr}): Route="${m.route || 'NULL'}", From="${m.from}", To="${m.to}"`);
-        });
-        console.log('==========================================');
 
         // Call backend to generate PDF
         const pdfResponse = await api.post('/umrah-visa/generate-pdf', pdfData, {
@@ -817,7 +726,7 @@ export function VoucherPreviewDialog({
             {/* Hotel Schedules */}
             <div className="space-y-4 p-4 border rounded-lg bg-white">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg">Hotel Schedules</h3>
+              <h3 className="font-semibold text-lg">Hotel Schedules</h3>
                 <Button type="button" size="sm" onClick={addHotel} variant="outline">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Hotel
@@ -848,8 +757,8 @@ export function VoucherPreviewDialog({
                         const availableHotels = hotelsByCity.get(cityKey) || [];
                         
                         return (
-                          <TableRow key={idx}>
-                            <TableCell>{hotel.number}</TableCell>
+                        <TableRow key={idx}>
+                          <TableCell>{hotel.number}</TableCell>
                             <TableCell>
                               <Select
                                 value={hotel.cityId || ''}
@@ -910,23 +819,23 @@ export function VoucherPreviewDialog({
                                 </SelectContent>
                               </Select>
                             </TableCell>
-                            <TableCell>{hotel.days}</TableCell>
-                            <TableCell>
-                              <Input
-                                type="date"
-                                value={hotel.checkIn ? new Date(hotel.checkIn).toISOString().split('T')[0] : ''}
-                                onChange={(e) => handleHotelScheduleChange(idx, 'checkIn', e.target.value)}
-                                className="w-40"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="date"
-                                value={hotel.checkOut ? new Date(hotel.checkOut).toISOString().split('T')[0] : ''}
-                                onChange={(e) => handleHotelScheduleChange(idx, 'checkOut', e.target.value)}
-                                className="w-40"
-                              />
-                            </TableCell>
+                          <TableCell>{hotel.days}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="date"
+                              value={hotel.checkIn ? new Date(hotel.checkIn).toISOString().split('T')[0] : ''}
+                              onChange={(e) => handleHotelScheduleChange(idx, 'checkIn', e.target.value)}
+                              className="w-40"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="date"
+                              value={hotel.checkOut ? new Date(hotel.checkOut).toISOString().split('T')[0] : ''}
+                              onChange={(e) => handleHotelScheduleChange(idx, 'checkOut', e.target.value)}
+                              className="w-40"
+                            />
+                          </TableCell>
                             <TableCell>
                               <Button
                                 type="button"
@@ -937,7 +846,7 @@ export function VoucherPreviewDialog({
                                 <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
                             </TableCell>
-                          </TableRow>
+                        </TableRow>
                         );
                       })}
                     </TableBody>

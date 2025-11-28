@@ -381,7 +381,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         cityId: city.id,
         cityName: city.name,
         locationId: '', // No prefill
-        location: '',
+        location: city.name, // IMPORTANT: location should be city name (CityMaster), not hotel name
         hotelName: '', // No prefill
         checkIn: checkInDate.toISOString().split('T')[0],
         checkOut: checkOutDate.toISOString().split('T')[0],
@@ -467,9 +467,11 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       if (!isLastHotel) {
         const nextHotel = newHotels[i + 1];
         if (nextHotel.cityId && nextHotel.cityName) {
-          // From: current hotel's ziyarath (if exists) or hotel, To: next hotel
-          const fromLocationId = hasZiyarath && ziyarathLocation ? ziyarathLocation.id : '';
-          const fromLocation = hasZiyarath && ziyarathLocation ? ziyarathLocation.name : '';
+          // IMPORTANT: After ziyarath (round trip), person returns to hotel
+          // So the next movement should start from the hotel, NOT from ziyarath
+          // From: current hotel (always), To: next hotel
+          const fromLocationId = ''; // Will be updated when hotel is selected
+          const fromLocation = ''; // Will be updated when hotel is selected
           
           // Estimate date based on current hotel check-out or ziyarath date
           const movementDate = hasZiyarath && currentHotel.checkIn 
@@ -483,8 +485,8 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
             time: '12:00',
             fromCityId: currentHotel.cityId,
             from: currentHotel.cityName,
-            fromLocationId: fromLocationId,
-            fromLocation: fromLocation,
+            fromLocationId: fromLocationId, // Hotel location (will be set when hotel selected)
+            fromLocation: fromLocation, // Hotel location (will be set when hotel selected)
             toCityId: nextHotel.cityId,
             to: nextHotel.cityName,
             toLocationId: '', // Will be updated when hotel is selected
@@ -505,13 +507,11 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       const departureTime = departureFlightForMovement?.etd || '12:00';
       
       if (lastHotel.cityId && lastHotel.cityName) {
-        // Check if last hotel has ziyarath
-        const hasZiyarath = isZiyarathCity(lastHotel.cityName);
-        const ziyarathLocation = hasZiyarath ? getZiyarathForCity(lastHotel.cityName) : null;
-        
-        // From: last hotel's ziyarath (if exists) or hotel, To: departure airport
-        const fromLocationId = hasZiyarath && ziyarathLocation ? ziyarathLocation.id : '';
-        const fromLocation = hasZiyarath && ziyarathLocation ? ziyarathLocation.name : '';
+        // IMPORTANT: After ziyarath (round trip), person returns to hotel
+        // So the departure movement should start from the hotel, NOT from ziyarath
+        // From: last hotel (always), To: departure airport
+        const fromLocationId = ''; // Will be updated when hotel is selected
+        const fromLocation = ''; // Will be updated when hotel is selected
         
         newMovements.push({
           sr: movementIndex + 1,
@@ -520,8 +520,8 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
           time: calculateMovementTime(lastHotel.cityName || '', departureAirport?.name || '', departureTime),
           fromCityId: lastHotel.cityId,
           from: lastHotel.cityName || '',
-          fromLocationId: fromLocationId,
-          fromLocation: fromLocation,
+          fromLocationId: fromLocationId, // Hotel location (will be set when hotel selected)
+          fromLocation: fromLocation, // Hotel location (will be set when hotel selected)
           toCityId: departureAirport?.cityId,
           to: departureAirport?.city || '',
           toLocationId: departureAirport?.id,
@@ -555,27 +555,70 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         groupCode: formData.groupCode,
         paxCount: formData.paxCount,
         reservationDate: formData.reservationDate,
-        hotelSchedules: formData.hotelSchedules.map((hs, idx) => ({
-          ...hs,
-          number: idx + 1,
-          days: calculateDays(hs.checkIn, hs.checkOut),
-        })),
+        hotelSchedules: formData.hotelSchedules.map((hs, idx) => {
+          // IMPORTANT: location must be city name (CityMaster), NOT hotel name
+          // Always use cityName for location, never use hs.location (which might contain hotel name)
+          const cityName = hs.cityName || '';
+          
+          // Validate: if location equals hotelName, it's wrong - use cityName instead
+          const locationValue = (hs.location === hs.hotelName) ? cityName : (cityName || hs.location || '');
+          
+          return {
+            number: idx + 1,
+            location: locationValue, // City name (CityMaster) - MUST be city name
+            hotelName: hs.hotelName || '', // Hotel name (LocationMaster enum HOTEL)
+            checkIn: hs.checkIn,
+            checkOut: hs.checkOut,
+            days: calculateDays(hs.checkIn, hs.checkOut),
+            brn: hs.brn || null,
+          };
+        }),
         movementDetails: formData.movementDetails.map(m => ({
           sr: m.sr,
           route: null, // Backend will generate route numbers dynamically
           date: m.date,
           time: m.time,
-          from: m.from,
-          fromLocation: m.fromLocation,
-          fromLocationId: m.fromLocationId,
-          to: m.to,
-          toLocation: m.toLocation,
-          toLocationId: m.toLocationId,
-          driverDetails1: m.driverDetails1,
-          driverDetails2: m.driverDetails2,
-          vehicleNumber: m.vehicleNumber,
+          from: m.from || '',
+          fromLocation: m.fromLocation || '',
+          fromLocationId: m.fromLocationId || null,
+          to: m.to || '',
+          toLocation: m.toLocation || '',
+          toLocationId: m.toLocationId || null,
+          driverDetails1: m.driverDetails1 || null,
+          driverDetails2: m.driverDetails2 || null,
+          vehicleNumber: m.vehicleNumber || null,
         })),
-        flightDetails: formData.flightDetails,
+        flightDetails: formData.flightDetails.map(f => {
+          // Get airport name from locations array using the location ID
+          let arrivalAirport = '';
+          let departureAirport = '';
+          
+          if (f.type === 'AA' && f.fromLocationId) {
+            const airport = airports.find(a => a.id === f.fromLocationId);
+            arrivalAirport = airport?.name || airport?.code || f.from || '';
+          }
+          
+          if (f.type === 'AD' && f.toLocationId) {
+            const airport = airports.find(a => a.id === f.toLocationId);
+            departureAirport = airport?.name || airport?.code || f.to || '';
+          }
+          
+          return {
+            type: f.type,
+            date: f.date,
+            carrier: f.carrier,
+            number: f.number,
+            // For AA: from is arrival airport name, to is JED; For AD: from is JED, to is departure airport name
+            from: f.type === 'AA' ? (arrivalAirport || f.from || '') : 'JED',
+            to: f.type === 'AD' ? (departureAirport || f.to || '') : 'JED',
+            arrivalAirportId: f.type === 'AA' ? (f.fromLocationId || null) : null,
+            arrivalAirport: f.type === 'AA' ? arrivalAirport : undefined,
+            departureAirportId: f.type === 'AD' ? (f.toLocationId || null) : null,
+            departureAirport: f.type === 'AD' ? departureAirport : undefined,
+            etd: f.etd || '',
+            eta: f.eta || '',
+          };
+        }),
         transportOptions: formData.transportOptions,
       });
 
@@ -615,7 +658,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         ...formData.hotelSchedules,
         {
           number: formData.hotelSchedules.length + 1,
-          location: '',
+          location: '', // Will be set to city name when city is selected
           hotelName: '',
           checkIn: '',
           checkOut: '',
@@ -640,7 +683,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     // When city changes, clear hotel selection (no prefill)
     if (field === 'cityName') {
       updated[index].locationId = '';
-      updated[index].location = '';
+      updated[index].location = value || ''; // Set location to city name (CityMaster)
       updated[index].hotelName = '';
     }
     
@@ -648,8 +691,10 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     if (field === 'locationId') {
       const location = locations.find(l => l.id === value);
       if (location) {
-        updated[index].location = location.name;
-        updated[index].hotelName = location.name;
+        // IMPORTANT: location field should be city name (CityMaster), NOT hotel name
+        // hotelName should be the hotel name (LocationMaster enum HOTEL)
+        updated[index].location = updated[index].cityName || ''; // Keep city name, not hotel name
+        updated[index].hotelName = location.name; // Hotel name (LocationMaster)
         // Update corresponding movements
         updateMovementsForHotel(index, value);
       }
