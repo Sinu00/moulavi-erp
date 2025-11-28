@@ -20,7 +20,7 @@ import {
   Search, 
   RefreshCw,
   Eye,
-  Edit,
+  Download,
   Ticket,
   Calendar,
   Users,
@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
 import { voucherAPI } from '@/lib/api';
+import api from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { QuickVoucherForm } from '@/components/voucher/QuickVoucherForm';
 import { Loader2, Save } from 'lucide-react';
@@ -130,6 +131,7 @@ export default function VoucherServicePage() {
   // Editing states
   const [editingMovements, setEditingMovements] = useState<Map<string, Movement>>(new Map());
   const [savingMovementId, setSavingMovementId] = useState<string | null>(null);
+  const [downloadingVoucherId, setDownloadingVoucherId] = useState<string | null>(null);
 
 
   const loadStats = async () => {
@@ -219,6 +221,104 @@ export default function VoucherServicePage() {
       }
       return updated;
     });
+  };
+
+  // Download voucher PDF
+  const downloadVoucherPDF = async (voucherId: string) => {
+    try {
+      setDownloadingVoucherId(voucherId);
+      
+      // Fetch voucher data
+      const response = await voucherAPI.getVoucherById(voucherId);
+      const voucher = response.data.voucher;
+      
+      // Format data for PDF generation (same format as VoucherPreviewDialog)
+      const pdfData = {
+        voucherNumber: voucher.voucherNumber,
+        reservationNumber: voucher.voucherNumber, // Use voucherNumber as reservation number
+        reservationDate: voucher.reservationDate ? (typeof voucher.reservationDate === 'string' 
+          ? voucher.reservationDate.split('T')[0] 
+          : new Date(voucher.reservationDate).toISOString().split('T')[0]) : '',
+        guestName: voucher.guestName || '',
+        guestMobile: voucher.guestMobile || '',
+        groupCode: voucher.groupCode || '',
+        paxCount: voucher.paxCount || 0,
+        umrahVisaProvider: voucher.booking?.party ? {
+          partyName: voucher.booking.party.partyName || '',
+          address: voucher.booking.party.address || '',
+          city: voucher.booking.party.city || '',
+          state: voucher.booking.party.state || '',
+          country: voucher.booking.party.country || '',
+          contactNumber: voucher.booking.party.contactNumber || '',
+          whatsappNumber: voucher.booking.party.whatsappNumber || '',
+          email: voucher.booking.party.email || '',
+        } : null, // Will be null if not available - PDF service handles this
+        hotelSchedules: (voucher.hotelSchedules || []).map((hs: any) => ({
+          number: hs.number || 0,
+          location: hs.location || '', // City name
+          hotelName: hs.hotelName || '', // Hotel name
+          checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' 
+            ? hs.checkIn.split('T')[0] 
+            : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
+          checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' 
+            ? hs.checkOut.split('T')[0] 
+            : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
+          days: hs.days || 0,
+          brn: hs.brn || null,
+        })),
+        movementDetails: (voucher.movementDetails || []).map((md: any) => ({
+          sr: md.sr || 0,
+          route: md.route || '',
+          date: md.date ? (typeof md.date === 'string' 
+            ? md.date.split('T')[0] 
+            : new Date(md.date).toISOString().split('T')[0]) : '',
+          time: md.time || '',
+          from: md.from || '',
+          fromLocation: md.fromLocation || '',
+          to: md.to || '',
+          toLocation: md.toLocation || '',
+        })),
+        flightDetails: (voucher.flightDetails || []).map((fd: any) => ({
+          type: fd.type || 'AA',
+          carrier: fd.carrier || '',
+          number: fd.number || '',
+          date: fd.date ? (typeof fd.date === 'string' 
+            ? fd.date.split('T')[0] 
+            : new Date(fd.date).toISOString().split('T')[0]) : '',
+          arrivalAirport: fd.type === 'AA' ? (fd.from || '') : undefined,
+          departureAirport: fd.type === 'AD' ? (fd.to || '') : undefined,
+          from: fd.from || '',
+          to: fd.to || '',
+          etd: fd.etd || '',
+          eta: fd.eta || '',
+        })),
+      };
+
+      // Call backend to generate PDF
+      const pdfResponse = await api.post('/umrah-visa/generate-pdf', pdfData, {
+        responseType: 'blob',
+      });
+
+      // Create blob and download
+      const blob = new Blob([pdfResponse.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Voucher_${pdfData.voucherNumber}_${pdfData.guestName
+        .replace(/\s+/g, '_')
+        .slice(0, 20)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Voucher PDF downloaded successfully');
+    } catch (error: any) {
+      console.error('Error downloading voucher PDF:', error);
+      toast.error(error?.response?.data?.error || 'Failed to download voucher PDF');
+    } finally {
+      setDownloadingVoucherId(null);
+    }
   };
 
   // Save movement changes
@@ -521,17 +621,22 @@ export default function VoucherServicePage() {
                                         onClick={() => {
                                           router.push(`/dashboard/services/voucher/view/${voucher.id}`);
                                         }}
+                                        title="View Voucher"
                                       >
                                         <Eye className="h-4 w-4" />
                                       </Button>
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => {
-                                          router.push(`/dashboard/services/voucher/edit/${voucher.id}`);
-                                        }}
+                                        onClick={() => downloadVoucherPDF(voucher.id)}
+                                        disabled={downloadingVoucherId === voucher.id}
+                                        title="Download PDF"
                                       >
-                                        <Edit className="h-4 w-4" />
+                                        {downloadingVoucherId === voucher.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Download className="h-4 w-4" />
+                                        )}
                                       </Button>
                                     </div>
                                   </TableCell>
