@@ -32,6 +32,8 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
 }) => {
   // Store raw input values for BRN fields to preserve commas while typing
   const [brnInputs, setBrnInputs] = useState<{ [key: number]: string }>({});
+  // Store raw input values for duration fields
+  const [durationInputs, setDurationInputs] = useState<{ [key: number]: string }>({});
 
   // Initialize BRN inputs from booking data
   React.useEffect(() => {
@@ -44,6 +46,22 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
       }
     });
     setBrnInputs(prev => ({ ...prev, ...inputs }));
+  }, [hotelBookings.length]);
+
+  // Initialize duration inputs from booking data
+  React.useEffect(() => {
+    const inputs: { [key: number]: string } = {};
+    hotelBookings.forEach((booking, index) => {
+      const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
+      const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+      if (checkIn && checkOut) {
+        const duration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+        inputs[index] = duration > 0 ? duration.toString() : '';
+      } else if (!durationInputs[index]) {
+        inputs[index] = '';
+      }
+    });
+    setDurationInputs(prev => ({ ...prev, ...inputs }));
   }, [hotelBookings.length]);
 
   if (hotelBookings.length === 0) {
@@ -87,10 +105,10 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
               Check-out
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              BRN
+              Duration
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Duration
+              BRN
             </th>
             {onRemoveBooking && (
               <th className="border border-gray-200 p-3 text-center text-sm font-medium text-gray-700">
@@ -159,7 +177,25 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                   <Input
                     type="date"
                     value={booking.checkInDate}
-                    onChange={(e) => onUpdateBooking(index, 'checkInDate', e.target.value)}
+                    onChange={(e) => {
+                      onUpdateBooking(index, 'checkInDate', e.target.value);
+                      // If duration is set, recalculate check-out date
+                      const durationValue = durationInputs[index] ?? (duration > 0 ? duration.toString() : '');
+                      const durationNum = parseInt(durationValue, 10);
+                      if (!isNaN(durationNum) && durationNum > 0 && e.target.value) {
+                        const checkIn = new Date(e.target.value);
+                        const checkOut = new Date(checkIn);
+                        checkOut.setDate(checkOut.getDate() + durationNum);
+                        const checkOutStr = checkOut.toISOString().split('T')[0];
+                        onUpdateBooking(index, 'checkOutDate', checkOutStr);
+                      } else if (e.target.value && booking.checkOutDate) {
+                        // If check-out exists but no duration set, recalculate duration
+                        const checkIn = new Date(e.target.value);
+                        const checkOut = new Date(booking.checkOutDate);
+                        const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                        setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
+                      }
+                    }}
                     className="w-full"
                     disabled={disabled}
                   />
@@ -168,9 +204,66 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                   <Input
                     type="date"
                     value={booking.checkOutDate}
-                    onChange={(e) => onUpdateBooking(index, 'checkOutDate', e.target.value)}
+                    onChange={(e) => {
+                      onUpdateBooking(index, 'checkOutDate', e.target.value);
+                      // Update duration when check-out changes manually
+                      if (e.target.value && booking.checkInDate) {
+                        const checkIn = new Date(booking.checkInDate);
+                        const checkOut = new Date(e.target.value);
+                        const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                        setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
+                      }
+                    }}
                     className="w-full"
                     disabled={disabled}
+                  />
+                </td>
+                <td className="border border-gray-200 p-3">
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Days"
+                    value={durationInputs[index] ?? (duration > 0 ? duration.toString() : '')}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      // Store the raw input value
+                      setDurationInputs(prev => ({ ...prev, [index]: inputValue }));
+                      
+                      // Calculate check-out date from duration if check-in date exists
+                      const durationNum = parseInt(inputValue, 10);
+                      if (!isNaN(durationNum) && durationNum > 0 && booking.checkInDate) {
+                        const checkIn = new Date(booking.checkInDate);
+                        const checkOut = new Date(checkIn);
+                        checkOut.setDate(checkOut.getDate() + durationNum);
+                        const checkOutStr = checkOut.toISOString().split('T')[0];
+                        onUpdateBooking(index, 'checkOutDate', checkOutStr);
+                      } else if (inputValue === '' || inputValue === '0') {
+                        // Clear check-out if duration is cleared
+                        onUpdateBooking(index, 'checkOutDate', '');
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // On blur, validate and sync
+                      const inputValue = e.target.value.trim();
+                      const durationNum = parseInt(inputValue, 10);
+                      
+                      if (inputValue === '' || isNaN(durationNum) || durationNum <= 0) {
+                        setDurationInputs(prev => ({ ...prev, [index]: '' }));
+                        if (inputValue !== '' && booking.checkInDate) {
+                          // If invalid input but check-in exists, recalculate from check-out
+                          const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
+                          const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+                          if (checkIn && checkOut) {
+                            const calculatedDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                            setDurationInputs(prev => ({ ...prev, [index]: calculatedDuration > 0 ? calculatedDuration.toString() : '' }));
+                          }
+                        }
+                      } else {
+                        setDurationInputs(prev => ({ ...prev, [index]: durationNum.toString() }));
+                      }
+                    }}
+                    className="w-full"
+                    disabled={disabled || !booking.checkInDate}
                   />
                 </td>
                 <td className="border border-gray-200 p-3">
@@ -219,11 +312,6 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                         <span>Separate multiple BRNs with commas (e.g., BRN001, BRN002)</span>
                       )}
                     </div>
-                  </div>
-                </td>
-                <td className="border border-gray-200 p-3">
-                  <div className="text-sm text-gray-600">
-                    {duration > 0 ? `${duration} night${duration > 1 ? 's' : ''}` : '-'}
                   </div>
                 </td>
                 {onRemoveBooking && (

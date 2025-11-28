@@ -4,16 +4,30 @@ import { BOOKING_LIMITS, FLIGHT_NUMBER_REGEX } from './constants';
 import { Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Passenger } from './types';
 
 export const formatFlightNumber = (value: string): string => {
+  // Remove all invalid characters and convert to uppercase
   let cleaned = value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
-  cleaned = cleaned.replace(/-/g, '');
   
-  const letters = cleaned.substring(0, 2).replace(/[^A-Z]/g, '');
-  const numbers = cleaned.substring(2).replace(/[^0-9]/g, '').substring(0, 4);
+  // Split by dash if present, otherwise treat as single string
+  const parts = cleaned.split('-');
   
-  if (letters.length === 0) return '';
-  if (letters.length < 2) return letters;
-  if (numbers.length === 0) return letters + '-';
-  return letters + '-' + numbers;
+  if (parts.length === 1) {
+    // No dash found, format as we type
+    const allChars = parts[0];
+    if (allChars.length === 0) return '';
+    if (allChars.length <= 2) return allChars;
+    // First 2 chars, then dash, then up to 4 more chars
+    const firstPart = allChars.substring(0, 2);
+    const secondPart = allChars.substring(2, 6); // Max 4 chars
+    return secondPart.length > 0 ? `${firstPart}-${secondPart}` : `${firstPart}-`;
+  } else {
+    // Dash found, format both parts
+    const firstPart = parts[0].substring(0, 2).replace(/[^A-Z0-9]/g, '');
+    const secondPart = parts.slice(1).join('').substring(0, 4).replace(/[^A-Z0-9]/g, '');
+    
+    if (firstPart.length === 0) return '';
+    if (firstPart.length < 2) return firstPart + (secondPart.length > 0 ? '-' + secondPart : '-');
+    return secondPart.length > 0 ? `${firstPart}-${secondPart}` : `${firstPart}-`;
+  }
 };
 
 export const calculateDuration = (arrival: string, departure: string) => {
@@ -107,11 +121,11 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
   }
 
   if (!FLIGHT_NUMBER_REGEX.test(data.arrivalFlightNumber)) {
-    return 'Arrival flight number must be in format: XX-1234 (2 letters, dash, 1-4 numbers)';
+    return 'Arrival flight number must be in format: XX-XXXX (2 alphanumeric, dash, 1-4 alphanumeric)';
   }
 
   if (!FLIGHT_NUMBER_REGEX.test(data.departureFlightNumber)) {
-    return 'Departure flight number must be in format: XX-1234';
+    return 'Departure flight number must be in format: XX-XXXX (2 alphanumeric, dash, 1-4 alphanumeric)';
   }
 
   const durationResult = calculateDuration(data.arrivalDate, data.departureDate);

@@ -8,8 +8,8 @@ import { combineDateTime } from '../../utils/datetime';
 // Export Prisma client instance (shared across all route files)
 export const prisma = new PrismaClient();
 
-// Flight number validation regex: 2 letters + dash + up to 4 numbers (e.g., SV-1234)
-export const FLIGHT_NUMBER_REGEX = /^[A-Z]{2}-\d{1,4}$/;
+// Flight number validation regex: 2 alphanumeric + dash + 1-4 alphanumeric (e.g., C1-132A, SC-123, 22-SCV)
+export const FLIGHT_NUMBER_REGEX = /^[A-Z0-9]{2}-[A-Z0-9]{1,4}$/;
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -89,11 +89,11 @@ export const step2Schema = z.object({
   arrivalDate: z.string(), // YYYY-MM-DD format
   arrivalTime: z.string(), // HH:mm format
   arrivalAirportId: z.string().uuid(),
-  arrivalFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
+  arrivalFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-XXXX (2 alphanumeric, dash, 1-4 alphanumeric)'),
   departureDate: z.string(), // YYYY-MM-DD format
   departureTime: z.string(), // HH:mm format
   departureAirportId: z.string().uuid(),
-  departureFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-1234'),
+  departureFlightNumber: z.string().regex(FLIGHT_NUMBER_REGEX, 'Flight number must be in format: XX-XXXX (2 alphanumeric, dash, 1-4 alphanumeric)'),
   passengerCount: z.number().min(1).max(50).optional(), // Number of passengers (for both individual and group bookings - now in Step 2)
   transportBookings: z.array(z.object({
     fromLocationId: z.string().uuid(),
