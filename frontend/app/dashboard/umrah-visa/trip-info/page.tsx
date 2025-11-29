@@ -348,9 +348,16 @@ export default function TripInfoPage() {
                           <TableRow key={booking.id}>
                             {/* Visa Type */}
                             <TableCell>
-                              <Badge variant={booking.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
-                                {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
-                              </Badge>
+                              <div className="flex flex-col gap-1">
+                                <Badge variant={booking.visaType === 'group_visa' ? 'default' : 'secondary'} className="text-xs">
+                                  {booking.visaType === 'group_visa' ? 'Group Visa' : 'Individual Visa'}
+                                </Badge>
+                                {booking.hasMultipleGroup && (
+                                  <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
+                                    Add to Existing
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                             {/* Group Details */}
                             <TableCell>
@@ -358,8 +365,53 @@ export default function TripInfoPage() {
                                 <div className="font-semibold text-gray-900">{booking.party?.partyName || 'N/A'}</div>
                                 {booking.groupNumber ? (
                                   <>
-                                    <div className="text-sm font-medium text-indigo-600">{booking.groupNumber}</div>
-                                    <div className="text-xs text-gray-500">{booking.groupName}</div>
+                                    {(() => {
+                                      // Parse multipleGroupDetails if available
+                                      let groups: Array<{ groupNumber?: string; groupName?: string }> = [];
+                                      if (booking.hasMultipleGroup && booking.multipleGroupDetails) {
+                                        try {
+                                          if (Array.isArray(booking.multipleGroupDetails)) {
+                                            groups = booking.multipleGroupDetails as Array<{ groupNumber?: string; groupName?: string }>;
+                                          }
+                                        } catch (e) {
+                                          console.error('Error parsing multipleGroupDetails:', e);
+                                        }
+                                      }
+                                      
+                                      // If we have parsed groups, display them individually
+                                      if (groups.length > 0) {
+                                        const groupNumbers = groups.map(g => g.groupNumber).filter(Boolean);
+                                        const groupNames = groups.map(g => g.groupName).filter(Boolean);
+                                        const lastIndex = groups.length - 1;
+                                        
+                                        return (
+                                          <>
+                                            <div className="text-sm font-medium">
+                                              {groupNumbers.map((num, idx) => (
+                                                <span key={idx} className={idx === lastIndex ? 'text-orange-600' : 'text-indigo-600'}>
+                                                  {num}{idx < groupNumbers.length - 1 ? ', ' : ''}
+                                                </span>
+                                              ))}
+                                            </div>
+                                            <div className="text-xs">
+                                              {groupNames.map((name, idx) => (
+                                                <span key={idx} className={idx === lastIndex ? 'text-orange-600' : 'text-gray-500'}>
+                                                  {name}{idx < groupNames.length - 1 ? ', ' : ''}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </>
+                                        );
+                                      } else {
+                                        // Fallback to original display
+                                        return (
+                                          <>
+                                            <div className="text-sm font-medium text-indigo-600">{booking.groupNumber}</div>
+                                            <div className="text-xs text-gray-500">{booking.groupName}</div>
+                                          </>
+                                        );
+                                      }
+                                    })()}
                                   </>
                                 ) : (
                                   <div className="text-sm text-gray-400 italic">No group assigned</div>
