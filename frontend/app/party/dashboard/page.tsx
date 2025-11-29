@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { getUser, hasRole, removeUser } from '@/lib/auth';
 import { umrahVisaAPI, authAPI } from '@/lib/api';
-import ViewUmrahVisaDialog from '@/components/ViewUmrahVisaDialog';
 import { PartyLayout } from '@/components/layouts/PartyLayout';
 import { 
   Plus, 
@@ -77,10 +76,14 @@ export default function PartyDashboardPage() {
   const [filteredBookings, setFilteredBookings] = useState<UmrahVisaBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingServices, setLoadingServices] = useState(false);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -92,30 +95,13 @@ export default function PartyDashboardPage() {
       router.push('/');
       return;
     }
+  }, []);
 
-    // Only load services once when component mounts
-    loadServices();
-  }, []); // Empty dependency array to run only once
-
-  // Filter bookings based on search term and status
+  // Load bookings when page, search, or status filter changes
   useEffect(() => {
-    let filtered = bookings;
-
-    if (searchTerm) {
-      filtered = filtered.filter(booking => 
-        booking.party?.partyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.groupNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.groupName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.id?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(booking => booking.status === statusFilter);
-    }
-
-    setFilteredBookings(filtered);
-  }, [bookings, searchTerm, statusFilter]);
+    loadServices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, searchTerm, statusFilter]);
 
   const loadServices = async () => {
     // Prevent multiple simultaneous calls
@@ -134,24 +120,42 @@ export default function PartyDashboardPage() {
     }, 10000); // 10 second timeout
     
     try {
-      // Use the same endpoint as admin but filter by party
-      const response = await umrahVisaAPI.getBookings({ page: 1, limit: 50 });
+      // Use pagination and filters
+      const response = await umrahVisaAPI.getBookings({ 
+        page: pagination.page, 
+        limit: pagination.limit,
+        search: searchTerm || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+      });
+      
       const bookingsData = response.data.bookings || [];
+      const paginationData = response.data.pagination || {
+        page: pagination.page,
+        limit: pagination.limit,
+        total: bookingsData.length,
+        totalPages: 1,
+      };
       
       // Filter bookings for current party (done on backend via authentication)
       setBookings(bookingsData);
+      setFilteredBookings(bookingsData);
+      setPagination(paginationData);
 
-      // Calculate stats using booking status
+      // Calculate stats - need to fetch all for stats
+      const statsResponse = await umrahVisaAPI.getBookings({ page: 1, limit: 1000 });
+      const allBookings = statsResponse.data.bookings || [];
+      
       setStats({
-        total: bookingsData.length,
-        pending: bookingsData.filter((b: UmrahVisaBooking) => 
+        total: paginationData.total || allBookings.length,
+        pending: allBookings.filter((b: UmrahVisaBooking) => 
           ['pending', 'documents_downloaded', 'group_assigned', 'voucher', 'bill'].includes(b.status)
         ).length,
-        completed: bookingsData.filter((b: UmrahVisaBooking) => b.status === 'booking_success').length,
+        completed: allBookings.filter((b: UmrahVisaBooking) => b.status === 'booking_success').length,
       });
     } catch (error) {
       console.error('Error loading bookings:', error);
       setBookings([]);
+      setFilteredBookings([]);
       setStats({
         total: 0,
         pending: 0,
@@ -196,8 +200,7 @@ export default function PartyDashboardPage() {
   };
 
   const handleViewBooking = (bookingId: string) => {
-    setSelectedBookingId(bookingId);
-    setViewDialogOpen(true);
+    router.push(`/party/umrah-visa/view/${bookingId}`);
   };
 
   const getStatusIcon = (status: string) => {
@@ -336,62 +339,75 @@ export default function PartyDashboardPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredBookings.slice(0, 5).map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center">
-                        <Building className="h-5 w-5 text-gray-600" />
+              <>
+                <div className="space-y-3">
+                  {filteredBookings.map((booking) => (
+                    <div
+                      key={booking.id}
+                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center">
+                          <Building className="h-5 w-5 text-gray-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-gray-900">
+                            {booking.groupName || booking.party?.partyName || 'Umrah Application'}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            {booking.groupNumber ? `${booking.groupNumber} • ` : ''}{booking.passengerCount || 0} pax • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900">
-                          {booking.groupName || booking.party?.partyName || 'Umrah Application'}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          {booking.groupNumber ? `${booking.groupNumber} • ` : ''}{booking.passengerCount || 0} pax • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
-                        </p>
+                      <div className="flex items-center space-x-3">
+                        {getStatusBadge(booking.status)}
+                        <Button
+                          onClick={() => handleViewBooking(booking.id)}
+                          size="sm"
+                          variant="ghost"
+                          className="text-gray-600 hover:text-red-600 hover:bg-red-50"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      {getStatusBadge(booking.status)}
+                  ))}
+                </div>
+                
+                {/* Pagination */}
+                {pagination.totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+                    <div className="text-sm text-gray-500">
+                      Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
+                      {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                      {pagination.total} results
+                    </div>
+                    <div className="flex space-x-2">
                       <Button
-                        onClick={() => handleViewBooking(booking.id)}
+                        variant="outline"
                         size="sm"
-                        variant="ghost"
-                        className="text-gray-600 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
+                        disabled={pagination.page === 1 || loading}
                       >
-                        <Eye className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
+                        disabled={pagination.page === pagination.totalPages || loading}
+                      >
+                        Next
                       </Button>
                     </div>
                   </div>
-                ))}
-                
-                {filteredBookings.length > 5 && (
-                  <div className="text-center pt-4">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="text-gray-600 hover:text-red-600 hover:border-red-200"
-                    >
-                      View All Applications ({filteredBookings.length})
-                    </Button>
-                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>
       </div>
 
-      {/* View Dialog */}
-      <ViewUmrahVisaDialog
-        bookingId={selectedBookingId}
-        open={viewDialogOpen}
-        onOpenChange={setViewDialogOpen}
-      />
     </PartyLayout>
   );
 }

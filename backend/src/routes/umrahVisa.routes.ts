@@ -249,6 +249,120 @@ router.get('/:bookingId', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/umrah-visa/:bookingId/voucher - Get voucher for party users by booking ID
+router.get('/:bookingId/voucher', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(bookingId)) {
+      return res.status(400).json({ error: 'Invalid booking ID format' });
+    }
+
+    // Get booking to verify ownership and get group number
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        partyId: true,
+        groupNumber: true,
+        groupName: true,
+      },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Verify ownership for party users
+    if (user.role === 'party') {
+      const userParty = await prisma.party.findUnique({
+        where: { userId: user.id },
+      });
+      
+      if (!userParty || booking.partyId !== userParty.id) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
+
+    // Find voucher by groupCode (groupNumber)
+    if (!booking.groupNumber) {
+      return res.status(404).json({ error: 'Voucher not found - no group number assigned' });
+    }
+
+    const voucher = await prisma.voucher.findFirst({
+      where: {
+        groupCode: {
+          contains: booking.groupNumber,
+          mode: 'insensitive',
+        },
+      },
+      include: {
+        movements: {
+          orderBy: {
+            sr: 'asc',
+          },
+        },
+        hotels: {
+          orderBy: {
+            number: 'asc',
+          },
+        },
+        flights: {
+          orderBy: {
+            date: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!voucher) {
+      return res.status(404).json({ error: 'Voucher not found' });
+    }
+
+    // Transform normalized data to match frontend expectations (same format as voucher routes)
+    const transformedVoucher = {
+      ...voucher,
+      hotelSchedules: voucher.hotels.map((h: any) => ({
+        number: h.number,
+        location: h.location,
+        hotelName: h.hotelName,
+        checkIn: h.checkIn ? h.checkIn.toISOString().split('T')[0] : '',
+        checkOut: h.checkOut ? h.checkOut.toISOString().split('T')[0] : '',
+        days: h.days,
+        brn: h.brn,
+      })),
+      movementDetails: voucher.movements.map((m: any) => ({
+        sr: m.sr,
+        route: m.route || '',
+        date: m.date ? m.date.toISOString().split('T')[0] : '',
+        time: m.time,
+        from: m.from,
+        fromLocation: m.fromLocation,
+        to: m.to,
+        toLocation: m.toLocation,
+      })),
+      flightDetails: voucher.flights.map((f: any) => ({
+        type: f.type,
+        carrier: f.carrier,
+        number: f.number,
+        date: f.date ? f.date.toISOString().split('T')[0] : '',
+        from: f.from,
+        to: f.to,
+        etd: f.etd,
+        eta: f.eta,
+      })),
+    };
+
+    res.json({ voucher: transformedVoucher });
+  } catch (error) {
+    console.error('Error fetching voucher:', error);
+    res.status(500).json({ error: 'Failed to fetch voucher' });
+  }
+});
+
 // GET /api/umrah-visa/transport-options/:airportId - Get transport options for airport
 router.get('/transport-options/:airportId', authenticate, async (req, res) => {
   try {

@@ -1,0 +1,751 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { getUser, hasRole } from '@/lib/auth';
+import { umrahVisaAPI } from '@/lib/api';
+import { toast } from 'sonner';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { PartyLayout } from '@/components/layouts/PartyLayout';
+import { Calendar, Plane, Users, Building, MapPin, Mail, Clock, DollarSign, Route, Truck, Phone, MessageCircle, Loader2, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import api from '@/lib/api';
+
+export default function ViewUmrahVisaBookingPage() {
+  const router = useRouter();
+  const params = useParams();
+  const bookingId = (params?.id as string) || '';
+  const user = getUser();
+
+  const [loading, setLoading] = useState(true);
+  const [booking, setBooking] = useState<any>(null);
+  const [downloadingVoucher, setDownloadingVoucher] = useState(false);
+
+  useEffect(() => {
+    if (!user || !hasRole('party')) {
+      router.push('/');
+      return;
+    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId]);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const res = await umrahVisaAPI.getBookingById(bookingId);
+      const bookingData = res.data;
+      
+      setBooking(bookingData);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error || 'Failed to load booking');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (date?: string | Date) => {
+    if (!date) return 'N/A';
+    try {
+      return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch {
+      return 'N/A';
+    }
+  };
+
+  const formatDateTime = (dateTime?: string | Date) => {
+    if (!dateTime) return { date: 'N/A', time: 'N/A' };
+    try {
+      const dt = new Date(dateTime);
+      return {
+        date: dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+        time: dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      };
+    } catch {
+      return { date: 'N/A', time: 'N/A' };
+    }
+  };
+
+  // Helper to format transport route from cities
+  const formatTransportRoute = (route: any) => {
+    if (!route) return 'N/A';
+    const cities = [
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
+    ].filter(Boolean);
+    return cities.length > 0 ? cities.join(' → ') : 'N/A';
+  };
+
+  const getStatusBadgeColor = (status: string) => {
+    const statusColors: Record<string, string> = {
+      pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      documents_downloaded: 'bg-purple-100 text-purple-800 border-purple-200',
+      group_assigned: 'bg-blue-100 text-blue-800 border-blue-200',
+      voucher: 'bg-orange-100 text-orange-800 border-orange-200',
+      bill: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      booking_success: 'bg-green-100 text-green-800 border-green-200',
+      cancelled: 'bg-red-100 text-red-800 border-red-200',
+    };
+    return statusColors[status] || 'bg-red-100 text-red-800 border-red-200';
+  };
+
+  const downloadVoucherPDF = async () => {
+    if (!bookingId) {
+      toast.error('Booking ID not found');
+      return;
+    }
+
+    try {
+      setDownloadingVoucher(true);
+      
+      // Fetch voucher by booking ID (party-specific endpoint)
+      const voucherResponse = await api.get(`/umrah-visa/${bookingId}/voucher`);
+      const fullVoucher = voucherResponse.data.voucher;
+
+      // Format data for PDF generation
+      const pdfData = {
+        voucherNumber: fullVoucher.voucherNumber,
+        reservationNumber: fullVoucher.voucherNumber,
+        reservationDate: fullVoucher.reservationDate ? (typeof fullVoucher.reservationDate === 'string' 
+          ? fullVoucher.reservationDate.split('T')[0] 
+          : new Date(fullVoucher.reservationDate).toISOString().split('T')[0]) : '',
+        guestName: fullVoucher.guestName || '',
+        guestMobile: fullVoucher.guestMobile || '',
+        groupCode: fullVoucher.groupCode || '',
+        paxCount: fullVoucher.paxCount || 0,
+        umrahVisaProvider: fullVoucher.booking?.party ? {
+          partyName: fullVoucher.booking.party.partyName || '',
+          address: fullVoucher.booking.party.address || '',
+          city: fullVoucher.booking.party.city || '',
+          state: fullVoucher.booking.party.state || '',
+          country: fullVoucher.booking.party.country || '',
+          contactNumber: fullVoucher.booking.party.contactNumber || '',
+          whatsappNumber: fullVoucher.booking.party.whatsappNumber || '',
+          email: fullVoucher.booking.party.email || '',
+        } : null,
+        hotelSchedules: (fullVoucher.hotelSchedules || []).map((hs: any) => ({
+          number: hs.number || 0,
+          location: hs.location || '',
+          hotelName: hs.hotelName || '',
+          checkIn: hs.checkIn ? (typeof hs.checkIn === 'string' 
+            ? hs.checkIn.split('T')[0] 
+            : new Date(hs.checkIn).toISOString().split('T')[0]) : '',
+          checkOut: hs.checkOut ? (typeof hs.checkOut === 'string' 
+            ? hs.checkOut.split('T')[0] 
+            : new Date(hs.checkOut).toISOString().split('T')[0]) : '',
+          days: hs.days || 0,
+          brn: hs.brn || null,
+        })),
+        movementDetails: (fullVoucher.movementDetails || []).map((md: any) => ({
+          sr: md.sr || 0,
+          route: md.route || '',
+          date: md.date ? (typeof md.date === 'string' 
+            ? md.date.split('T')[0] 
+            : new Date(md.date).toISOString().split('T')[0]) : '',
+          time: md.time || '',
+          from: md.from || '',
+          fromLocation: md.fromLocation || '',
+          to: md.to || '',
+          toLocation: md.toLocation || '',
+        })),
+        flightDetails: (fullVoucher.flightDetails || []).map((fd: any) => ({
+          type: fd.type || 'AA',
+          carrier: fd.carrier || '',
+          number: fd.number || '',
+          date: fd.date ? (typeof fd.date === 'string' 
+            ? fd.date.split('T')[0] 
+            : new Date(fd.date).toISOString().split('T')[0]) : '',
+          arrivalAirport: fd.type === 'AA' ? (fd.from || '') : undefined,
+          departureAirport: fd.type === 'AD' ? (fd.to || '') : undefined,
+          from: fd.from || '',
+          to: fd.to || '',
+          etd: fd.etd || '',
+          eta: fd.eta || '',
+        })),
+      };
+
+      // Call backend to generate PDF
+      const pdfResponse = await api.post('/umrah-visa/generate-pdf', pdfData, {
+        responseType: 'blob',
+      });
+
+      // Create blob and download
+      const blob = new Blob([pdfResponse.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Voucher_${pdfData.voucherNumber}_${pdfData.guestName
+        .replace(/\s+/g, '_')
+        .slice(0, 20)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Voucher PDF downloaded successfully');
+    } catch (error: any) {
+      console.error('Error downloading voucher PDF:', error);
+      toast.error(error?.response?.data?.error || 'Failed to download voucher PDF');
+    } finally {
+      setDownloadingVoucher(false);
+    }
+  };
+
+  return (
+    <PartyLayout 
+      title={booking?.groupName || 'Booking Details'} 
+      subtitle={`ID: ${booking?.groupNumber || 'Not Assigned'}`}
+    >
+      <div className="min-h-screen bg-gray-50">
+        <div className="p-4 lg:p-6">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 text-red-600 animate-spin mb-4" />
+              <p className="text-gray-600 font-medium">Loading booking details...</p>
+            </div>
+          ) : !booking ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Building className="h-16 w-16 text-gray-300 mb-4" />
+              <p className="text-lg font-semibold text-gray-700 mb-2">No booking details available</p>
+              <p className="text-sm text-gray-500">Please check the booking ID and try again.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Booking Summary Card with Red Accent */}
+              <Card className="border-l-4 border-l-red-600 shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+                  <CardTitle className="text-xl flex items-center gap-2 text-red-600">
+                    <Building className="h-6 w-6" /> Booking Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Group Name</p>
+                      <p className="text-xl font-bold text-red-600">{booking.groupName || 'N/A'}</p>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Group Number</p>
+                      <p className="text-xl font-bold text-red-600">{booking.groupNumber || '—'}</p>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Passengers</p>
+                      <p className="text-xl font-bold text-red-600">{booking.passengerCount || 0}</p>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Status</p>
+                      <Badge className={`text-sm font-semibold px-3 py-1 border ${getStatusBadgeColor(booking.status)}`}>
+                        {booking.status?.replace(/_/g, ' ').toUpperCase() || 'N/A'}
+                      </Badge>
+                    </div>
+                  </div>
+                  {booking.status === 'bill' && (
+                    <div className="mt-4 pt-4 border-t border-red-200">
+                      <Button
+                        onClick={downloadVoucherPDF}
+                        disabled={downloadingVoucher}
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        {downloadingVoucher ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-2" />
+                            Download Voucher
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Party Contact Information */}
+              <Card className="shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+                  <CardTitle className="text-xl flex items-center gap-2 text-red-600">
+                    <Mail className="h-6 w-6" /> Party Contact Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Mail className="h-4 w-4 text-red-600" />
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Email</p>
+                      </div>
+                      <p className="text-sm text-gray-900 break-all font-medium">{booking.party?.email || 'N/A'}</p>
+                    </div>
+                    {booking.party?.contactNumber && (
+                      <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Phone className="h-4 w-4 text-red-600" />
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Contact</p>
+                        </div>
+                        <p className="text-sm text-gray-900 font-medium">{booking.party.contactNumber}</p>
+                      </div>
+                    )}
+                    {booking.party?.whatsappNumber && (
+                      <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <MessageCircle className="h-4 w-4 text-red-600" />
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">WhatsApp</p>
+                        </div>
+                        <p className="text-sm text-gray-900 font-medium">{booking.party.whatsappNumber}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Flight Details */}
+              {booking.travelDetails && (
+                <Card className="shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+                    <CardTitle className="text-xl flex items-center gap-2 text-red-600">
+                      <Plane className="h-6 w-6" /> Flight Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Arrival */}
+                      <div className="border-l-4 border-l-red-600 bg-red-50 rounded-r-lg p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="h-10 w-10 rounded-full bg-red-600 flex items-center justify-center">
+                            <Plane className="h-5 w-5 text-white rotate-[-45deg]" />
+                          </div>
+                          <p className="text-sm font-bold text-red-600 uppercase tracking-wide">Arrival</p>
+                        </div>
+                        {(() => {
+                          const arrival = formatDateTime(booking.travelDetails.arrivalDateTime);
+                          return (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <Calendar className="h-5 w-5 text-red-600" />
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide">Date</p>
+                                  <p className="text-lg font-bold text-gray-900">{arrival.date}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Clock className="h-5 w-5 text-red-600" />
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide">Time</p>
+                                  <p className="text-lg font-bold text-gray-900">{arrival.time}</p>
+                                </div>
+                              </div>
+                              <div className="pt-3 border-t border-red-200 space-y-2">
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide mb-1">Airport</p>
+                                  <p className="text-sm font-semibold text-gray-900">{booking.travelDetails.arrivalAirport?.name || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide mb-1">Flight Number</p>
+                                  <p className="text-sm font-semibold text-red-600">{booking.travelDetails.arrivalFlightNumber || 'N/A'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Departure */}
+                      <div className="border-l-4 border-l-orange-500 bg-orange-50 rounded-r-lg p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="h-10 w-10 rounded-full bg-orange-500 flex items-center justify-center">
+                            <Plane className="h-5 w-5 text-white rotate-[45deg]" />
+                          </div>
+                          <p className="text-sm font-bold text-orange-600 uppercase tracking-wide">Departure</p>
+                        </div>
+                        {(() => {
+                          const departure = formatDateTime(booking.travelDetails.departureDateTime);
+                          return (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <Calendar className="h-5 w-5 text-orange-600" />
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide">Date</p>
+                                  <p className="text-lg font-bold text-gray-900">{departure.date}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Clock className="h-5 w-5 text-orange-600" />
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide">Time</p>
+                                  <p className="text-lg font-bold text-gray-900">{departure.time}</p>
+                                </div>
+                              </div>
+                              <div className="pt-3 border-t border-orange-200 space-y-2">
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide mb-1">Airport</p>
+                                  <p className="text-sm font-semibold text-gray-900">{booking.travelDetails.departureAirport?.name || 'N/A'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-gray-600 uppercase tracking-wide mb-1">Flight Number</p>
+                                  <p className="text-sm font-semibold text-orange-600">{booking.travelDetails.departureFlightNumber || 'N/A'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Accommodation Section */}
+              <Card className="shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+                  <CardTitle className="text-xl flex items-center gap-2 text-red-600">
+                    <Building className="h-6 w-6" /> Accommodation
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  {/* Accommodation Type Badge */}
+                  <div className="flex items-center gap-4 p-4 bg-red-50 rounded-lg border border-red-100">
+                    <div className="h-12 w-12 rounded-full bg-red-600 flex items-center justify-center">
+                      <Building className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Accommodation Type</p>
+                      <Badge className="bg-red-600 text-white text-sm font-semibold px-3 py-1">
+                        {booking.accommodationType?.toUpperCase() || 'N/A'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Hotel Details */}
+                  {(() => {
+                    const accType = booking.accommodationType;
+                    const hotelBookings = booking.hotelBookings;
+                    
+                    const isHotel = accType && (accType.toLowerCase() === 'hotel');
+                    
+                    if (!isHotel) {
+                      return null;
+                    }
+                    
+                    const hasHotelBookings = Array.isArray(hotelBookings) && hotelBookings.length > 0;
+                    
+                    if (!hasHotelBookings) {
+                      return (
+                        <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+                          <Building className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-sm font-medium text-gray-600">No hotel bookings found</p>
+                        </div>
+                      );
+                    }
+                    
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-red-600 text-white">
+                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">City</th>
+                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Hotel Name</th>
+                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Check-In</th>
+                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Check-Out</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {hotelBookings.map((h: any, idx: number) => {
+                              const cityName = h.city?.name || h.city?.destinationName || 'N/A';
+                              const hotelName = h.hotel?.name || h.hotel?.hotelName || 'N/A';
+                              const checkIn = h.checkInDate || h.checkIn;
+                              const checkOut = h.checkOutDate || h.checkOut;
+                              
+                              return (
+                                <tr 
+                                  key={h.id} 
+                                  className={`border-b border-gray-200 transition-colors ${
+                                    idx % 2 === 0 ? 'bg-white' : 'bg-red-50'
+                                  } hover:bg-red-100`}
+                                >
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <MapPin className="h-4 w-4 text-red-600" />
+                                      <span className="text-sm font-semibold text-gray-900">{cityName}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <Building className="h-4 w-4 text-gray-400" />
+                                      <span className="text-sm text-gray-700">{hotelName}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="h-4 w-4 text-red-600" />
+                                      <span className="text-sm text-gray-700 font-medium">{formatDate(checkIn)}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="h-4 w-4 text-red-600" />
+                                      <span className="text-sm text-gray-700 font-medium">{formatDate(checkOut)}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Iqama Details */}
+                  {booking.accommodationType === 'iqama' && (
+                    <>
+                      {booking.sponsorIqamaDetails ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Iqama Number</p>
+                            <p className="text-base font-bold text-red-600">{booking.sponsorIqamaDetails.iqamaNumber || 'N/A'}</p>
+                          </div>
+                          <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Holder Name</p>
+                            <p className="text-base font-bold text-gray-900">{booking.sponsorIqamaDetails.iqamaSponserName || 'N/A'}</p>
+                          </div>
+                          <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Date of Birth</p>
+                            <p className="text-base font-bold text-gray-900">{formatDate(booking.sponsorIqamaDetails.sponserDob)}</p>
+                          </div>
+                          <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Mobile Number</p>
+                            <p className="text-base font-bold text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
+                          </div>
+                          {booking.sponsorIqamaDetails.iqamaNationalShortAddress && (
+                            <div className="sm:col-span-2 bg-red-50 rounded-lg p-4 border border-red-100">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">National Short Address</p>
+                              <p className="text-base font-semibold text-gray-900">{booking.sponsorIqamaDetails.iqamaNationalShortAddress}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+                          <Building className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-sm font-medium text-gray-600">No iqama details found</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Movement Details & Ziyaraths */}
+              {Array.isArray(booking.movementDetails) && booking.movementDetails.length > 0 && (() => {
+                const regularMovements = booking.movementDetails.filter((m: any) => m.toLocation?.locationType !== 'ZIYARAT');
+                const ziyaraths = booking.movementDetails.filter((m: any) => m.toLocation?.locationType === 'ZIYARAT');
+                
+                return (
+                  <Card className="shadow-md hover:shadow-lg transition-shadow">
+                    <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+                      <CardTitle className="text-xl flex items-center gap-2 text-red-600">
+                        <Route className="h-6 w-6" /> 
+                        Movement Details & Ziyaraths
+                        <Badge className="ml-2 bg-red-600 text-white">{booking.movementDetails.length}</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                      {/* Regular Movement Details */}
+                      {regularMovements.length > 0 && (
+                        <div className="mb-8">
+                          <h4 className="text-sm font-bold text-red-600 uppercase tracking-wide mb-4 flex items-center gap-2">
+                            <Truck className="h-4 w-4" /> Transport Movements ({regularMovements.length})
+                          </h4>
+                          <div className="space-y-4">
+                            {regularMovements.map((movement: any, index: number) => {
+                              const travelDateTime = formatDateTime(movement.travelDateTime);
+                              return (
+                                <div key={movement.id} className="border-l-4 border-l-red-600 bg-red-50 rounded-r-lg p-5 hover:bg-red-100 transition-all shadow-sm">
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-10 w-10 rounded-full bg-red-600 flex items-center justify-center shadow-md">
+                                        <span className="text-xs font-bold text-white">{movement.routeNumber || `#${index + 1}`}</span>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">Route {index + 1}</p>
+                                        <p className="text-base font-bold text-gray-900">
+                                          {movement.fromCity?.name || 'N/A'} → {movement.toCity?.name || 'N/A'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="bg-white rounded-lg p-3 border border-red-200">
+                                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Travel Date & Time</p>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <Calendar className="h-4 w-4 text-red-600" />
+                                        <span className="text-sm font-semibold text-gray-900">{travelDateTime.date}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4 text-red-600" />
+                                        <span className="text-sm font-semibold text-gray-900">{travelDateTime.time}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-red-200">
+                                    <div className="bg-white rounded-lg p-3 border border-red-100">
+                                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">From</p>
+                                      <div className="flex items-center gap-2">
+                                        <MapPin className="h-4 w-4 text-red-600" />
+                                        <div>
+                                          <p className="text-sm font-bold text-gray-900">{movement.fromLocation?.name || 'N/A'}</p>
+                                          <p className="text-xs text-gray-600">{movement.fromCity?.name || 'N/A'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="bg-white rounded-lg p-3 border border-red-100">
+                                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">To</p>
+                                      <div className="flex items-center gap-2">
+                                        <MapPin className="h-4 w-4 text-red-600" />
+                                        <div>
+                                          <p className="text-sm font-bold text-gray-900">{movement.toLocation?.name || 'N/A'}</p>
+                                          <p className="text-xs text-gray-600">{movement.toCity?.name || 'N/A'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ziyaraths */}
+                      {ziyaraths.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-bold text-red-600 uppercase tracking-wide mb-4 flex items-center gap-2">
+                            <MapPin className="h-4 w-4" /> Ziyaraths ({ziyaraths.length})
+                          </h4>
+                          <div className="space-y-4">
+                            {ziyaraths.map((ziyarath: any, index: number) => {
+                              const travelDateTime = formatDateTime(ziyarath.travelDateTime);
+                              return (
+                                <div key={ziyarath.id} className="border-l-4 border-l-red-500 bg-gradient-to-r from-red-50 to-purple-50 rounded-r-lg p-5 hover:from-red-100 hover:to-purple-100 transition-all shadow-sm">
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-red-600 to-purple-600 flex items-center justify-center shadow-md">
+                                        <span className="text-xs font-bold text-white">Z{index + 1}</span>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-1">Ziyarath {index + 1}</p>
+                                        <p className="text-base font-bold text-gray-900">
+                                          {ziyarath.fromCity?.name || 'N/A'} → {ziyarath.toLocation?.name || 'N/A'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="bg-white rounded-lg p-3 border border-red-200">
+                                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Date & Time</p>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <Calendar className="h-4 w-4 text-red-600" />
+                                        <span className="text-sm font-semibold text-gray-900">{travelDateTime.date}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4 text-red-600" />
+                                        <span className="text-sm font-semibold text-gray-900">{travelDateTime.time}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="pt-4 border-t border-red-200 bg-white rounded-lg p-3 border border-red-100">
+                                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">Ziyarath Location</p>
+                                    <div className="flex items-center gap-2">
+                                      <MapPin className="h-4 w-4 text-red-600" />
+                                      <div>
+                                        <p className="text-sm font-bold text-gray-900">{ziyarath.toLocation?.name || 'N/A'}</p>
+                                        <p className="text-xs text-gray-600">{ziyarath.toCity?.name || 'N/A'}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* Transportation */}
+              {Array.isArray(booking.transportBookings) && booking.transportBookings.length > 0 && (
+                <Card className="shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+                    <CardTitle className="text-xl flex items-center gap-2 text-red-600">
+                      <Truck className="h-6 w-6" /> Transportation Vehicles
+                      <Badge className="ml-2 bg-red-600 text-white">{booking.transportBookings.length}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-red-600 text-white">
+                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Route</th>
+                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Vehicle Type</th>
+                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Capacity</th>
+                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {booking.transportBookings.map((t: any, idx: number) => {
+                            const route = t.transportMaster?.route;
+                            const vehicleType = t.transportMaster?.vehicleType;
+                            const price = t.transportMaster?.price ? Number(t.transportMaster.price) : null;
+                            
+                            return (
+                              <tr 
+                                key={t.id} 
+                                className={`border-b border-gray-200 transition-colors ${
+                                  idx % 2 === 0 ? 'bg-white' : 'bg-red-50'
+                                } hover:bg-red-100`}
+                              >
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <Route className="h-4 w-4 text-red-600" />
+                                    <span className="text-sm font-semibold text-gray-900">{formatTransportRoute(route)}</span>
+                                  </div>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <Truck className="h-4 w-4 text-gray-400" />
+                                    <span className="text-sm font-medium text-gray-700">{vehicleType?.vehicleName || 'N/A'}</span>
+                                  </div>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <Users className="h-4 w-4 text-gray-400" />
+                                    <span className="text-sm text-gray-700">{vehicleType?.paxCount || 'N/A'} PAX</span>
+                                  </div>
+                                </td>
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4 text-red-600" />
+                                    <span className="text-sm font-bold text-red-600">{price ? `₹${price.toLocaleString('en-IN')}` : 'N/A'}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </PartyLayout>
+  );
+}
