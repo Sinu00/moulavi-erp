@@ -243,7 +243,7 @@ export default function ViewUmrahVisaBookingPage() {
                       </Badge>
                     </div>
                   </div>
-                  {booking.status === 'bill' && (
+                  {booking.status === 'bill' && booking.hasTransportation && (
                     <div className="mt-4 pt-4 border-t border-red-200">
                       <Button
                         onClick={downloadVoucherPDF}
