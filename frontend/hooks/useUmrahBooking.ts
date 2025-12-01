@@ -336,7 +336,7 @@ export const useMasterData = () => {
         hotelName: hotel.name, // For backward compatibility
         code: hotel.code,
         cityId: hotel.cityId,
-        city: hotel.city,
+        city: hotel.cityMaster || (hotel.city && typeof hotel.city === 'string' ? { id: hotel.cityId, name: hotel.city } : hotel.city),
       }));
       
       setMasterData(prev => ({
@@ -351,10 +351,21 @@ export const useMasterData = () => {
 
   const getHotelsForLocation = useCallback((cityId: string) => {
     // Filter hotels by cityId from LocationMaster's cityId field
+    // Transform LocationMaster to Hotel format
     if (!cityId) return [];
-    return masterData.locationMasters?.filter((lm: any) => 
+    const hotelLocationMasters = masterData.locationMasters?.filter((lm: any) => 
       lm.locationType === 'HOTEL' && lm.cityId === cityId
     ) || [];
+    
+    // Transform LocationMaster to Hotel format
+    return hotelLocationMasters.map((lm: any) => ({
+      id: lm.id,
+      name: lm.name,
+      hotelName: lm.name, // For backward compatibility
+      code: lm.code,
+      cityId: lm.cityId,
+      city: lm.cityMaster || (lm.city ? { id: lm.cityId, name: lm.city } : undefined),
+    }));
   }, [masterData.locationMasters]);
 
   const loadAllLocationMasters = useCallback(async () => {

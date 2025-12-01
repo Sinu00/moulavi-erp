@@ -450,7 +450,7 @@ export const useGroupUmrahBooking = () => {
           hotelBookings: [
             ...existingBookings,
             {
-              locationId: '',
+              cityId: '',
               hotelId: '',
               checkInDate,
               checkOutDate: '',

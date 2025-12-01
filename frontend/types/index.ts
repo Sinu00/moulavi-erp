@@ -274,6 +274,13 @@ export interface UmrahVisaBooking {
     partyName: string;
     email?: string;
   };
+  hasMultipleGroup?: boolean;
+  multipleGroupDetails?: Array<{
+    groupNumber?: string;
+    groupName?: string;
+    passengerCount?: number;
+    documentId?: string | null;
+  }>;
 }
 
 

@@ -51,50 +51,67 @@ export const useAutoTransportSegments = ({
     const bookings = hotelBookings || [];
     const segments: TransportBooking[] = [];
 
+    // Helper to get location ID from cityId
+    const getLocationIdFromCityId = (cityId: string): string | undefined => {
+      // First try to find location by matching cityId with location id (if locations are cities)
+      const location = locations.find((l: any) => l.id === cityId || l.cityId === cityId);
+      return location?.id || cityId; // Fallback to cityId if no location found
+    };
+
     // 1) Arrival airport → first hotel
     const firstHotel = bookings[0];
     if (arrivalDate && firstHotel && arrivalAirportId) {
-      segments.push({
-        fromLocationId: arrivalAirportId, // Use arrival airport ID
-        toLocationId: firstHotel.locationId,
-        fromHotelId: '', // Airport, no hotel
-        toHotelId: firstHotel.hotelId,
-        paxCount: 0,
-        price: 0,
-        travelDate: arrivalDate,
-        travelTime: arrivalTime || '',
-      });
+      const hotelLocationId = getLocationIdFromCityId(firstHotel.cityId);
+      if (hotelLocationId) {
+        segments.push({
+          fromLocationId: arrivalAirportId, // Use arrival airport ID
+          toLocationId: hotelLocationId,
+          fromHotelId: '', // Airport, no hotel
+          toHotelId: firstHotel.hotelId,
+          paxCount: 0,
+          price: 0,
+          travelDate: arrivalDate,
+          travelTime: arrivalTime || '',
+        });
+      }
     }
 
     // 2) Inter-city moves between hotels (Hotel 1 → Hotel 2, etc.)
     for (let i = 1; i < bookings.length; i++) {
       const prev = bookings[i - 1];
       const curr = bookings[i];
-      segments.push({
-        fromLocationId: prev.locationId,
-        toLocationId: curr.locationId,
-        fromHotelId: prev.hotelId,
-        toHotelId: curr.hotelId,
-        paxCount: 0,
-        price: 0,
-        travelDate: curr.checkInDate || '',
-        travelTime: '',
-      });
+      const prevLocationId = getLocationIdFromCityId(prev.cityId);
+      const currLocationId = getLocationIdFromCityId(curr.cityId);
+      if (prevLocationId && currLocationId) {
+        segments.push({
+          fromLocationId: prevLocationId,
+          toLocationId: currLocationId,
+          fromHotelId: prev.hotelId,
+          toHotelId: curr.hotelId,
+          paxCount: 0,
+          price: 0,
+          travelDate: curr.checkInDate || '',
+          travelTime: '',
+        });
+      }
     }
 
     // 3) Last hotel → departure airport
     const lastHotel = bookings[bookings.length - 1];
     if (departureDate && lastHotel && departureAirportId) {
-      segments.push({
-        fromLocationId: lastHotel.locationId,
-        toLocationId: departureAirportId, // Use departure airport ID
-        fromHotelId: lastHotel.hotelId,
-        toHotelId: '', // Airport, no hotel
-        paxCount: 0,
-        price: 0,
-        travelDate: departureDate,
-        travelTime: departureTime || '',
-      });
+      const hotelLocationId = getLocationIdFromCityId(lastHotel.cityId);
+      if (hotelLocationId) {
+        segments.push({
+          fromLocationId: hotelLocationId,
+          toLocationId: departureAirportId, // Use departure airport ID
+          fromHotelId: lastHotel.hotelId,
+          toHotelId: '', // Airport, no hotel
+          paxCount: 0,
+          price: 0,
+          travelDate: departureDate,
+          travelTime: departureTime || '',
+        });
+      }
     }
 
     // Note: Ziyarah segments need getAllHotelsForLocation function which is context-specific
@@ -139,7 +156,8 @@ export const generateZiyarahSegments = (
       (l) => (l.city || '').toLowerCase() === cityName.toLowerCase()
     );
     if (!cityLoc) return null;
-    const hb = hotelBookings.find((h) => h.locationId === cityLoc.id);
+    // Match by cityId instead of locationId
+    const hb = hotelBookings.find((h) => h.cityId === cityLoc.id || (cityLoc as any).cityId === h.cityId);
     return hb?.checkInDate;
   };
 
@@ -155,8 +173,9 @@ export const generateZiyarahSegments = (
     );
     if (!cityLoc) return;
 
+    // Match by cityId instead of locationId
     const cityHotelBooking = hotelBookings.find(
-      (h) => h.locationId === cityLoc.id
+      (h) => h.cityId === cityLoc.id || (cityLoc as any).cityId === h.cityId
     );
     if (!cityHotelBooking) return;
 

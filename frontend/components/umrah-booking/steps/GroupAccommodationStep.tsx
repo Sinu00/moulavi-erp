@@ -106,7 +106,7 @@ export const GroupAccommodationStep: React.FC<GroupAccommodationStepProps> = ({
       const updatedBookings = [...(data.hotelBookings || [])];
       updatedBookings[index] = { ...updatedBookings[index], [field]: value };
 
-      if (field === 'locationId' && typeof value === 'string') {
+      if (field === 'cityId' && typeof value === 'string') {
         updatedBookings[index].hotelId = '';
         onLoadHotels(value);
       }

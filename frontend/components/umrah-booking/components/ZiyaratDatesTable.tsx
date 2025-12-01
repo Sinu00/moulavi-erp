@@ -28,7 +28,8 @@ const formatDateDisplay = (dateString: string): string => {
 
 interface ZiyaratDatesTableProps {
   hotelBookings: HotelBooking[];
-  locations: Array<{ id: string; destinationName: string; city?: string }>;
+  locations: Array<{ id: string; destinationName: string; city?: string; cityId?: string }>;
+  cities?: Array<{ id: string; name: string }>; // Optional cities data to map cityId to city name
   ziyarahDates: Array<{ cityId: string; cityName: string; date: string }>;
   onUpdateDate: (cityId: string, date: string) => void;
   disabled?: boolean;
@@ -37,20 +38,29 @@ interface ZiyaratDatesTableProps {
 export const ZiyaratDatesTable: React.FC<ZiyaratDatesTableProps> = ({
   hotelBookings,
   locations,
+  cities = [],
   ziyarahDates,
   onUpdateDate,
   disabled = false,
 }) => {
-  // Find Makkah and Madinah hotel bookings
+  // Helper to get city name from cityId
+  const getCityNameFromId = (cityId: string): string => {
+    const city = cities.find((c) => c.id === cityId);
+    if (city) return city.name.toLowerCase();
+    
+    // Fallback: try to find in locations by cityId
+    const location = locations.find((l) => l.cityId === cityId);
+    return (location?.city || location?.destinationName || '').toLowerCase();
+  };
+
+  // Find Makkah and Madinah hotel bookings by cityId
   const makkahBooking = hotelBookings.find((hb) => {
-    const location = locations.find((l) => l.id === hb.locationId);
-    const cityName = (location?.city || location?.destinationName || '').toLowerCase();
+    const cityName = getCityNameFromId(hb.cityId);
     return cityName.includes('makkah') || cityName.includes('mecca');
   });
 
   const madinahBooking = hotelBookings.find((hb) => {
-    const location = locations.find((l) => l.id === hb.locationId);
-    const cityName = (location?.city || location?.destinationName || '').toLowerCase();
+    const cityName = getCityNameFromId(hb.cityId);
     return cityName.includes('madinah') || cityName.includes('medina') || cityName.includes('madinah');
   });
 
@@ -88,26 +98,32 @@ export const ZiyaratDatesTable: React.FC<ZiyaratDatesTableProps> = ({
   const rows = [];
 
   if (makkahBooking && makkahCityId) {
-    const location = locations.find((l) => l.id === makkahBooking.locationId);
-    const cityName = location?.city || location?.destinationName || 'Makkah';
+    const cityName = getCityNameFromId(makkahBooking.cityId);
+    const displayCityName = cities.find((c) => c.id === makkahBooking.cityId)?.name || 
+                            locations.find((l) => l.cityId === makkahBooking.cityId)?.city ||
+                            locations.find((l) => l.cityId === makkahBooking.cityId)?.destinationName ||
+                            'Makkah';
     const ziyaratDate = getZiyaratDate(makkahCityId, makkahBooking.checkInDate);
     
     rows.push({
       cityId: makkahCityId,
-      cityName,
+      cityName: displayCityName,
       checkInDate: makkahBooking.checkInDate,
       ziyaratDate,
     });
   }
 
   if (madinahBooking && madinahCityId) {
-    const location = locations.find((l) => l.id === madinahBooking.locationId);
-    const cityName = location?.city || location?.destinationName || 'Madinah';
+    const cityName = getCityNameFromId(madinahBooking.cityId);
+    const displayCityName = cities.find((c) => c.id === madinahBooking.cityId)?.name || 
+                            locations.find((l) => l.cityId === madinahBooking.cityId)?.city ||
+                            locations.find((l) => l.cityId === madinahBooking.cityId)?.destinationName ||
+                            'Madinah';
     const ziyaratDate = getZiyaratDate(madinahCityId, madinahBooking.checkInDate);
     
     rows.push({
       cityId: madinahCityId,
-      cityName,
+      cityName: displayCityName,
       checkInDate: madinahBooking.checkInDate,
       ziyaratDate,
     });

@@ -409,8 +409,9 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
       if (arrivalDate && firstHotel && arrivalAirportId) {
         // Get airport's city location ID
         const airportCityLocationId = getCityLocationId(arrivalAirportId);
-        // Get hotel's city location ID (should match firstHotel.locationId, but verify)
-        const hotelCityLocationId = getHotelCityLocationId(firstHotel.hotelId) || firstHotel.locationId;
+        // Get hotel's city location ID (use cityId from hotel booking)
+        const hotelCityLocationId = getHotelCityLocationId(firstHotel.hotelId) || 
+                                    (firstHotel.cityId ? locations.find((l: any) => l.id === firstHotel.cityId || l.cityId === firstHotel.cityId)?.id : null);
         
         if (airportCityLocationId && hotelCityLocationId) {
           segments.push({
@@ -432,8 +433,10 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
         const curr = bookings[i];
         
         // Get city location IDs for both hotels
-        const prevCityLocationId = getHotelCityLocationId(prev.hotelId) || prev.locationId;
-        const currCityLocationId = getHotelCityLocationId(curr.hotelId) || curr.locationId;
+        const prevCityLocationId = getHotelCityLocationId(prev.hotelId) || 
+                                    (prev.cityId ? locations.find((l: any) => l.id === prev.cityId || l.cityId === prev.cityId)?.id : null);
+        const currCityLocationId = getHotelCityLocationId(curr.hotelId) || 
+                                    (curr.cityId ? locations.find((l: any) => l.id === curr.cityId || l.cityId === curr.cityId)?.id : null);
         
         segments.push({
           fromLocationId: prevCityLocationId, // City ID
@@ -451,7 +454,8 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
       const lastHotel = bookings[bookings.length - 1];
       if (departureDate && lastHotel && departureAirportId) {
         // Get city location IDs
-        const hotelCityLocationId = getHotelCityLocationId(lastHotel.hotelId) || lastHotel.locationId;
+        const hotelCityLocationId = getHotelCityLocationId(lastHotel.hotelId) || 
+                                    (lastHotel.cityId ? locations.find((l: any) => l.id === lastHotel.cityId || l.cityId === lastHotel.cityId)?.id : null);
         const airportCityLocationId = getCityLocationId(departureAirportId);
         
         if (hotelCityLocationId && airportCityLocationId) {
