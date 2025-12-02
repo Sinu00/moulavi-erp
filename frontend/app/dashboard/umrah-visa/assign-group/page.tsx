@@ -132,12 +132,39 @@ export default function AssignGroupPage() {
   const handleDownloadDocuments = async (booking: UmrahVisaBooking) => {
     if (!booking.id) return;
     try {
-      toast.info('Downloading documents...');
-      const response = await umrahVisaAPI.downloadDocuments(booking.id);
+      toast.info('Downloading zip file...');
+      
+      // First, download the actual zip file
+      const zipResponse = await umrahVisaAPI.downloadBookingZip(booking.id);
+      
+      if (zipResponse.data.downloadUrl) {
+        // If S3, use presigned URL to download
+        const link = document.createElement('a');
+        link.href = zipResponse.data.downloadUrl;
+        link.download = zipResponse.data.fileName || 'documents.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        // If local file, the response should be a blob
+        // This case is handled by the backend directly serving the file
+        toast.error('Download URL not available');
+        return;
+      }
+      
+      // Then track the download (update status)
+      try {
+        await umrahVisaAPI.downloadDocuments(booking.id);
+      } catch (trackError: any) {
+        // If tracking fails, still show success for the download
+        console.warn('Failed to track download:', trackError);
+      }
+      
       toast.success('Documents downloaded successfully!');
       fetchBookings();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to download documents');
+      console.error('Download error:', error);
+      toast.error(error.response?.data?.error || error.message || 'Failed to download documents');
     }
   };
 

@@ -209,6 +209,9 @@ export const umrahVisaAPI = {
   downloadDocuments: (bookingId: string) =>
     api.post(`/umrah-visa/${bookingId}/download-documents`),
 
+  downloadBookingZip: (bookingId: string) =>
+    api.get(`/umrah-visa/${bookingId}/download-zip`),
+
   addGroupData: (bookingId: string, data: any) =>
     api.post(`/umrah-visa/${bookingId}/add-group-data`, data),
 

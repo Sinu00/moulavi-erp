@@ -5,6 +5,8 @@ import { syncBookingStatus, syncBookingStatusInTx } from '../services/statusSync
 import { generateVoucherNumber, formatTime, formatDate, generateRouteNumbersForVoucher } from '../services/voucherService';
 import { generateVoucherPDF } from '../services/pdfService';
 import { VoucherPdfData } from '../types/voucher';
+import { isS3Configured, generateDownloadUrl } from '../config/s3';
+import fs from 'fs';
 
 const router = Router();
 
@@ -85,6 +87,59 @@ router.post('/:bookingId/add-group-data', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error adding group data:', error);
     res.status(500).json({ error: 'Failed to add group data' });
+  }
+});
+
+// GET /api/umrah-visa/:bookingId/download-zip - Download zip file for booking
+router.get('/:bookingId/download-zip', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Only admin/staff can download zip files
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can download zip files' });
+    }
+
+    // Find document with pan_card_zip type for this booking
+    const zipDocument = await prisma.document.findFirst({
+      where: {
+        bookingId,
+        documentType: 'pan_card_zip',
+        isDeleted: false,
+      },
+    });
+
+    if (!zipDocument) {
+      return res.status(404).json({ error: 'Zip file not found for this booking' });
+    }
+
+    // Handle file download based on storage type
+    if (isS3Configured()) {
+      // Generate presigned URL for S3 file
+      try {
+        const downloadUrl = await generateDownloadUrl(zipDocument.filePath);
+        res.json({
+          downloadUrl,
+          fileName: zipDocument.fileName,
+          fileSize: zipDocument.fileSize,
+          mimeType: zipDocument.mimeType,
+        });
+      } catch (error) {
+        console.error('Error generating download URL:', error);
+        res.status(500).json({ error: 'Failed to generate download URL' });
+      }
+    } else {
+      // Serve local file
+      if (fs.existsSync(zipDocument.filePath)) {
+        res.download(zipDocument.filePath, zipDocument.fileName);
+      } else {
+        res.status(404).json({ error: 'File not found on server' });
+      }
+    }
+  } catch (error) {
+    console.error('Error downloading zip file:', error);
+    res.status(500).json({ error: 'Failed to download zip file' });
   }
 });
 

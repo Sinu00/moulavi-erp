@@ -1,9 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import multer from 'multer';
+import multerS3 from 'multer-s3';
 import path from 'path';
 import fs from 'fs';
 import { combineDateTime } from '../../utils/datetime';
+import { s3Client, S3_CONFIG, generateS3Key, generateUniqueFileName, isS3Configured } from '../../config/s3';
 
 // Export Prisma client instance (shared across all route files)
 export const prisma = new PrismaClient();
@@ -11,20 +13,45 @@ export const prisma = new PrismaClient();
 // Flight number validation regex: 2 alphanumeric + dash + 1-4 alphanumeric (e.g., C1-132A, SC-123, 22-SCV)
 export const FLIGHT_NUMBER_REGEX = /^[A-Z0-9]{2}-[A-Z0-9]{1,4}$/;
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = 'uploads/umrah-visa';
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Configure multer for file uploads (S3 or local)
+const storage = isS3Configured()
+  ? multerS3({
+      s3: s3Client!,
+      bucket: S3_CONFIG.BUCKET_NAME,
+      key: (req: any, file: Express.Multer.File, cb: any) => {
+        // For booking creation, we don't have bookingId yet, so we'll use a temporary path
+        // The actual bookingId will be available in the route handler
+        const uniqueFileName = generateUniqueFileName(file.originalname, file.mimetype || 'application/zip');
+        
+        // Generate a temporary key - will be updated after booking is created
+        // For ZIP files, we'll use a pattern that can be updated later
+        const timestamp = Date.now();
+        const sanitizedFileName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const key = `bookings/temp/${timestamp}_${sanitizedFileName}`;
+        cb(null, key);
+      },
+      metadata: (req: any, file: Express.Multer.File, cb: any) => {
+        cb(null, {
+          originalName: file.originalname,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: req.user?.id || 'unknown'
+        });
+      },
+      contentType: multerS3.AUTO_CONTENT_TYPE,
+    })
+  : multer.diskStorage({
+      destination: (req, file, cb) => {
+        const uploadDir = 'uploads/umrah-visa';
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+      }
+    });
 
 export const upload = multer({ 
   storage,

@@ -92,12 +92,17 @@ app.listen(PORT, () => {
   console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
   
   // Check S3 configuration
-  const { isS3Configured } = require('./config/s3');
+  const { isS3Configured, getEndpoint } = require('./config/s3');
   if (isS3Configured()) {
+    // Import getEndpoint function (we'll need to export it)
+    const endpoint = getEndpoint() || 'AWS S3 (default)';
+    const region = process.env.AWS_REGION || 'us-east-1';
     console.log(`☁️  S3 Storage: Configured (${process.env.S3_BUCKET_NAME})`);
+    console.log(`   Endpoint: ${endpoint}`);
+    console.log(`   Region: ${region}`);
   } else {
     console.log(`📁 File Storage: Local (uploads/ directory)`);
-    console.log(`💡 To use S3, set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME`);
+    console.log(`💡 To use S3/Spaces, set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME`);
   }
 });
 

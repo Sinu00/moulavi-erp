@@ -13,6 +13,7 @@ import {
   upload,
 } from './umrahVisa/shared';
 import { combineDateTime, splitDateTime } from '../utils/datetime';
+import { isS3Configured } from '../config/s3';
 
 const router = Router();
 
@@ -573,12 +574,14 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
 
       // 7.5. Save ZIP file as Document (linked to booking, not individual passenger) - same as group booking
       if (zipFile) {
+        const filePath = isS3Configured() ? (zipFile as any).location : zipFile.path;
+        
         await tx.document.create({
           data: {
             bookingId: booking.id,
             documentType: 'pan_card_zip',
             fileName: zipFile.originalname,
-            filePath: zipFile.path,
+            filePath: filePath, // S3 URL or local path
             fileSize: zipFile.size,
             mimeType: zipFile.mimetype,
           },

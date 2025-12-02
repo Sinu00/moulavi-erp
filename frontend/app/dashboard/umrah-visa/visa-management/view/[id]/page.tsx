@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, Plane, Users, Building, MapPin, Mail, CheckCircle, ArrowLeft, Clock, DollarSign, Route, Truck, ArrowRight } from 'lucide-react';
+import { Calendar, Plane, Users, Building, MapPin, Mail, CheckCircle, ArrowLeft, Clock, DollarSign, Route, Truck, ArrowRight, Download } from 'lucide-react';
 
 export default function ViewUmrahVisaBookingPage() {
   const router = useRouter();
@@ -20,6 +20,7 @@ export default function ViewUmrahVisaBookingPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState<any>(null);
+  const [downloadingZip, setDownloadingZip] = useState(false);
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -96,6 +97,35 @@ export default function ViewUmrahVisaBookingPage() {
     return cities.length > 0 ? cities.join(' → ') : 'N/A';
   };
 
+  const handleDownloadZip = async () => {
+    if (!bookingId || downloadingZip) return;
+    
+    try {
+      setDownloadingZip(true);
+      toast.info('Downloading zip file...');
+      
+      const zipResponse = await umrahVisaAPI.downloadBookingZip(bookingId);
+      
+      if (zipResponse.data.downloadUrl) {
+        // If S3, use presigned URL to download
+        const link = document.createElement('a');
+        link.href = zipResponse.data.downloadUrl;
+        link.download = zipResponse.data.fileName || 'documents.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Zip file downloaded successfully!');
+      } else {
+        toast.error('Download URL not available');
+      }
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast.error(error.response?.data?.error || error.message || 'Failed to download zip file');
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       <div className="hidden lg:block">
@@ -124,6 +154,15 @@ export default function ViewUmrahVisaBookingPage() {
                     {booking.status?.replace(/_/g, ' ').toUpperCase()}
                   </Badge>
                 )}
+                <Button 
+                  variant="outline" 
+                  onClick={handleDownloadZip}
+                  disabled={downloadingZip}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {downloadingZip ? 'Downloading...' : 'Download Documents'}
+                </Button>
                 <Button variant="outline" onClick={() => router.back()}>
                   <ArrowLeft className="h-4 w-4 mr-1" /> Back
                 </Button>
