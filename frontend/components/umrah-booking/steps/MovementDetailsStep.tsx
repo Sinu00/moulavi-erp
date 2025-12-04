@@ -189,12 +189,23 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
       return;
     }
 
+    // Check if transport is still selected - if not, clear movements
+    const hasTransport = transportData?.selectedTransports?.length > 0 || !!transportData?.selectedTransport;
+    if (!hasTransport) {
+      // Clear movements if no transport is selected
+      if (movements.length > 0) {
+        onChange({ movements: [] });
+        lastGeneratedHashRef.current = '';
+      }
+      return;
+    }
+
     // Check if accommodation is iqama
     const accommodationType = step3Data?.accommodationType;
     const isIqama = accommodationType === 'iqama';
 
     // For iqama: Generate default movement from airport to Jeddah City Center
-    if (isIqama && (transportData?.selectedTransports || transportData?.selectedTransport)) {
+    if (isIqama && hasTransport) {
       if (!arrivalAirportId || !arrivalDate) {
         return;
       }
@@ -232,7 +243,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
         }
         
     // Only generate if transport routes are selected
-    if (transportData?.selectedTransports || transportData?.selectedTransport) {
+    if (hasTransport) {
       const selectedRoutes = getSelectedRoutes(transportData, availableRoutes);
       
       if (selectedRoutes.length > 0) {

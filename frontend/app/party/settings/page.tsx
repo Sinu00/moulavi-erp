@@ -231,14 +231,14 @@ export default function PartySettingsPage() {
 
   return (
       <PartyLayout title="Settings" subtitle="Manage your profile and account settings">
-        <div className="p-4 lg:p-6">
+        <div className="p-4 sm:p-6">
         <div className="space-y-6">
           {/* Tab Navigation */}
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8">
+          <div className="border-b border-gray-200 overflow-x-auto">
+            <nav className="flex space-x-4 lg:space-x-8 min-w-max lg:min-w-0">
               <button
                 onClick={() => setActiveTab('profile')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                className={`py-3 lg:py-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                   activeTab === 'profile'
                     ? 'border-red-600 text-red-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -251,7 +251,7 @@ export default function PartySettingsPage() {
               </button>
               <button
                 onClick={() => setActiveTab('password')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                className={`py-3 lg:py-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                   activeTab === 'password'
                     ? 'border-red-600 text-red-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -280,7 +280,7 @@ export default function PartySettingsPage() {
                   <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
                   <Separator />
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="partyName">Party Name *</Label>
                       <Input
@@ -340,7 +340,7 @@ export default function PartySettingsPage() {
                   <h3 className="text-lg font-semibold text-gray-900">Document Information</h3>
                   <Separator />
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="gstNumber">GST Number</Label>
                       <Input
@@ -451,11 +451,11 @@ export default function PartySettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4">
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                   <Button
                     onClick={handleSave}
                     disabled={saving}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white"
                   >
                     {saving ? (
                       <>
@@ -524,11 +524,11 @@ export default function PartySettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4">
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                   <Button
                     onClick={handleChangePassword}
                     disabled={changingPassword}
-                    className="bg-red-600 hover:bg-red-700 text-white"
+                    className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white"
                   >
                     {changingPassword ? (
                       <>

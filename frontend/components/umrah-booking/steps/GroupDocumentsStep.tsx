@@ -37,12 +37,7 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
       return;
     }
 
-    // Validate file size (e.g., max 50MB for ZIP)
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (file.size > maxSize) {
-      alert('File size exceeds 50MB limit. Please compress your files.');
-      return;
-    }
+    // No max size validation - removed as per user requirement
 
     // Store the file in step4Data
     onChange({ panCardZipFile: file } as any);
@@ -122,7 +117,7 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
                     {isDragging ? 'Drop your ZIP file here' : 'Click to upload or drag and drop'}
                   </p>
                   <p className="text-sm text-gray-500">
-                    ZIP file containing all PAN cards (MAX. 50MB)
+                    ZIP file containing all PAN cards
                   </p>
                 </div>
               </div>
@@ -162,7 +157,6 @@ export const GroupDocumentsStep: React.FC<GroupDocumentsStepProps> = ({
             <ul className="space-y-1 text-sm text-blue-800 list-disc list-inside">
               <li>Create a ZIP file containing all PAN card images/PDFs</li>
               <li>Name each file clearly (e.g., passenger-name-pan.pdf)</li>
-              <li>Maximum file size: 50MB</li>
               <li>Supported formats inside ZIP: PNG, JPG, PDF</li>
             </ul>
             <p className="text-xs text-blue-700 mt-2">

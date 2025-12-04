@@ -119,6 +119,21 @@ export default function AdminCreateIndividualUmrahVisaPage() {
     }
   };
 
+  // Helper: Check if arrival airport is Jeddah or Madinah
+  const isJeddahOrMadinahAirport = (): boolean => {
+    if (!bookingState.step2Data.arrivalAirportId || !masterData.locationMasters) {
+      return false;
+    }
+    const arrivalAirport = masterData.locationMasters.find(
+      (lm) => lm.id === bookingState.step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
+    );
+    if (!arrivalAirport) return false;
+    
+    const cityName = arrivalAirport.cityMaster?.name || arrivalAirport.city || '';
+    const normalizedCity = cityName.toLowerCase().trim();
+    return normalizedCity === 'jeddah' || normalizedCity === 'madinah' || normalizedCity === 'madina' || normalizedCity === 'medina';
+  };
+
   const nextStep = async () => {
     if (!selectedPartyId) {
       toast.error('Please select a party first');
@@ -132,16 +147,46 @@ export default function AdminCreateIndividualUmrahVisaPage() {
     }
 
     const success = await submitStep(bookingState.currentStep);
+    
+    // Special handling for step 3: Skip steps 4 and 5 if arrival airport is not Jeddah/Madinah
+    if (success && bookingState.currentStep === 3 && !isJeddahOrMadinahAirport()) {
+      // Skip steps 4 and 5, go directly to step 6
+      setCurrentStep(6);
+      return;
+    }
+    
     if (success && bookingState.currentStep === 6) {
       router.push('/dashboard/umrah-visa/bookings');
     }
   };
 
   const prevStep = () => {
+    // Special handling for step 6:
+    // - If arrival airport is not Jeddah/Madinah, go to step 3
+    // - If no transport is selected, go to step 3 (not step 5)
+    if (bookingState.currentStep === 6) {
+      if (!isJeddahOrMadinahAirport()) {
+        setCurrentStep(3);
+        return;
+      }
+      // Check if transport is selected
+      const hasTransport = bookingState.step4Data.selectedTransport || 
+                           (bookingState.step4Data.selectedTransports && bookingState.step4Data.selectedTransports.length > 0);
+      if (!hasTransport) {
+        setCurrentStep(3);
+        return;
+      }
+    }
     setCurrentStep(Math.max(bookingState.currentStep - 1, 1));
   };
 
   const goToStep = (stepId: number) => {
+    // Prevent going to steps 4 or 5 if arrival airport is not Jeddah/Madinah
+    if ((stepId === 4 || stepId === 5) && !isJeddahOrMadinahAirport()) {
+      // If trying to go to step 4 or 5 but airport is not Jeddah/Madinah, go to step 6 instead
+      setCurrentStep(6);
+      return;
+    }
     if (stepId <= bookingState.currentStep || bookingState.completedSteps.includes(stepId)) {
       setCurrentStep(stepId);
     }
@@ -192,7 +237,15 @@ export default function AdminCreateIndividualUmrahVisaPage() {
             step2Data={bookingState.step2Data}
             step3Data={bookingState.step3Data}
             locationMasters={masterData.locationMasters}
-            onChange={updateStep4Data}
+            onChange={(data) => {
+              updateStep4Data(data);
+              // Clear movements if transport is removed
+              const hasTransport = data.selectedTransport || 
+                                   (data.selectedTransports && data.selectedTransports.length > 0);
+              if (!hasTransport) {
+                updateStep5Data({ movements: [] });
+              }
+            }}
             disabled={isLoading}
           />
         );

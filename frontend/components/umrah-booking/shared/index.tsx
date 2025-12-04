@@ -32,12 +32,13 @@ export const StepProgress: React.FC<StepProgressProps> = ({
   steps = STEPS,
 }) => {
   return (
-    <div className="mb-8">
-      <div className={`grid gap-4 ${
-        steps.length === 6 ? 'grid-cols-6' : 
-        steps.length === 5 ? 'grid-cols-5' : 
-        'grid-cols-4'
-      }`}>
+    <div className="mb-6 lg:mb-8">
+      <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
+        <div className={`grid gap-2 lg:gap-4 min-w-max lg:min-w-0 ${
+          steps.length === 6 ? 'grid-cols-6' : 
+          steps.length === 5 ? 'grid-cols-5' : 
+          'grid-cols-4'
+        }`}>
         {steps.map((step, index) => {
           const Icon = iconMap[step.icon as keyof typeof iconMap];
           const isCompleted = completedSteps.includes(step.id);
@@ -53,7 +54,7 @@ export const StepProgress: React.FC<StepProgressProps> = ({
             <div key={step.id} className="flex flex-col items-center relative">
               {/* Progress Line */}
               {index < steps.length - 1 && (
-                <div className={`absolute top-6 left-1/2 w-1/2 h-0.5 z-0 ${
+                <div className={`absolute top-5 lg:top-6 left-1/2 w-1/2 h-0.5 z-0 ${
                   shouldShowRedLine ? 'bg-red-400' : 'bg-gray-200'
                 }`} />
               )}
@@ -61,7 +62,7 @@ export const StepProgress: React.FC<StepProgressProps> = ({
               <button
                 onClick={() => onStepClick(step.id)}
                 disabled={!isAccessible}
-                className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all shadow-sm relative z-10 ${
+                className={`w-10 h-10 lg:w-12 lg:h-12 rounded-full flex items-center justify-center border-2 transition-all shadow-sm relative z-10 ${
                   isCompleted
                     ? 'bg-red-400 border-red-400 text-white'
                     : isCurrent
@@ -72,19 +73,19 @@ export const StepProgress: React.FC<StepProgressProps> = ({
                 }`}
               >
                 {isCompleted ? (
-                  <Check className="h-6 w-6" />
+                  <Check className="h-5 w-5 lg:h-6 lg:w-6" />
                 ) : (
-                  <Icon className="h-6 w-6" />
+                  <Icon className="h-5 w-5 lg:h-6 lg:w-6" />
                 )}
               </button>
               
-              <div className="mt-4 text-center px-2">
-                <p className={`text-sm font-medium mb-1 ${
+              <div className="mt-2 lg:mt-4 text-center px-1 lg:px-2">
+                <p className={`text-xs lg:text-sm font-medium mb-0.5 lg:mb-1 ${
                   isCurrent ? 'text-red-600 font-semibold' : isCompleted ? 'text-red-600' : 'text-gray-500'
                 }`}>
                   {step.title}
                 </p>
-                <p className={`text-xs leading-relaxed ${
+                <p className={`text-[10px] lg:text-xs leading-relaxed hidden lg:block ${
                   isCurrent ? 'text-gray-600' : 'text-gray-400'
                 }`}>
                   {step.description}
@@ -93,6 +94,7 @@ export const StepProgress: React.FC<StepProgressProps> = ({
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

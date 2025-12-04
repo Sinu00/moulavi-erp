@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/umrah-visa/bookings - Get all bookings with pagination and filters
 router.get('/bookings', authenticate, async (req, res) => {
   try {
-    const { page = '1', limit = '10', status, partyId } = req.query;
+    const { page = '1', limit = '10', status, partyId, search } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
@@ -54,6 +54,14 @@ router.get('/bookings', authenticate, async (req, res) => {
         // If status is a single string, use it directly
         where.status = status;
       }
+    }
+
+    // Search by group number
+    if (search && typeof search === 'string' && search.trim() !== '') {
+      where.groupNumber = {
+        contains: search.trim(),
+        mode: 'insensitive',
+      };
     }
 
     const [bookings, total] = await Promise.all([

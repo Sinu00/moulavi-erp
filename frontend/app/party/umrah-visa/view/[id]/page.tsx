@@ -223,7 +223,7 @@ export default function ViewUmrahVisaBookingPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                     <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Group Name</p>
                       <p className="text-xl font-bold text-red-600">{booking.groupName || 'N/A'}</p>
@@ -275,7 +275,7 @@ export default function ViewUmrahVisaBookingPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                       <div className="flex items-center gap-2 mb-2">
                         <Mail className="h-4 w-4 text-red-600" />
@@ -314,7 +314,7 @@ export default function ViewUmrahVisaBookingPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
                       {/* Arrival */}
                       <div className="border-l-4 border-l-red-600 bg-red-50 rounded-r-lg p-6">
                         <div className="flex items-center gap-2 mb-4">
@@ -445,59 +445,63 @@ export default function ViewUmrahVisaBookingPage() {
                     }
                     
                     return (
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-red-600 text-white">
-                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">City</th>
-                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Hotel Name</th>
-                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Check-In</th>
-                              <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Check-Out</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {hotelBookings.map((h: any, idx: number) => {
-                              const cityName = h.city?.name || h.city?.destinationName || 'N/A';
-                              const hotelName = h.hotel?.name || h.hotel?.hotelName || 'N/A';
-                              const checkIn = h.checkInDate || h.checkIn;
-                              const checkOut = h.checkOutDate || h.checkOut;
-                              
-                              return (
-                                <tr 
-                                  key={h.id} 
-                                  className={`border-b border-gray-200 transition-colors ${
-                                    idx % 2 === 0 ? 'bg-white' : 'bg-red-50'
-                                  } hover:bg-red-100`}
-                                >
-                                  <td className="py-4 px-4">
-                                    <div className="flex items-center gap-2">
-                                      <MapPin className="h-4 w-4 text-red-600" />
-                                      <span className="text-sm font-semibold text-gray-900">{cityName}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-4">
-                                    <div className="flex items-center gap-2">
-                                      <Building className="h-4 w-4 text-gray-400" />
-                                      <span className="text-sm text-gray-700">{hotelName}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-4">
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="h-4 w-4 text-red-600" />
-                                      <span className="text-sm text-gray-700 font-medium">{formatDate(checkIn)}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-4">
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="h-4 w-4 text-red-600" />
-                                      <span className="text-sm text-gray-700 font-medium">{formatDate(checkOut)}</span>
-                                    </div>
-                                  </td>
+                      <div className="overflow-x-auto -mx-4 lg:mx-0">
+                        <div className="min-w-full inline-block align-middle">
+                          <div className="overflow-hidden border border-gray-200 rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-red-600">
+                                <tr>
+                                  <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">City</th>
+                                  <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Hotel Name</th>
+                                  <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Check-In</th>
+                                  <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Check-Out</th>
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {hotelBookings.map((h: any, idx: number) => {
+                                  const cityName = h.city?.name || h.city?.destinationName || 'N/A';
+                                  const hotelName = h.hotel?.name || h.hotel?.hotelName || 'N/A';
+                                  const checkIn = h.checkInDate || h.checkIn;
+                                  const checkOut = h.checkOutDate || h.checkOut;
+                                  
+                                  return (
+                                    <tr 
+                                      key={h.id} 
+                                      className={`transition-colors ${
+                                        idx % 2 === 0 ? 'bg-white' : 'bg-red-50'
+                                      } hover:bg-red-100`}
+                                    >
+                                      <td className="py-3 px-3 lg:px-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          <MapPin className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                          <span className="text-xs lg:text-sm font-semibold text-gray-900">{cityName}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 lg:px-4">
+                                        <div className="flex items-center gap-2">
+                                          <Building className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                          <span className="text-xs lg:text-sm text-gray-700">{hotelName}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 lg:px-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          <Calendar className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                          <span className="text-xs lg:text-sm text-gray-700 font-medium">{formatDate(checkIn)}</span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3 px-3 lg:px-4 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          <Calendar className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                          <span className="text-xs lg:text-sm text-gray-700 font-medium">{formatDate(checkOut)}</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       </div>
                     );
                   })()}
@@ -686,58 +690,62 @@ export default function ViewUmrahVisaBookingPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-6">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-red-600 text-white">
-                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Route</th>
-                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Vehicle Type</th>
-                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Capacity</th>
-                            <th className="py-4 px-4 text-left text-xs font-bold uppercase tracking-wide">Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {booking.transportBookings.map((t: any, idx: number) => {
-                            const route = t.transportMaster?.route;
-                            const vehicleType = t.transportMaster?.vehicleType;
-                            const price = t.transportMaster?.price ? Number(t.transportMaster.price) : null;
-                            
-                            return (
-                              <tr 
-                                key={t.id} 
-                                className={`border-b border-gray-200 transition-colors ${
-                                  idx % 2 === 0 ? 'bg-white' : 'bg-red-50'
-                                } hover:bg-red-100`}
-                              >
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-2">
-                                    <Route className="h-4 w-4 text-red-600" />
-                                    <span className="text-sm font-semibold text-gray-900">{formatTransportRoute(route)}</span>
-                                  </div>
-                                </td>
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-2">
-                                    <Truck className="h-4 w-4 text-gray-400" />
-                                    <span className="text-sm font-medium text-gray-700">{vehicleType?.vehicleName || 'N/A'}</span>
-                                  </div>
-                                </td>
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-2">
-                                    <Users className="h-4 w-4 text-gray-400" />
-                                    <span className="text-sm text-gray-700">{vehicleType?.paxCount || 'N/A'} PAX</span>
-                                  </div>
-                                </td>
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-2">
-                                    <DollarSign className="h-4 w-4 text-red-600" />
-                                    <span className="text-sm font-bold text-red-600">{price ? `₹${price.toLocaleString('en-IN')}` : 'N/A'}</span>
-                                  </div>
-                                </td>
+                    <div className="overflow-x-auto -mx-4 lg:mx-0">
+                      <div className="min-w-full inline-block align-middle">
+                        <div className="overflow-hidden border border-gray-200 rounded-lg">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-red-600">
+                              <tr>
+                                <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Route</th>
+                                <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Vehicle Type</th>
+                                <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Capacity</th>
+                                <th className="py-3 px-3 lg:px-4 text-left text-xs font-bold uppercase tracking-wide text-white">Price</th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {booking.transportBookings.map((t: any, idx: number) => {
+                                const route = t.transportMaster?.route;
+                                const vehicleType = t.transportMaster?.vehicleType;
+                                const price = t.transportMaster?.price ? Number(t.transportMaster.price) : null;
+                                
+                                return (
+                                  <tr 
+                                    key={t.id} 
+                                    className={`transition-colors ${
+                                      idx % 2 === 0 ? 'bg-white' : 'bg-red-50'
+                                    } hover:bg-red-100`}
+                                  >
+                                    <td className="py-3 px-3 lg:px-4">
+                                      <div className="flex items-center gap-2">
+                                        <Route className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                        <span className="text-xs lg:text-sm font-semibold text-gray-900">{formatTransportRoute(route)}</span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-3 lg:px-4">
+                                      <div className="flex items-center gap-2">
+                                        <Truck className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                        <span className="text-xs lg:text-sm font-medium text-gray-700">{vehicleType?.vehicleName || 'N/A'}</span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-3 lg:px-4 whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        <Users className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                        <span className="text-xs lg:text-sm text-gray-700">{vehicleType?.paxCount || 'N/A'} PAX</span>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-3 lg:px-4 whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        <DollarSign className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                        <span className="text-xs lg:text-sm font-bold text-red-600">{price ? `₹${price.toLocaleString('en-IN')}` : 'N/A'}</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

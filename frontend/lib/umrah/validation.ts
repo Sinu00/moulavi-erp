@@ -220,7 +220,7 @@ export const validateStep3 = (
       for (const transport of data.selectedTransports) {
         if (!transport.routeId || !transport.transportId || !transport.vehicleTypeId) {
           return 'Please complete all transport selections';
-        }
+      }
         if (transport.quantity && transport.quantity < 1) {
           return 'Transport quantity must be at least 1';
         }
@@ -301,8 +301,8 @@ export const validateStep4 = (
     // Validate unified movements array
     if (!data.movements || data.movements.length === 0) {
       return 'Please add movements. Select transport routes in Step 3 to auto-generate, or add manually.';
-    }
-
+  }
+  
     // Validate each movement
     for (const movement of data.movements) {
       if (!movement.fromLocationId || !movement.toLocationId) {

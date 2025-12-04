@@ -19,6 +19,7 @@ interface UmrahVisaBooking {
   groupName?: string;
   passengerCount: number;
   status: string;
+  visaType?: 'individual_visa' | 'group_visa';
   createdAt: string;
 }
 
@@ -56,8 +57,12 @@ export default function AddToExistingBookingPage() {
     try {
       setLoadingBookings(true);
       const response = await umrahVisaAPI.getBookings({ page: 1, limit: 1000 });
-      const bookingsData = response.data.bookings || [];
-      setBookings(bookingsData);
+      const allBookings = response.data.bookings || [];
+      // Filter to only show group bookings
+      const groupBookings = allBookings.filter((booking: UmrahVisaBooking) => 
+        booking.visaType === 'group_visa'
+      );
+      setBookings(groupBookings);
     } catch (error) {
       console.error('Error loading bookings:', error);
       toast.error('Failed to load bookings');
@@ -167,7 +172,7 @@ export default function AddToExistingBookingPage() {
         title="Add to Existing Booking" 
         subtitle="Add a new group to an existing booking"
       >
-        <div className="p-4 lg:p-6">
+        <div className="p-4 sm:p-6">
         <Card>
           <CardHeader>
             <CardTitle>Add Group to Existing Booking</CardTitle>
@@ -183,14 +188,14 @@ export default function AddToExistingBookingPage() {
                 {loadingBookings ? (
                   <div className="text-sm text-gray-500 py-2">Loading bookings...</div>
                 ) : bookings.length === 0 ? (
-                  <div className="text-sm text-gray-500 py-2">No bookings found. Please create a booking first.</div>
+                  <div className="text-sm text-gray-500 py-2">No group bookings found. Please create a group booking first.</div>
                 ) : (
                   <Select
                     value={formData.existingBookingId}
                     onValueChange={(value) => setFormData({ ...formData, existingBookingId: value })}
                     required
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a booking" />
                     </SelectTrigger>
                     <SelectContent>
@@ -252,7 +257,7 @@ export default function AddToExistingBookingPage() {
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+                    className={`border-2 border-dashed rounded-lg p-6 lg:p-12 text-center cursor-pointer transition-colors ${
                       isDragging
                         ? 'border-red-500 bg-red-50'
                         : 'border-gray-300 bg-gray-50 hover:border-red-400 hover:bg-red-50/50'
@@ -266,25 +271,25 @@ export default function AddToExistingBookingPage() {
                       className="hidden"
                     />
                     
-                    <div className="flex flex-col items-center justify-center space-y-4">
-                      <UploadCloud className={`w-16 h-16 ${isDragging ? 'text-red-500' : 'text-gray-400'}`} />
+                    <div className="flex flex-col items-center justify-center space-y-3 lg:space-y-4">
+                      <UploadCloud className={`w-12 h-12 lg:w-16 lg:h-16 ${isDragging ? 'text-red-500' : 'text-gray-400'}`} />
                       <div>
-                        <p className="text-lg font-medium text-gray-700 mb-1">
+                        <p className="text-base lg:text-lg font-medium text-gray-700 mb-1">
                           {isDragging ? 'Drop your ZIP file here' : 'Click to upload or drag and drop'}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-xs lg:text-sm text-gray-500">
                           ZIP file containing all PAN cards (MAX. 50MB)
                         </p>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50">
-                    <div className="flex items-center space-x-3">
-                      <File className="h-8 w-8 text-red-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">{zipFile.name}</p>
-                        <p className="text-sm text-gray-500">
+                  <div className="flex items-center justify-between p-3 lg:p-4 border border-gray-200 rounded-lg bg-gray-50">
+                    <div className="flex items-center space-x-2 lg:space-x-3 min-w-0 flex-1">
+                      <File className="h-6 w-6 lg:h-8 lg:w-8 text-red-600 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-900 text-sm lg:text-base truncate">{zipFile.name}</p>
+                        <p className="text-xs lg:text-sm text-gray-500">
                           {(zipFile.size / (1024 * 1024)).toFixed(2)} MB
                         </p>
                       </div>
@@ -294,7 +299,7 @@ export default function AddToExistingBookingPage() {
                       variant="ghost"
                       size="sm"
                       onClick={handleRemoveFile}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 ml-2"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -302,11 +307,11 @@ export default function AddToExistingBookingPage() {
                 )}
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white"
                 >
                   {loading ? 'Adding Group...' : 'Add Group to Booking'}
                 </Button>

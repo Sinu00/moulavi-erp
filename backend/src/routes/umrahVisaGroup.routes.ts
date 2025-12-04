@@ -690,9 +690,7 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
     });
   } catch (error) {
     // Handle multer errors
-    if ((error as any).code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File size exceeds 50MB limit. Please compress your files.' });
-    }
+    // File size limit removed as per user requirement
     if (error instanceof multer.MulterError) {
       return res.status(400).json({ error: error.message });
     }
@@ -945,9 +943,7 @@ router.post('/group/add-to-existing-booking', authenticate, upload.single('panCa
     });
   } catch (error) {
     // Handle multer errors
-    if ((error as any).code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File size exceeds 50MB limit. Please compress your files.' });
-    }
+    // File size limit removed as per user requirement
     if (error instanceof multer.MulterError) {
       return res.status(400).json({ error: error.message });
     }

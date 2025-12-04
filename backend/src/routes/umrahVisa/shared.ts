@@ -55,7 +55,7 @@ const storage = isS3Configured()
 
 export const upload = multer({ 
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for ZIP files
+  limits: { fileSize: Infinity }, // No file size limit - removed as per user requirement
   fileFilter: (req, file, cb) => {
     // Allow ZIP files for group bookings
     if (file.fieldname === 'panCardZipFile') {

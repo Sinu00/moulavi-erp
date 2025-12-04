@@ -513,7 +513,10 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
       };
 
       // Process unified movements array from step5Data
-      if (step5Data?.movements && Array.isArray(step5Data.movements) && step5Data.movements.length > 0) {
+      // Only process movements if transport is selected (movements should only exist if transport is selected)
+      const hasTransport = !!(step4Data?.selectedTransport?.transportId || 
+                               (step4Data?.selectedTransports && step4Data.selectedTransports.length > 0));
+      if (hasTransport && step5Data?.movements && Array.isArray(step5Data.movements) && step5Data.movements.length > 0) {
         for (const movement of step5Data.movements) {
           // Get LocationMaster for "from" location
           let fromLocation = locationMap.get(movement.fromLocationId);
@@ -654,9 +657,7 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
     });
   } catch (error) {
     // Handle multer errors
-    if ((error as any).code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File size exceeds 50MB limit. Please compress your files.' });
-    }
+    // File size limit removed as per user requirement
     if (error instanceof multer.MulterError) {
       return res.status(400).json({ error: error.message });
     }

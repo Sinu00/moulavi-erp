@@ -151,11 +151,24 @@ export const useUmrahBooking = () => {
           const data = await response.json();
           
           if (response.ok) {
-            // Special handling for step 4: Check if transport is selected
-            // If no transport selected, skip to step 6 (documents)
-            // If transport selected, go to step 5 (movements)
+            // Special handling for step 3: Check if arrival airport is Jeddah or Madinah
+            // If not, skip steps 4 and 5, go directly to step 6 (documents)
             let nextStep = stepNumber + 1;
-            if (stepNumber === 4) {
+            if (stepNumber === 3) {
+              // Check if arrival airport is Jeddah or Madinah
+              const arrivalAirportId = bookingState.step2Data.arrivalAirportId;
+              const requiresTransport = arrivalAirportId && 
+                (arrivalAirportId.toLowerCase().includes('jeddah') || 
+                 arrivalAirportId.toLowerCase().includes('madinah') ||
+                 arrivalAirportId.toLowerCase().includes('medina'));
+              
+              // For now, we'll check this in the page component where we have access to locationMasters
+              // Here we'll just proceed normally, the page component will handle the skip logic
+              nextStep = 4;
+            } else if (stepNumber === 4) {
+              // Special handling for step 4: Check if transport is selected
+              // If no transport selected, skip to step 6 (documents)
+              // If transport selected, go to step 5 (movements)
               const hasTransport = bookingState.step4Data.selectedTransport || 
                                    (bookingState.step4Data.selectedTransports && bookingState.step4Data.selectedTransports.length > 0);
               nextStep = hasTransport ? 5 : 6; // Skip to documents if no transport
@@ -207,8 +220,10 @@ export const useUmrahBooking = () => {
           selectedTransport: bookingState.step4Data.selectedTransport,
           selectedTransports: bookingState.step4Data.selectedTransports,
         }));
-        // Add movements from step5Data if they exist
-        if (bookingState.step5Data.movements && bookingState.step5Data.movements.length > 0) {
+        // Add movements from step5Data ONLY if transport is selected
+        const hasTransport = bookingState.step4Data.selectedTransport || 
+                             (bookingState.step4Data.selectedTransports && bookingState.step4Data.selectedTransports.length > 0);
+        if (hasTransport && bookingState.step5Data.movements && bookingState.step5Data.movements.length > 0) {
           formData.append('step5', JSON.stringify({
             movements: bookingState.step5Data.movements,
           }));

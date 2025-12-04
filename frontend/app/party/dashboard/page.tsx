@@ -1,16 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toast } from 'sonner';
-import { getUser, hasRole, removeUser } from '@/lib/auth';
-import { umrahVisaAPI, authAPI } from '@/lib/api';
+import { getUser, hasRole } from '@/lib/auth';
+import { umrahVisaAPI } from '@/lib/api';
 import { PartyLayout } from '@/components/layouts/PartyLayout';
 import { 
   Plus, 
@@ -23,31 +21,14 @@ import {
   Calendar,
   Building,
   Eye,
-  AlertCircle,
-  RefreshCw,
   Search,
   Filter,
-  TrendingUp,
-  Activity,
-  Plane,
-  MapPin,
-  Bell,
-  Settings
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
-
-interface UmrahPassenger {
-  id: string;
-  bookingId: string;
-  isLeadPassenger: boolean;
-  fullName: string;
-  passportNumber: string;
-  nationality: string;
-  passportExpiry: string;
-  dateOfBirth: string;
-  gender: 'male' | 'female';
-  phoneNumber?: string;
-}
 
 interface UmrahVisaBooking {
   id: string;
@@ -56,28 +37,24 @@ interface UmrahVisaBooking {
   groupName?: string;
   passengerCount: number;
   status: 'pending' | 'documents_downloaded' | 'group_assigned' | 'voucher' | 'bill' | 'booking_success' | 'cancelled';
-  visaType?: 'individual_visa' | 'group_visa';
   createdAt: string;
-  updatedAt: string;
-  passengers?: UmrahPassenger[];
   party?: {
     id: string;
     partyName: string;
     email: string;
-    contactNumber?: string;
-    whatsappNumber?: string;
   };
 }
 
 export default function PartyDashboardPage() {
   const router = useRouter();
-  const user = getUser();
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const [bookings, setBookings] = useState<UmrahVisaBooking[]>([]);
-  const [filteredBookings, setFilteredBookings] = useState<UmrahVisaBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingServices, setLoadingServices] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<'createdAt' | 'passengerCount' | 'status'>('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -89,45 +66,33 @@ export default function PartyDashboardPage() {
     pending: 0,
     completed: 0,
   });
+  const loadingRef = useRef(false);
 
+  // Initialize on mount
   useEffect(() => {
-    if (!user || !hasRole('party')) {
-      router.push('/');
-      return;
-    }
+    setMounted(true);
+    const currentUser = getUser();
+    setUser(currentUser);
   }, []);
 
-  // Load bookings when page, search, or status filter changes
-  useEffect(() => {
-    loadServices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, searchTerm, statusFilter]);
-
-  const loadServices = async () => {
-    // Prevent multiple simultaneous calls
-    if (loadingServices) {
-      return;
-    }
-    
-    setLoadingServices(true);
-    setLoading(true);
-    
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.warn('Services loading timeout - forcing loading to false');
-      setLoading(false);
-      setLoadingServices(false);
-    }, 10000); // 10 second timeout
+  // Load bookings and calculate stats
+  const loadBookings = async () => {
+    if (loadingRef.current) return;
     
     try {
-      // Use pagination and filters
-      const response = await umrahVisaAPI.getBookings({ 
-        page: pagination.page, 
-        limit: pagination.limit,
+      loadingRef.current = true;
+      setLoading(true);
+      
+      const params = { 
+        page: String(pagination.page), 
+        limit: String(pagination.limit),
         search: searchTerm || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
-      });
+        sortBy: sortBy,
+        sortOrder: sortOrder,
+      };
       
+      const response = await umrahVisaAPI.getBookings(params);
       const bookingsData = response.data.bookings || [];
       const paginationData = response.data.pagination || {
         page: pagination.page,
@@ -136,37 +101,52 @@ export default function PartyDashboardPage() {
         totalPages: 1,
       };
       
-      // Filter bookings for current party (done on backend via authentication)
       setBookings(bookingsData);
-      setFilteredBookings(bookingsData);
       setPagination(paginationData);
-
-      // Calculate stats - need to fetch all for stats
-      const statsResponse = await umrahVisaAPI.getBookings({ page: 1, limit: 1000 });
-      const allBookings = statsResponse.data.bookings || [];
       
-      setStats({
-        total: paginationData.total || allBookings.length,
-        pending: allBookings.filter((b: UmrahVisaBooking) => 
-          ['pending', 'documents_downloaded', 'group_assigned', 'voucher', 'bill'].includes(b.status)
-        ).length,
-        completed: allBookings.filter((b: UmrahVisaBooking) => b.status === 'booking_success').length,
-      });
+      // Calculate stats from total count
+      const total = paginationData.total || 0;
+      
+      // Get stats from a separate call for accuracy
+      try {
+        const statsResponse = await umrahVisaAPI.getBookings({ page: 1, limit: 1000 });
+        const allBookings = statsResponse.data.bookings || [];
+        setStats({
+          total: allBookings.length,
+          pending: allBookings.filter((b: UmrahVisaBooking) => 
+            ['pending', 'documents_downloaded', 'group_assigned', 'voucher', 'bill'].includes(b.status)
+          ).length,
+          completed: allBookings.filter((b: UmrahVisaBooking) => b.status === 'booking_success').length,
+        });
+      } catch {
+        // If stats fail, use total from pagination
+        setStats(prev => ({ ...prev, total }));
+      }
     } catch (error) {
-      console.error('Error loading bookings:', error);
       setBookings([]);
-      setFilteredBookings([]);
-      setStats({
-        total: 0,
-        pending: 0,
-        completed: 0,
-      });
+      setStats({ total: 0, pending: 0, completed: 0 });
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
-      setLoadingServices(false);
+      loadingRef.current = false;
     }
   };
+
+  // Auth check and redirect
+  useEffect(() => {
+    if (!mounted) return;
+    
+    if (!user || !hasRole('party')) {
+      router.push('/');
+      return;
+    }
+  }, [mounted, user, router]);
+
+  // Load bookings when filters/pagination change (only after user is confirmed)
+  useEffect(() => {
+    if (!mounted || !user || !hasRole('party')) return;
+    loadBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, user, pagination.page, pagination.limit, searchTerm, statusFilter, sortBy, sortOrder]);
 
   const getStatusBadge = (status: string) => {
     if (!status) {
@@ -203,37 +183,37 @@ export default function PartyDashboardPage() {
     router.push(`/party/umrah-visa/view/${bookingId}`);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Clock className="h-4 w-4 text-gray-600" />;
-      case 'documents_downloaded':
-        return <FileText className="h-4 w-4 text-yellow-600" />;
-      case 'group_assigned':
-        return <Users className="h-4 w-4 text-blue-600" />;
-      case 'voucher':
-        return <FileText className="h-4 w-4 text-purple-600" />;
-      case 'bill':
-        return <FileText className="h-4 w-4 text-orange-600" />;
-      case 'booking_success':
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'cancelled':
-        return <XCircle className="h-4 w-4 text-red-600" />;
-      default:
-        return <Clock className="h-4 w-4 text-gray-600" />;
-    }
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const handleSortChange = (value: string) => {
+    const [field, order] = value.split('-') as [typeof sortBy, typeof sortOrder];
+    setSortBy(field);
+    setSortOrder(order);
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
 
-  if (!user) {
+  if (!mounted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
     );
+  }
+
+  if (!user || !hasRole('party')) {
+    return null;
   }
 
   return (
@@ -243,35 +223,35 @@ export default function PartyDashboardPage() {
     >
       <div className="p-4 lg:p-6">
         {/* Stats Overview */}
-        <div className="mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mb-6 lg:mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div key={i} className="bg-white rounded-lg p-4 lg:p-6 shadow-sm border border-gray-100">
                   <div className="text-center">
                     <Skeleton className="h-8 w-12 mx-auto mb-2" />
-                    <Skeleton className="h-4 w-16 mx-auto" />
+                    <Skeleton className="h-4 w-24 mx-auto" />
                   </div>
                 </div>
               ))
             ) : (
               <>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="bg-white rounded-lg p-4 lg:p-6 shadow-sm border border-gray-100">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</div>
-                    <div className="text-sm text-red-600 font-medium">Total Applications</div>
+                    <div className="text-2xl lg:text-3xl font-bold text-gray-900 mb-1">{stats.total}</div>
+                    <div className="text-xs lg:text-sm text-red-600 font-medium">Total Applications</div>
                   </div>
                 </div>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="bg-white rounded-lg p-4 lg:p-6 shadow-sm border border-gray-100">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-1">{stats.pending}</div>
-                    <div className="text-sm text-red-600 font-medium">Pending Applications</div>
+                    <div className="text-2xl lg:text-3xl font-bold text-gray-900 mb-1">{stats.pending}</div>
+                    <div className="text-xs lg:text-sm text-red-600 font-medium">Pending Applications</div>
                   </div>
                 </div>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                <div className="bg-white rounded-lg p-4 lg:p-6 shadow-sm border border-gray-100">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-1">{stats.completed}</div>
-                    <div className="text-sm text-red-600 font-medium">Completed Applications</div>
+                    <div className="text-2xl lg:text-3xl font-bold text-gray-900 mb-1">{stats.completed}</div>
+                    <div className="text-xs lg:text-sm text-red-600 font-medium">Completed Applications</div>
                   </div>
                 </div>
               </>
@@ -279,35 +259,76 @@ export default function PartyDashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-3">
-          <Button 
-            onClick={() => router.push('/party/umrah-visa-group')}
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Group Booking
-          </Button>
-          <Button 
-            onClick={() => router.push('/party/add-to-existing-booking')}
-            variant="outline"
-            className="border-red-200 text-red-600 hover:bg-red-50"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add to Existing Booking
-          </Button>
-        </div>
-
-        {/* Recent Applications */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-6 border-b border-gray-200">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Recent Applications</h2>
-              <p className="text-sm text-gray-600">Your latest applications</p>
+        {/* All Applications */}
+        <div className="bg-white rounded-lg lg:rounded-xl shadow-sm border border-gray-100">
+          <div className="p-4 lg:p-6 border-b border-gray-200">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">All Applications</h2>
+              <p className="text-sm text-gray-600">View and manage all your applications</p>
+            </div>
+            
+            {/* Search and Filters */}
+            <div className="flex flex-col gap-3">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search by group number..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10 pr-10"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => handleSearchChange('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Filters Row */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Status Filter */}
+                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="documents_downloaded">Documents Downloaded</SelectItem>
+                    <SelectItem value="group_assigned">Group Assigned</SelectItem>
+                    <SelectItem value="voucher">Voucher</SelectItem>
+                    <SelectItem value="bill">Bill</SelectItem>
+                    <SelectItem value="booking_success">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {/* Sort */}
+                <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="createdAt-desc">Newest First</SelectItem>
+                    <SelectItem value="createdAt-asc">Oldest First</SelectItem>
+                    <SelectItem value="passengerCount-desc">Most Passengers</SelectItem>
+                    <SelectItem value="passengerCount-asc">Fewest Passengers</SelectItem>
+                    <SelectItem value="status-asc">Status A-Z</SelectItem>
+                    <SelectItem value="status-desc">Status Z-A</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           
-          <div className="p-6">
+          <div className="p-4 lg:p-6">
             {loading ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -323,7 +344,7 @@ export default function PartyDashboardPage() {
                   </div>
                 ))}
               </div>
-            ) : filteredBookings.length === 0 ? (
+            ) : bookings.length === 0 ? (
               <div className="text-center py-12">
                 <div className="h-16 w-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
                   <FileText className="h-8 w-8 text-gray-400" />
@@ -340,35 +361,62 @@ export default function PartyDashboardPage() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
-                  {filteredBookings.map((booking) => (
+                <div className="space-y-3 lg:space-y-4">
+                  {bookings.map((booking) => (
                     <div
                       key={booking.id}
-                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="border border-gray-200 rounded-lg lg:rounded-xl bg-white hover:shadow-md transition-all hover:border-red-200"
                     >
-                      <div className="flex items-center space-x-4">
-                        <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center">
-                          <Building className="h-5 w-5 text-gray-600" />
+                      <div className="p-4 lg:p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                          {/* Icon and Main Content */}
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <div className="h-10 w-10 lg:h-12 lg:w-12 rounded-lg bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center flex-shrink-0">
+                              <Building className="h-5 w-5 lg:h-6 lg:w-6 text-red-600" />
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 text-base lg:text-lg mb-2">
+                                {booking.groupName || booking.party?.partyName || 'Umrah Application'}
+                              </h3>
+                              <div className="flex flex-wrap items-center gap-2 lg:gap-3 text-xs lg:text-sm text-gray-600 mb-2">
+                                {booking.groupNumber && (
+                                  <span className="flex items-center gap-1">
+                                    <Hash className="h-3 w-3" />
+                                    {booking.groupNumber}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Users className="h-3 w-3" />
+                                  {booking.passengerCount || 0} passengers
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
+                                </span>
+                              </div>
+                              {booking.bookingId && (
+                                <p className="text-xs text-gray-500 font-mono truncate">
+                                  ID: {booking.bookingId}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Status and Actions */}
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 flex-shrink-0">
+                            {getStatusBadge(booking.status)}
+                            <Button
+                              onClick={() => handleViewBooking(booking.id)}
+                              size="sm"
+                              variant="outline"
+                              className="w-full sm:w-auto border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50"
+                            >
+                              <Eye className="h-4 w-4 mr-1.5" />
+                              View
+                            </Button>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            {booking.groupName || booking.party?.partyName || 'Umrah Application'}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {booking.groupNumber ? `${booking.groupNumber} • ` : ''}{booking.passengerCount || 0} pax • {format(new Date(booking.createdAt), 'MMM dd, yyyy')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        {getStatusBadge(booking.status)}
-                        <Button
-                          onClick={() => handleViewBooking(booking.id)}
-                          size="sm"
-                          variant="ghost"
-                          className="text-gray-600 hover:text-red-600 hover:bg-red-50"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
                   ))}
@@ -376,29 +424,69 @@ export default function PartyDashboardPage() {
                 
                 {/* Pagination */}
                 {pagination.totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-                    <div className="text-sm text-gray-500">
-                      Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-                      {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
-                      {pagination.total} results
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
-                        disabled={pagination.page === 1 || loading}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
-                        disabled={pagination.page === pagination.totalPages || loading}
-                      >
-                        Next
-                      </Button>
+                  <div className="mt-4 lg:mt-6 pt-4 lg:pt-6 border-t border-gray-200">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 lg:gap-4">
+                      <div className="text-xs lg:text-sm text-gray-600 text-center sm:text-left">
+                        Showing <span className="font-medium text-gray-900">{((pagination.page - 1) * pagination.limit) + 1}</span> to{' '}
+                        <span className="font-medium text-gray-900">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> of{' '}
+                        <span className="font-medium text-gray-900">{pagination.total}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1 lg:gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                          disabled={pagination.page === 1 || loading}
+                          className="gap-1"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          <span className="hidden sm:inline">Previous</span>
+                        </Button>
+                        
+                        {/* Page Numbers - Simplified for mobile */}
+                        <div className="hidden sm:flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                            let pageNum: number;
+                            if (pagination.totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (pagination.page <= 3) {
+                              pageNum = i + 1;
+                            } else if (pagination.page >= pagination.totalPages - 2) {
+                              pageNum = pagination.totalPages - 4 + i;
+                            } else {
+                              pageNum = pagination.page - 2 + i;
+                            }
+                            
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={pagination.page === pageNum ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
+                                disabled={loading}
+                                className={pagination.page === pageNum ? "bg-red-600 hover:bg-red-700 text-white" : ""}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        <div className="sm:hidden text-sm text-gray-600 px-2">
+                          {pagination.page} / {pagination.totalPages}
+                        </div>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                          disabled={pagination.page === pagination.totalPages || loading}
+                          className="gap-1"
+                        >
+                          <span className="hidden sm:inline">Next</span>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -407,7 +495,6 @@ export default function PartyDashboardPage() {
           </div>
         </div>
       </div>
-
     </PartyLayout>
   );
 }

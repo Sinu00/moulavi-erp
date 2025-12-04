@@ -9,6 +9,12 @@ import { Step3Data, Location, Hotel as HotelType, HotelBooking } from '@/lib/umr
 import { useHotelCoverage } from '../hooks/useHotelCoverage';
 import { HotelBookingTable } from '../components/HotelBookingTable';
 import { HotelCoverageIndicator } from '../components/HotelCoverageIndicator';
+import { REGEXP_ONLY_DIGITS_AND_CHARS } from "input-otp";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 interface AccommodationStepProps {
   data: Step3Data;
@@ -288,17 +294,27 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
 
           <div className="space-y-2">
             <Label htmlFor="iqamaNationalShortAddress">National Short Address *</Label>
-            <Input
-              id="iqamaNationalShortAddress"
-              placeholder="Enter national short address"
+            <InputOTP
+              maxLength={6}
+              pattern={REGEXP_ONLY_DIGITS_AND_CHARS}
               value={data.iqamaDetails?.iqamaNationalShortAddress || ''}
-              onChange={(e) =>
+              onChange={(value) =>
                 onChange({
-                  iqamaDetails: { ...data.iqamaDetails, iqamaNationalShortAddress: e.target.value },
+                  iqamaDetails: { ...data.iqamaDetails, iqamaNationalShortAddress: value },
                 })
               }
               disabled={disabled}
-            />
+            >
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+            <p className="text-xs text-gray-500">Enter 6-character national short address</p>
           </div>
         </div>
       )}
