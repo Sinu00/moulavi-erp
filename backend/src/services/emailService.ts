@@ -244,22 +244,79 @@ const EMAIL_TEMPLATES = {
 
 // Utility function to send email with error handling
 const sendEmail = async (mailOptions: nodemailer.SendMailOptions): Promise<void> => {
+  const startTime = Date.now();
+  const logPrefix = '[EMAIL]';
+  
+  console.log(`${logPrefix} ========== START: Sending Email ==========`);
+  console.log(`${logPrefix} Timestamp: ${new Date().toISOString()}`);
+  console.log(`${logPrefix} To: ${mailOptions.to || 'null'}`);
+  console.log(`${logPrefix} Subject: ${mailOptions.subject || 'null'}`);
+  console.log(`${logPrefix} From: ${mailOptions.from || EMAIL_CONFIG.from}`);
+  console.log(`${logPrefix} CC: ${mailOptions.cc || 'none'}`);
+  console.log(`${logPrefix} BCC: ${mailOptions.bcc || 'none'}`);
+  console.log(`${logPrefix} Has Attachments: ${mailOptions.attachments ? mailOptions.attachments.length : 0}`);
+  
+  if (mailOptions.attachments && mailOptions.attachments.length > 0) {
+    mailOptions.attachments.forEach((att, idx) => {
+      console.log(`${logPrefix}   Attachment ${idx + 1}: ${att.filename || 'unnamed'} (${att.content ? 'Buffer' : 'path'})`);
+    });
+  }
+
+  // Log SMTP configuration (masked)
+  console.log(`${logPrefix} SMTP Configuration:`);
+  console.log(`${logPrefix}   Host: ${transporter.options.host || 'not set'}`);
+  console.log(`${logPrefix}   Port: ${transporter.options.port || 'not set'}`);
+  console.log(`${logPrefix}   Secure: ${transporter.options.secure || false}`);
+  console.log(`${logPrefix}   User: ${transporter.options.auth?.user ? `${transporter.options.auth.user.substring(0, 3)}***` : 'not set'}`);
+
   try {
     // Verify SMTP connection in development
     if (process.env.NODE_ENV === 'development') {
+      console.log(`${logPrefix} Verifying SMTP connection...`);
+      const verifyStartTime = Date.now();
       await transporter.verify();
-      console.log('SMTP connection verified successfully');
+      const verifyDuration = Date.now() - verifyStartTime;
+      console.log(`${logPrefix} ✓ SMTP connection verified successfully in ${verifyDuration}ms`);
     }
     
+    console.log(`${logPrefix} Sending email via SMTP...`);
+    const sendStartTime = Date.now();
     const result = await transporter.sendMail(mailOptions);
-    console.log(`Email sent successfully to ${mailOptions.to}:`, result.messageId);
+    const sendDuration = Date.now() - sendStartTime;
+    const totalDuration = Date.now() - startTime;
+    
+    console.log(`${logPrefix} ✅ SUCCESS: Email sent successfully`);
+    console.log(`${logPrefix} Message ID: ${result.messageId || 'N/A'}`);
+    console.log(`${logPrefix} Response: ${result.response || 'N/A'}`);
+    console.log(`${logPrefix} Accepted: ${result.accepted?.join(', ') || 'N/A'}`);
+    console.log(`${logPrefix} Rejected: ${result.rejected?.join(', ') || 'none'}`);
+    console.log(`${logPrefix} Send Duration: ${sendDuration}ms`);
+    console.log(`${logPrefix} Total Duration: ${totalDuration}ms`);
+    console.log(`${logPrefix} ========== END: Email Sent Successfully ==========`);
   } catch (error: any) {
-    console.error('Error sending email:', {
-      to: mailOptions.to,
-      subject: mailOptions.subject,
-      error: error?.message || 'Unknown error',
-      code: error?.code || 'Unknown code',
-    });
+    const totalDuration = Date.now() - startTime;
+    console.error(`${logPrefix} ❌ EXCEPTION: Error sending email`);
+    console.error(`${logPrefix} Duration before error: ${totalDuration}ms`);
+    console.error(`${logPrefix} Error Type: ${error?.constructor?.name || 'Unknown'}`);
+    console.error(`${logPrefix} Error Message: ${error?.message || 'Unknown error'}`);
+    console.error(`${logPrefix} Error Code: ${error?.code || 'Unknown code'}`);
+    console.error(`${logPrefix} Error Stack:`, error?.stack || 'No stack trace available');
+    
+    if (error?.command) {
+      console.error(`${logPrefix} SMTP Command: ${error.command}`);
+    }
+    
+    if (error?.response) {
+      console.error(`${logPrefix} SMTP Response: ${error.response}`);
+    }
+    
+    if (error?.responseCode) {
+      console.error(`${logPrefix} SMTP Response Code: ${error.responseCode}`);
+    }
+    
+    console.error(`${logPrefix} To: ${mailOptions.to || 'null'}`);
+    console.error(`${logPrefix} Subject: ${mailOptions.subject || 'null'}`);
+    console.error(`${logPrefix} ========== END: Exception ==========`);
     throw new Error(`Failed to send email: ${error?.message || 'Unknown error'}`);
   }
 };
@@ -272,6 +329,15 @@ export const sendCredentialsEmail = async (
   password: string,
   phoneNumber?: string
 ): Promise<void> => {
+  console.log('[EMAIL] ========== sendCredentialsEmail called ==========');
+  console.log('[EMAIL] Parameters:', {
+    to: to || 'null',
+    name: name || 'null',
+    email: email || 'null',
+    password: password ? '***masked***' : 'null',
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'not provided',
+  });
+  
   const mailOptions: nodemailer.SendMailOptions = {
     from: EMAIL_CONFIG.from,
     to,
@@ -279,18 +345,33 @@ export const sendCredentialsEmail = async (
     html: EMAIL_TEMPLATES.credentials(name, email, password, EMAIL_CONFIG.frontendUrl),
   };
   
-  await sendEmail(mailOptions);
+  console.log('[EMAIL] Email template generated');
+  console.log('[EMAIL] HTML length:', mailOptions.html?.length || 0);
   
-  // Send WhatsApp message if phone number is provided
-  if (phoneNumber) {
-    try {
-      const { sendCredentialsWhatsApp } = await import('./whatsappService');
-      await sendCredentialsWhatsApp(phoneNumber, name, email, password);
-      console.log(`WhatsApp credentials sent to ${phoneNumber}`);
-    } catch (error) {
-      console.error('Failed to send WhatsApp credentials:', error);
-      // Don't throw error to avoid breaking email flow
+  try {
+    await sendEmail(mailOptions);
+    console.log('[EMAIL] ✅ sendCredentialsEmail email sent successfully');
+    
+    // Send WhatsApp message if phone number is provided
+    if (phoneNumber) {
+      console.log('[EMAIL] Attempting to send WhatsApp credentials...');
+      try {
+        const { sendCredentialsWhatsApp } = await import('./whatsappService');
+        await sendCredentialsWhatsApp(phoneNumber, name, email, password);
+        console.log('[EMAIL] ✅ WhatsApp credentials sent successfully');
+      } catch (error: any) {
+        console.error('[EMAIL] ❌ Failed to send WhatsApp credentials:', error?.message || 'Unknown error');
+        console.error('[EMAIL] Error details:', error);
+        // Don't throw error to avoid breaking email flow
+      }
+    } else {
+      console.log('[EMAIL] No phone number provided, skipping WhatsApp');
     }
+    
+    console.log('[EMAIL] ✅ sendCredentialsEmail completed successfully');
+  } catch (error: any) {
+    console.error('[EMAIL] ❌ sendCredentialsEmail failed:', error?.message || 'Unknown error');
+    throw error;
   }
 };
 
@@ -302,6 +383,15 @@ export const sendServiceConfirmationEmail = async (
   bookingId: string,
   phoneNumber?: string
 ): Promise<void> => {
+  console.log('[EMAIL] ========== sendServiceConfirmationEmail called ==========');
+  console.log('[EMAIL] Parameters:', {
+    to: to || 'null',
+    name: name || 'null',
+    serviceType: serviceType || 'null',
+    bookingId: bookingId || 'null',
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'not provided',
+  });
+  
   const mailOptions: nodemailer.SendMailOptions = {
     from: EMAIL_CONFIG.from,
     to,
@@ -309,18 +399,33 @@ export const sendServiceConfirmationEmail = async (
     html: EMAIL_TEMPLATES.serviceConfirmation(name, serviceType, bookingId),
   };
   
-  await sendEmail(mailOptions);
+  console.log('[EMAIL] Email template generated');
+  console.log('[EMAIL] HTML length:', mailOptions.html?.length || 0);
   
-  // Send WhatsApp message if phone number is provided
-  if (phoneNumber) {
-    try {
-      const { sendServiceConfirmationWhatsApp } = await import('./whatsappService');
-      await sendServiceConfirmationWhatsApp(phoneNumber, name, serviceType, bookingId);
-      console.log(`WhatsApp service confirmation sent to ${phoneNumber}`);
-    } catch (error) {
-      console.error('Failed to send WhatsApp service confirmation:', error);
-      // Don't throw error to avoid breaking email flow
+  try {
+    await sendEmail(mailOptions);
+    console.log('[EMAIL] ✅ sendServiceConfirmationEmail email sent successfully');
+    
+    // Send WhatsApp message if phone number is provided
+    if (phoneNumber) {
+      console.log('[EMAIL] Attempting to send WhatsApp service confirmation...');
+      try {
+        const { sendServiceConfirmationWhatsApp } = await import('./whatsappService');
+        await sendServiceConfirmationWhatsApp(phoneNumber, name, serviceType, bookingId);
+        console.log('[EMAIL] ✅ WhatsApp service confirmation sent successfully');
+      } catch (error: any) {
+        console.error('[EMAIL] ❌ Failed to send WhatsApp service confirmation:', error?.message || 'Unknown error');
+        console.error('[EMAIL] Error details:', error);
+        // Don't throw error to avoid breaking email flow
+      }
+    } else {
+      console.log('[EMAIL] No phone number provided, skipping WhatsApp');
     }
+    
+    console.log('[EMAIL] ✅ sendServiceConfirmationEmail completed successfully');
+  } catch (error: any) {
+    console.error('[EMAIL] ❌ sendServiceConfirmationEmail failed:', error?.message || 'Unknown error');
+    throw error;
   }
 };
 
@@ -332,6 +437,15 @@ export const sendBillEmail = async (
   groupName: string,
   pdfBuffer: Buffer
 ): Promise<void> => {
+  console.log('[EMAIL] ========== sendBillEmail called ==========');
+  console.log('[EMAIL] Parameters:', {
+    to: to || 'null',
+    partyName: partyName || 'null',
+    groupNumber: groupNumber || 'null',
+    groupName: groupName || 'null',
+    pdfBufferSize: pdfBuffer ? `${(pdfBuffer.length / 1024).toFixed(2)} KB` : 'null',
+  });
+  
   const mailOptions: nodemailer.SendMailOptions = {
     from: EMAIL_CONFIG.from,
     to,
@@ -384,7 +498,17 @@ export const sendBillEmail = async (
     ],
   };
   
-  await sendEmail(mailOptions);
+  console.log('[EMAIL] Email template generated with PDF attachment');
+  console.log('[EMAIL] HTML length:', mailOptions.html?.length || 0);
+  console.log('[EMAIL] Attachment filename:', mailOptions.attachments?.[0]?.filename || 'N/A');
+  
+  try {
+    await sendEmail(mailOptions);
+    console.log('[EMAIL] ✅ sendBillEmail completed successfully');
+  } catch (error: any) {
+    console.error('[EMAIL] ❌ sendBillEmail failed:', error?.message || 'Unknown error');
+    throw error;
+  }
 };
 
 // Export transporter for testing purposes
@@ -440,7 +564,31 @@ export const sendMovementUpdateEmail = async (
     html: emailHtml,
   };
 
-  await sendEmail(mailOptions);
+  console.log('[EMAIL] ========== sendMovementUpdateEmail called ==========');
+  console.log('[EMAIL] Parameters:', {
+    to: to || 'null',
+    partyName: partyName || 'null',
+    voucherNumber: voucherNumber || 'null',
+    movementDetails: {
+      date: movementDetails.date || 'null',
+      time: movementDetails.time || 'null',
+      fromLocation: movementDetails.fromLocation || 'null',
+      toLocation: movementDetails.toLocation || 'null',
+      driverDetails1: movementDetails.driverDetails1 || 'null',
+      driverDetails2: movementDetails.driverDetails2 || 'null',
+      vehicleNumber: movementDetails.vehicleNumber || 'null',
+    },
+  });
+  console.log('[EMAIL] Email template generated');
+  console.log('[EMAIL] HTML length:', emailHtml.length);
+
+  try {
+    await sendEmail(mailOptions);
+    console.log('[EMAIL] ✅ sendMovementUpdateEmail completed successfully');
+  } catch (error: any) {
+    console.error('[EMAIL] ❌ sendMovementUpdateEmail failed:', error?.message || 'Unknown error');
+    throw error;
+  }
 };
 
 export { transporter };

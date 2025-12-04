@@ -80,15 +80,33 @@ const formatPhoneNumber = (phoneNumber: string): string => {
 
 // Utility function to send WhatsApp message with error handling
 const sendWhatsAppMessage = async (to: string, message: string): Promise<void> => {
+  const startTime = Date.now();
+  const logPrefix = '[WHATSAPP]';
+  
+  console.log(`${logPrefix} ========== START: Sending WhatsApp Message ==========`);
+  console.log(`${logPrefix} Timestamp: ${new Date().toISOString()}`);
+  console.log(`${logPrefix} Original Phone Number: ${to}`);
+  console.log(`${logPrefix} Message Length: ${message.length} characters`);
+  console.log(`${logPrefix} Message Preview: ${message.substring(0, 150)}${message.length > 150 ? '...' : ''}`);
+
+  // Configuration validation
+  console.log(`${logPrefix} Checking configuration...`);
   if (!WHATSAPP_CONFIG.apiKey) {
+    console.error(`${logPrefix} ❌ ERROR: WhatsApp API key not configured`);
+    console.error(`${logPrefix} Environment variable WHATSAPP_API_KEY is missing or empty`);
     throw new Error('WhatsApp API key not configured');
   }
+  console.log(`${logPrefix} ✓ API Key: ${WHATSAPP_CONFIG.apiKey.substring(0, 10)}...${WHATSAPP_CONFIG.apiKey.substring(WHATSAPP_CONFIG.apiKey.length - 4)} (masked)`);
 
   if (!WHATSAPP_CONFIG.instanceId) {
+    console.error(`${logPrefix} ❌ ERROR: WhatsApp Instance ID not configured`);
+    console.error(`${logPrefix} Environment variable WHATSAPP_INSTANCE_ID is missing or empty`);
     throw new Error('WhatsApp Instance ID not configured');
   }
+  console.log(`${logPrefix} ✓ Instance ID: ${WHATSAPP_CONFIG.instanceId}`);
 
   const formattedNumber = formatPhoneNumber(to);
+  console.log(`${logPrefix} Formatted Phone Number: ${formattedNumber}`);
   
   const payload = {
     key: WHATSAPP_CONFIG.apiKey,
@@ -100,12 +118,20 @@ const sendWhatsAppMessage = async (to: string, message: string): Promise<void> =
     SendingMessageType: '1' // 1 for WhatsApp
   };
 
-  try {
-    console.log('Sending WhatsApp message to:', formattedNumber);
-    console.log('Message preview:', message.substring(0, 100) + '...');
-    console.log('API Key being used:', WHATSAPP_CONFIG.apiKey);
-    console.log('Payload:', payload);
+  console.log(`${logPrefix} API URL: ${WHATSAPP_CONFIG.apiUrl}`);
+  console.log(`${logPrefix} Payload (without API key):`, {
+    to: payload.to,
+    message: `${message.substring(0, 50)}...`,
+    IsUrgent: payload.IsUrgent,
+    isGroupMsg: payload.isGroupMsg,
+    IsFailMessage: payload.IsFailMessage,
+    SendingMessageType: payload.SendingMessageType,
+  });
 
+  try {
+    console.log(`${logPrefix} Making API request...`);
+    const requestStartTime = Date.now();
+    
     const response = await axios.post(WHATSAPP_CONFIG.apiUrl, payload, {
       headers: {
         'Content-Type': 'application/json',
@@ -113,21 +139,54 @@ const sendWhatsAppMessage = async (to: string, message: string): Promise<void> =
       timeout: 10000, // 10 second timeout
     });
 
-    console.log('WhatsApp API Response:', response.data);
+    const requestDuration = Date.now() - requestStartTime;
+    console.log(`${logPrefix} ✓ API Request completed in ${requestDuration}ms`);
+    console.log(`${logPrefix} Response Status: ${response.status} ${response.statusText}`);
+    console.log(`${logPrefix} Response Headers:`, JSON.stringify(response.headers, null, 2));
+    console.log(`${logPrefix} Response Data:`, JSON.stringify(response.data, null, 2));
 
     // Check if message was sent successfully
     if (response.data.status === 'success' || response.data.ErrorCode === '000') {
-      console.log('WhatsApp message sent successfully to', formattedNumber);
+      const totalDuration = Date.now() - startTime;
+      console.log(`${logPrefix} ✅ SUCCESS: WhatsApp message sent successfully to ${formattedNumber}`);
+      console.log(`${logPrefix} Total Duration: ${totalDuration}ms`);
+      console.log(`${logPrefix} ========== END: Message Sent Successfully ==========`);
     } else {
-      console.error('WhatsApp API Error:', response.data.ErrorMessage || response.data.message || response.data);
-      throw new Error(`WhatsApp API Error: ${response.data.ErrorMessage || response.data.message || 'Unknown error'}`);
+      const errorMessage = response.data.ErrorMessage || response.data.message || 'Unknown error';
+      console.error(`${logPrefix} ❌ API ERROR: ${errorMessage}`);
+      console.error(`${logPrefix} Full Response:`, JSON.stringify(response.data, null, 2));
+      console.error(`${logPrefix} ========== END: API Error ==========`);
+      throw new Error(`WhatsApp API Error: ${errorMessage}`);
     }
   } catch (error: any) {
-    console.error('Error sending WhatsApp message:', {
-      to: formattedNumber,
-      error: error?.message || 'Unknown error',
-      response: error?.response?.data,
-    });
+    const totalDuration = Date.now() - startTime;
+    console.error(`${logPrefix} ❌ EXCEPTION: Error sending WhatsApp message`);
+    console.error(`${logPrefix} Duration before error: ${totalDuration}ms`);
+    console.error(`${logPrefix} Error Type: ${error?.constructor?.name || 'Unknown'}`);
+    console.error(`${logPrefix} Error Message: ${error?.message || 'Unknown error'}`);
+    console.error(`${logPrefix} Error Stack:`, error?.stack || 'No stack trace available');
+    
+    if (error?.response) {
+      console.error(`${logPrefix} HTTP Status: ${error.response.status} ${error.response.statusText}`);
+      console.error(`${logPrefix} Response Data:`, JSON.stringify(error.response.data, null, 2));
+      console.error(`${logPrefix} Response Headers:`, JSON.stringify(error.response.headers, null, 2));
+    }
+    
+    if (error?.request) {
+      console.error(`${logPrefix} Request was made but no response received`);
+      console.error(`${logPrefix} Request Config:`, {
+        url: error.config?.url,
+        method: error.config?.method,
+        timeout: error.config?.timeout,
+      });
+    }
+    
+    if (error?.code) {
+      console.error(`${logPrefix} Error Code: ${error.code}`);
+    }
+    
+    console.error(`${logPrefix} Formatted Number: ${formattedNumber}`);
+    console.error(`${logPrefix} ========== END: Exception ==========`);
     throw new Error(`Failed to send WhatsApp message: ${error?.message || 'Unknown error'}`);
   }
 };
@@ -139,10 +198,27 @@ export const sendCredentialsWhatsApp = async (
   email: string,
   password: string
 ): Promise<void> => {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const message = WHATSAPP_TEMPLATES.credentials(name, email, password, frontendUrl);
+  console.log('[WHATSAPP] ========== sendCredentialsWhatsApp called ==========');
+  console.log('[WHATSAPP] Parameters:', {
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+    name: name || 'null',
+    email: email || 'null',
+    password: password ? '***masked***' : 'null',
+  });
   
-  await sendWhatsAppMessage(phoneNumber, message);
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  console.log('[WHATSAPP] Frontend URL:', frontendUrl);
+  
+  const message = WHATSAPP_TEMPLATES.credentials(name, email, password, frontendUrl);
+  console.log('[WHATSAPP] Message template generated, length:', message.length);
+  
+  try {
+    await sendWhatsAppMessage(phoneNumber, message);
+    console.log('[WHATSAPP] ✅ sendCredentialsWhatsApp completed successfully');
+  } catch (error: any) {
+    console.error('[WHATSAPP] ❌ sendCredentialsWhatsApp failed:', error?.message || 'Unknown error');
+    throw error;
+  }
 };
 
 // Send service confirmation WhatsApp message
@@ -152,9 +228,24 @@ export const sendServiceConfirmationWhatsApp = async (
   serviceType: string,
   bookingId: string
 ): Promise<void> => {
-  const message = WHATSAPP_TEMPLATES.serviceConfirmation(name, serviceType, bookingId);
+  console.log('[WHATSAPP] ========== sendServiceConfirmationWhatsApp called ==========');
+  console.log('[WHATSAPP] Parameters:', {
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+    name: name || 'null',
+    serviceType: serviceType || 'null',
+    bookingId: bookingId || 'null',
+  });
   
-  await sendWhatsAppMessage(phoneNumber, message);
+  const message = WHATSAPP_TEMPLATES.serviceConfirmation(name, serviceType, bookingId);
+  console.log('[WHATSAPP] Message template generated, length:', message.length);
+  
+  try {
+    await sendWhatsAppMessage(phoneNumber, message);
+    console.log('[WHATSAPP] ✅ sendServiceConfirmationWhatsApp completed successfully');
+  } catch (error: any) {
+    console.error('[WHATSAPP] ❌ sendServiceConfirmationWhatsApp failed:', error?.message || 'Unknown error');
+    throw error;
+  }
 };
 
 // Send custom WhatsApp message
@@ -162,7 +253,19 @@ export const sendCustomWhatsApp = async (
   phoneNumber: string,
   message: string
 ): Promise<void> => {
-  await sendWhatsAppMessage(phoneNumber, message);
+  console.log('[WHATSAPP] ========== sendCustomWhatsApp called ==========');
+  console.log('[WHATSAPP] Parameters:', {
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+    messageLength: message?.length || 0,
+  });
+  
+  try {
+    await sendWhatsAppMessage(phoneNumber, message);
+    console.log('[WHATSAPP] ✅ sendCustomWhatsApp completed successfully');
+  } catch (error: any) {
+    console.error('[WHATSAPP] ❌ sendCustomWhatsApp failed:', error?.message || 'Unknown error');
+    throw error;
+  }
 };
 
 // Export utility functions
@@ -181,6 +284,22 @@ export const sendMovementUpdateWhatsApp = async (
     vehicleNumber: string;
   }
 ): Promise<void> => {
+  console.log('[WHATSAPP] ========== sendMovementUpdateWhatsApp called ==========');
+  console.log('[WHATSAPP] Parameters:', {
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+    partyName: partyName || 'null',
+    voucherNumber: voucherNumber || 'null',
+    movementDetails: {
+      date: movementDetails.date || 'null',
+      time: movementDetails.time || 'null',
+      fromLocation: movementDetails.fromLocation || 'null',
+      toLocation: movementDetails.toLocation || 'null',
+      driverDetails1: movementDetails.driverDetails1 || 'null',
+      driverDetails2: movementDetails.driverDetails2 || 'null',
+      vehicleNumber: movementDetails.vehicleNumber || 'null',
+    },
+  });
+  
   const message = `🚗 *Movement Update - Voucher ${voucherNumber}*
 
 Dear ${partyName},
@@ -197,7 +316,15 @@ Your movement details have been updated:
 
 Thank you for choosing our services!`;
 
-  await sendWhatsAppMessage(phoneNumber, message);
+  console.log('[WHATSAPP] Message template generated, length:', message.length);
+  
+  try {
+    await sendWhatsAppMessage(phoneNumber, message);
+    console.log('[WHATSAPP] ✅ sendMovementUpdateWhatsApp completed successfully');
+  } catch (error: any) {
+    console.error('[WHATSAPP] ❌ sendMovementUpdateWhatsApp failed:', error?.message || 'Unknown error');
+    throw error;
+  }
 };
 
 export { sendWhatsAppMessage, formatPhoneNumber };

@@ -440,9 +440,22 @@ function generateBillHTML(data: BillPdfData): string {
 
 // Generate PDF from HTML using Puppeteer
 export async function generateBillPDF(data: BillPdfData): Promise<Buffer> {
+  const startTime = Date.now();
+  const logPrefix = '[PDF-BILL]';
   let browser;
+  
+  console.log(`${logPrefix} ========== START: Generating Bill PDF ==========`);
+  console.log(`${logPrefix} Timestamp: ${new Date().toISOString()}`);
+  console.log(`${logPrefix} Party Name: ${data.partyName || 'N/A'}`);
+  console.log(`${logPrefix} Group Number: ${data.groupNumber || 'N/A'}`);
+  console.log(`${logPrefix} Group Name: ${data.groupName || 'N/A'}`);
+  console.log(`${logPrefix} Passenger Count: ${data.passengerCount || 0}`);
+  console.log(`${logPrefix} Passengers: ${data.passengers?.length || 0}`);
+  console.log(`${logPrefix} Amount: ₹${data.amount?.toLocaleString('en-IN') || '0'}`);
+  
   try {
     // Try to use system Chrome first (more reliable on Windows)
+    console.log(`${logPrefix} Finding Chrome executable...`);
     const chromePath = findChromeExecutable();
     
     const launchOptions: any = {
@@ -460,26 +473,40 @@ export async function generateBillPDF(data: BillPdfData): Promise<Buffer> {
 
     // Use system Chrome/Chromium if available, otherwise use bundled Chromium
     if (chromePath) {
-      console.log('Using system browser:', chromePath);
+      console.log(`${logPrefix} ✓ Using system browser: ${chromePath}`);
       launchOptions.executablePath = chromePath;
     } else {
-      console.log('Using bundled Chromium (default)');
+      console.log(`${logPrefix} ✓ Using bundled Chromium (default)`);
+      console.log(`${logPrefix}   Note: If errors occur, set CHROME_PATH environment variable`);
     }
 
-    // Launch browser
+    console.log(`${logPrefix} Launching browser...`);
+    const browserStartTime = Date.now();
     browser = await puppeteer.launch(launchOptions);
+    const browserDuration = Date.now() - browserStartTime;
+    console.log(`${logPrefix} ✓ Browser launched in ${browserDuration}ms`);
 
+    console.log(`${logPrefix} Creating new page...`);
     const page = await browser.newPage();
+    console.log(`${logPrefix} ✓ Page created`);
 
-    // Generate HTML
+    console.log(`${logPrefix} Generating HTML template...`);
+    const htmlStartTime = Date.now();
     const html = generateBillHTML(data);
+    const htmlDuration = Date.now() - htmlStartTime;
+    console.log(`${logPrefix} ✓ HTML generated in ${htmlDuration}ms`);
+    console.log(`${logPrefix} HTML length: ${html.length} characters`);
 
-    // Set content and wait for fonts/styles to load
+    console.log(`${logPrefix} Setting page content and waiting for resources...`);
+    const contentStartTime = Date.now();
     await page.setContent(html, {
       waitUntil: 'networkidle0',
     });
+    const contentDuration = Date.now() - contentStartTime;
+    console.log(`${logPrefix} ✓ Page content loaded in ${contentDuration}ms`);
 
-    // Generate PDF
+    console.log(`${logPrefix} Generating PDF...`);
+    const pdfStartTime = Date.now();
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -491,14 +518,41 @@ export async function generateBillPDF(data: BillPdfData): Promise<Buffer> {
       },
       preferCSSPageSize: true,
     });
+    const pdfDuration = Date.now() - pdfStartTime;
+    const totalDuration = Date.now() - startTime;
+    const bufferSize = Buffer.from(pdfBuffer).length;
+    
+    console.log(`${logPrefix} ✅ SUCCESS: PDF generated`);
+    console.log(`${logPrefix} PDF size: ${(bufferSize / 1024).toFixed(2)} KB`);
+    console.log(`${logPrefix} PDF generation duration: ${pdfDuration}ms`);
+    console.log(`${logPrefix} Total duration: ${totalDuration}ms`);
+    console.log(`${logPrefix} ========== END: PDF Generated Successfully ==========`);
 
     return Buffer.from(pdfBuffer);
-  } catch (error) {
-    console.error('Error generating bill PDF:', error);
-    throw new Error('Failed to generate bill PDF');
+  } catch (error: any) {
+    const totalDuration = Date.now() - startTime;
+    console.error(`${logPrefix} ❌ EXCEPTION: Error generating bill PDF`);
+    console.error(`${logPrefix} Duration before error: ${totalDuration}ms`);
+    console.error(`${logPrefix} Error Type: ${error?.constructor?.name || 'Unknown'}`);
+    console.error(`${logPrefix} Error Message: ${error?.message || 'Unknown error'}`);
+    console.error(`${logPrefix} Error Stack:`, error?.stack || 'No stack trace available');
+    
+    if (error?.name) {
+      console.error(`${logPrefix} Error Name: ${error.name}`);
+    }
+    
+    console.error(`${logPrefix} Group Number: ${data.groupNumber || 'N/A'}`);
+    console.error(`${logPrefix} ========== END: Exception ==========`);
+    throw new Error(`Failed to generate bill PDF: ${error?.message || 'Unknown error'}`);
   } finally {
     if (browser) {
-      await browser.close();
+      console.log(`${logPrefix} Closing browser...`);
+      try {
+        await browser.close();
+        console.log(`${logPrefix} ✓ Browser closed`);
+      } catch (closeError: any) {
+        console.error(`${logPrefix} ⚠️ Error closing browser: ${closeError?.message || 'Unknown error'}`);
+      }
     }
   }
 }
