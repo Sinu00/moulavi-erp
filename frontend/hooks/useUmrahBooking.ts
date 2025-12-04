@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { partyAPI } from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/umrah/constants';
-import { BookingState, MasterData, Step1Data, Step2Data, Step3Data, Step4Data, Step5Data } from '@/lib/umrah/types';
+import { BookingState, MasterData, Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Step6Data } from '@/lib/umrah/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -29,7 +29,10 @@ export const useUmrahBooking = () => {
       selectedTransport: undefined,
     },
     step5Data: {
-      panCardZipFile: null, // ZIP file upload for individual bookings
+      movements: [], // For individual bookings: movements (Step 5)
+    },
+    step6Data: {
+      panCardZipFile: null, // For individual bookings: documents (Step 6)
     },
   });
 
@@ -68,6 +71,13 @@ export const useUmrahBooking = () => {
     setBookingState(prev => ({
       ...prev,
       step5Data: { ...prev.step5Data, ...data }
+    }));
+  }, []);
+
+  const updateStep6Data = useCallback((data: Partial<Step6Data>) => {
+    setBookingState(prev => ({
+      ...prev,
+      step6Data: { ...prev.step6Data, ...data }
     }));
   }, []);
 
@@ -141,10 +151,20 @@ export const useUmrahBooking = () => {
           const data = await response.json();
           
           if (response.ok) {
+            // Special handling for step 4: Check if transport is selected
+            // If no transport selected, skip to step 6 (documents)
+            // If transport selected, go to step 5 (movements)
+            let nextStep = stepNumber + 1;
+            if (stepNumber === 4) {
+              const hasTransport = bookingState.step4Data.selectedTransport || 
+                                   (bookingState.step4Data.selectedTransports && bookingState.step4Data.selectedTransports.length > 0);
+              nextStep = hasTransport ? 5 : 6; // Skip to documents if no transport
+            }
+            
             setBookingState(prev => ({
               ...prev,
               completedSteps: [...prev.completedSteps, stepNumber],
-              currentStep: stepNumber + 1
+              currentStep: nextStep
             }));
             
             toast.success(`Step ${stepNumber} validated successfully`);
@@ -155,13 +175,25 @@ export const useUmrahBooking = () => {
           }
         }
       } 
-      // Step 5: Send ALL data to create-booking endpoint with ZIP file (FormData, same as group booking)
+      // Step 5: Validate movements (no DB writes)
       else if (stepNumber === 5) {
+        // Step 5 is movements validation - just move to next step
+        setBookingState(prev => ({
+          ...prev,
+          completedSteps: [...prev.completedSteps, 5],
+          currentStep: 6
+        }));
+        
+        toast.success('Step 5 validated successfully');
+        return true;
+      }
+      // Step 6: Send ALL data to create-booking endpoint with ZIP file (FormData)
+      else if (stepNumber === 6) {
         // Create FormData for file upload
         const formData = new FormData();
         
         // Add ZIP file if present
-        const zipFile = bookingState.step5Data.panCardZipFile;
+        const zipFile = bookingState.step6Data?.panCardZipFile;
         if (zipFile) {
           formData.append('panCardZipFile', zipFile);
         }
@@ -175,6 +207,12 @@ export const useUmrahBooking = () => {
           selectedTransport: bookingState.step4Data.selectedTransport,
           selectedTransports: bookingState.step4Data.selectedTransports,
         }));
+        // Add movements from step5Data if they exist
+        if (bookingState.step5Data.movements && bookingState.step5Data.movements.length > 0) {
+          formData.append('step5', JSON.stringify({
+            movements: bookingState.step5Data.movements,
+          }));
+        }
 
         const response = await fetch(`${API_URL}/umrah-visa/create-booking`, {
           method: 'POST',
@@ -191,7 +229,7 @@ export const useUmrahBooking = () => {
           setBookingState(prev => ({
             ...prev,
             bookingId: data.data.bookingId,
-            completedSteps: [...prev.completedSteps, 5],
+            completedSteps: [...prev.completedSteps, 6],
           }));
           
           toast.success('Booking completed successfully!');
@@ -221,6 +259,7 @@ export const useUmrahBooking = () => {
     updateStep3Data,
     updateStep4Data,
     updateStep5Data,
+    updateStep6Data,
     setCurrentStep,
     loadPartyData,
     submitStep,

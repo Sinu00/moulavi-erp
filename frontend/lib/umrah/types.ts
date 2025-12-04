@@ -86,7 +86,15 @@ export interface Step4Data {
 }
 
 export interface Step5Data {
+  // For individual bookings: movements array (Step 5 is movement details)
+  movements?: Movement[];
+  // For group bookings: documents (backward compatibility)
   passengers?: Passenger[]; // Optional - not used for individual/group bookings (backend creates from passengerCount)
+  panCardZipFile?: File | null; // ZIP file containing all required documents
+}
+
+export interface Step6Data {
+  // For individual bookings: documents (Step 6 is documents)
   panCardZipFile?: File | null; // ZIP file containing all required documents
 }
 
@@ -173,6 +181,7 @@ export interface BookingState {
   step3Data: Step3Data;
   step4Data: Step4Data;
   step5Data: Step5Data;
+  step6Data?: Step6Data; // For individual bookings: documents (Step 6)
 }
 
 export interface ZiyarahBooking {

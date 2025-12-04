@@ -1,6 +1,6 @@
 // Simplified MovementDetailsStep using unified movements model
 import React from 'react';
-import { Step3Data, Step4Data, Movement, HotelBooking } from '@/lib/umrah/types';
+import { Step3Data, Step4Data, Step5Data, Movement, HotelBooking } from '@/lib/umrah/types';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Table2, AlertCircle } from 'lucide-react';
@@ -12,11 +12,15 @@ import { TransportRouteMaster } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface MovementDetailsStepProps {
-  data: Step4Data; // Now Step 4 contains movements
-  onChange: (data: Partial<Step4Data>) => void;
-  locations: any[];
+  data: Step4Data | Step5Data; // Step 4 for group bookings, Step 5 for individual bookings
+  onChange: (data: Partial<Step4Data> | Partial<Step5Data>) => void;
+  step1Data?: any;
+  step2Data?: any;
+  step3Data?: Step3Data; // Transport selections from Step 3 (for group bookings)
+  step4Data?: Step4Data; // Transport selections from Step 4 (for individual bookings)
   locationMasters?: any[];
-  hotelBookings: HotelBooking[]; // From step2Data
+  locations?: any[];
+  hotelBookings?: HotelBooking[]; // From step2Data (for group bookings) or step3Data (for individual bookings)
   arrivalAirportId?: string;
   departureAirportId?: string;
   arrivalDate?: string;
@@ -30,8 +34,7 @@ interface MovementDetailsStepProps {
       name: string;
     };
   } | null;
-  getAllHotelsForLocation: (locationId: string) => any[];
-  step3Data?: Step3Data; // Transport selections from Step 3
+  getAllHotelsForLocation?: (locationId: string) => any[];
   onLoadOptions?: (index: number, fromId?: string, toId?: string) => void;
   disabled?: boolean;
 }
@@ -39,9 +42,13 @@ interface MovementDetailsStepProps {
 export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   data,
   onChange,
-  locations,
+  step1Data,
+  step2Data,
+  step3Data,
+  step4Data,
   locationMasters = [],
-  hotelBookings,
+  locations = [],
+  hotelBookings = [],
   arrivalAirportId,
   departureAirportId,
   arrivalDate,
@@ -49,24 +56,57 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   arrivalTime,
   departureTime,
   getAllHotelsForLocation,
-  step3Data,
   onLoadOptions,
   disabled = false,
 }) => {
   const [availableRoutes, setAvailableRoutes] = React.useState<TransportRouteMaster[]>([]);
   const [loadingRoutes, setLoadingRoutes] = React.useState(false);
 
+  // Determine if this is individual booking (movements in Step5Data) or group booking (movements in Step4Data)
+  // For individual bookings: step4Data contains transport selections, step5Data contains movements
+  // For group bookings: step3Data contains transport selections, step4Data contains movements
+  // So if step4Data has transport selections, it's individual booking
+  const isIndividualBooking = React.useMemo(() => {
+    // Check if step4Data has transport selections (individual booking flow)
+    if (step4Data && (step4Data.selectedTransport || (step4Data.selectedTransports && step4Data.selectedTransports.length > 0))) {
+      return true;
+    }
+    // Check if step3Data has transport selections (group booking flow)
+    if (step3Data && (step3Data.selectedTransport || (step3Data.selectedTransports && step3Data.selectedTransports.length > 0))) {
+      return false;
+    }
+    // Default: if step4Data exists but no transport, assume individual (since we're in movements step)
+    // This handles the case where transport might not be selected yet
+    return !!step4Data;
+  }, [step3Data, step4Data]);
+  
+  // Get hotel bookings: from step2Data for group bookings, from step3Data for individual bookings
+  const actualHotelBookings = React.useMemo(() => {
+    if (hotelBookings && hotelBookings.length > 0) return hotelBookings;
+    if (step3Data?.hotelBookings && step3Data.hotelBookings.length > 0) return step3Data.hotelBookings;
+    if (step2Data?.hotelBookings && step2Data.hotelBookings.length > 0) return step2Data.hotelBookings;
+    return [];
+  }, [hotelBookings, step2Data, step3Data]);
+
+  // Get transport data: from step3Data for group bookings, from step4Data for individual bookings
+  const transportData = React.useMemo(() => {
+    if (isIndividualBooking && step4Data) {
+      return step4Data;
+    }
+    return step3Data;
+  }, [isIndividualBooking, step3Data, step4Data]);
+
   // Check if hotels are valid
   const areHotelsValid = React.useMemo(() => {
-    if (hotelBookings.length === 0) return false;
-    return hotelBookings.every(
+    if (actualHotelBookings.length === 0) return false;
+    return actualHotelBookings.every(
       (booking) =>
         booking.cityId &&
         booking.hotelId &&
         booking.checkInDate &&
         booking.checkOutDate
     );
-  }, [hotelBookings]);
+  }, [actualHotelBookings]);
 
   // Helper: Find ziyarath LocationMaster by city name
   const findZiyarathByCity = React.useCallback((cityName: string): any => {
@@ -98,12 +138,12 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
 
   // Track previous dependencies to detect changes and reset manual edit flag
   const prevDepsRef = React.useRef({
-    hotelBookings: hotelBookings,
+    hotelBookings: actualHotelBookings,
     arrivalAirportId,
     departureAirportId,
     arrivalDate,
     departureDate,
-    step3Data,
+    transportData,
   });
   const isManualEditRef = React.useRef<boolean>(false);
   const lastGeneratedHashRef = React.useRef<string>('');
@@ -112,34 +152,77 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   React.useEffect(() => {
     const prev = prevDepsRef.current;
     const hasChanged = 
-      prev.hotelBookings !== hotelBookings ||
+      prev.hotelBookings !== actualHotelBookings ||
       prev.arrivalAirportId !== arrivalAirportId ||
       prev.departureAirportId !== departureAirportId ||
       prev.arrivalDate !== arrivalDate ||
       prev.departureDate !== departureDate ||
-      prev.step3Data !== step3Data;
+      prev.transportData !== transportData;
           
     if (hasChanged) {
       isManualEditRef.current = false;
       prevDepsRef.current = {
-        hotelBookings,
+        hotelBookings: actualHotelBookings,
         arrivalAirportId,
         departureAirportId,
         arrivalDate,
         departureDate,
-        step3Data,
+        transportData,
       };
           }
-  }, [hotelBookings, arrivalAirportId, departureAirportId, arrivalDate, departureDate, step3Data]);
+  }, [actualHotelBookings, arrivalAirportId, departureAirportId, arrivalDate, departureDate, transportData]);
 
-  // Generate movements based on selected transport routes from Step 3
+  // Helper: Find Jeddah City Center location (OTHERS type)
+  const findJeddahCityCenter = React.useCallback((): any => {
+    return locationMasters.find(
+      (lm: any) =>
+        lm.locationType === 'OTHERS' &&
+        (lm.name?.toLowerCase().includes('jeddah') || lm.name?.toLowerCase().includes('city center')) &&
+        (lm.city?.toLowerCase().includes('jeddah') || lm.cityMaster?.name?.toLowerCase().includes('jeddah'))
+    );
+  }, [locationMasters]);
+
+  // Generate movements based on selected transport routes
   React.useEffect(() => {
     // Skip if user has manually edited movements
     if (isManualEditRef.current) {
       return;
     }
 
-    // Only auto-generate when hotels are valid
+    // Check if accommodation is iqama
+    const accommodationType = step3Data?.accommodationType;
+    const isIqama = accommodationType === 'iqama';
+
+    // For iqama: Generate default movement from airport to Jeddah City Center
+    if (isIqama && (transportData?.selectedTransports || transportData?.selectedTransport)) {
+      if (!arrivalAirportId || !arrivalDate) {
+        return;
+      }
+
+      const jeddahCityCenter = findJeddahCityCenter();
+      if (jeddahCityCenter) {
+        const defaultMovement: Movement = {
+          id: `movement-iqama-airport-to-citycenter`,
+          type: 'transport',
+          fromLocationId: arrivalAirportId,
+          toLocationId: jeddahCityCenter.id,
+          date: arrivalDate,
+          time: arrivalTime || '12:00',
+        };
+
+        const movementsHash = JSON.stringify([defaultMovement].map(m => 
+          `${m.type}-${m.fromLocationId}-${m.toLocationId}-${m.date}-${m.time}`
+        ));
+
+        if (movementsHash !== lastGeneratedHashRef.current) {
+          lastGeneratedHashRef.current = movementsHash;
+          onChange({ movements: [defaultMovement] });
+        }
+      }
+      return; // Exit early for iqama, don't generate hotel-based movements
+    }
+
+    // For hotel bookings: Only auto-generate when hotels are valid
     if (!areHotelsValid) {
       return;
     }
@@ -149,12 +232,12 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
         }
         
     // Only generate if transport routes are selected
-    if (step3Data?.selectedTransports || step3Data?.selectedTransport) {
-      const selectedRoutes = getSelectedRoutes(step3Data, availableRoutes);
+    if (transportData?.selectedTransports || transportData?.selectedTransport) {
+      const selectedRoutes = getSelectedRoutes(transportData, availableRoutes);
       
       if (selectedRoutes.length > 0) {
         const generatedMovements = generateMovementsFromRoutes({
-          hotelBookings,
+          hotelBookings: actualHotelBookings,
           arrivalAirportId,
           departureAirportId,
           arrivalDate,
@@ -180,7 +263,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     }
   }, [
     areHotelsValid,
-    hotelBookings,
+    actualHotelBookings,
     arrivalAirportId,
     departureAirportId,
     arrivalDate,
@@ -189,16 +272,21 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     departureTime,
     locationMasters,
     findZiyarathByCity,
-    step3Data,
+    transportData,
     availableRoutes,
     onChange,
+    step3Data,
+    findJeddahCityCenter,
   ]);
 
-  // Movement handlers
-  const movements = (data as Step4Data).movements || [];
+  // Movement handlers - support both Step4Data (group) and Step5Data (individual)
+  const movements = (data as Step4Data | Step5Data).movements || [];
   
   // Check if transport routes are selected
-  const hasTransportSelected = step3Data?.selectedTransports?.length > 0 || !!step3Data?.selectedTransport;
+  const hasTransportSelected = transportData?.selectedTransports?.length > 0 || !!transportData?.selectedTransport;
+  
+  // Determine the transport step number for messages
+  const transportStepNumber = isIndividualBooking ? 4 : 3;
   
   const addMovement = React.useCallback(() => {
     isManualEditRef.current = true; // Mark as manual edit
@@ -253,7 +341,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
 
   // Convert movements to old format for JourneyFlowSummary (backward compatibility)
   const getTransportSegmentsForSummary = () => {
-    return ((data as Step4Data).movements || [])
+    return (movements || [])
       .filter((m) => m.type === 'transport')
       .map((m) => ({
         fromLocationId: m.fromLocationId,
@@ -268,7 +356,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   };
 
   const getZiyarathsForSummary = () => {
-    return ((data as Step4Data).movements || [])
+    return (movements || [])
       .filter((m) => m.type === 'ziyarath')
       .map((m) => ({
         id: m.id,
@@ -287,7 +375,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Select transport routes in Step 3 to auto-generate movements, or add movements manually below.
+                Select transport routes in Step {transportStepNumber} to auto-generate movements, or add movements manually below.
               </AlertDescription>
             </Alert>
           )}
@@ -297,7 +385,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
               <p className="text-sm text-gray-600 mt-1">
                 {hasTransportSelected 
                   ? 'Movements are auto-generated based on your selected transport routes. All fields are editable. Movements are sorted chronologically.'
-                  : 'Add movements manually or go back to Step 3 to select transport routes for auto-generation.'}
+                  : `Add movements manually or go back to Step ${transportStepNumber} to select transport routes for auto-generation.`}
               </p>
             </div>
             <Button
@@ -319,7 +407,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
             onRemoveMovement={removeMovement}
             onAddMovement={addMovementAfter}
             disabled={disabled}
-            emptyMessage="No movements. Select transport routes in Step 3 to auto-generate movements, or add manually."
+            emptyMessage={`No movements. Select transport routes in Step ${transportStepNumber} to auto-generate movements, or add manually.`}
           />
         </div>
       </Card>

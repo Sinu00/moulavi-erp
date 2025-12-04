@@ -323,9 +323,63 @@ export const validateStep4 = (
   return null;
 };
 
+// For group bookings: Step 5 is documents
 export const validateStep5 = (data: Step5Data, step1Data: Step1Data, step3Data: Step3Data, isGroupVisa: boolean = false): string | null => {
   // For both group and individual bookings: ONLY ZIP file is required
   const zipFile = data.panCardZipFile;
+  if (!zipFile) {
+    return 'Please upload a ZIP file containing all required documents';
+  }
+
+  // Validate ZIP file type
+  const isValidZip = zipFile.type === 'application/zip' || zipFile.name.toLowerCase().endsWith('.zip');
+  if (!isValidZip) {
+    return 'Please upload a valid ZIP file (.zip)';
+  }
+
+  // Validate ZIP file size (max 50MB)
+  const maxSize = 50 * 1024 * 1024; // 50MB
+  if (zipFile.size > maxSize) {
+    return 'ZIP file size exceeds 50MB limit. Please compress your files.';
+  }
+  
+  return null; // All validations passed
+};
+
+// For individual bookings: Step 5 is movement details
+export const validateStep5Movements = (
+  data: Step5Data, 
+  step1Data: Step1Data, 
+  step2Data: Step2Data,
+  step3Data: Step3Data, 
+  step4Data: Step4Data,
+  locationMasters: any[]
+): string | null => {
+  // Validate movements array
+  if (!data.movements || data.movements.length === 0) {
+    return 'Please add movements. Select transport routes in Step 4 to auto-generate, or add manually.';
+  }
+
+  // Validate each movement
+  for (const movement of data.movements) {
+    if (!movement.fromLocationId || !movement.toLocationId) {
+      return 'Please fill in from and to locations for all movements';
+    }
+    if (!movement.date) {
+      return 'Date is required for all movements';
+    }
+    if (!movement.time) {
+      return 'Time is required for all movements';
+    }
+  }
+  
+  return null; // All validations passed
+};
+
+// For individual bookings: Step 6 is documents
+export const validateStep6 = (data: Step6Data, step1Data: Step1Data, step3Data: Step3Data, isGroupVisa: boolean = false): string | null => {
+  // ONLY ZIP file is required
+  const zipFile = data?.panCardZipFile;
   if (!zipFile) {
     return 'Please upload a ZIP file containing all required documents';
   }

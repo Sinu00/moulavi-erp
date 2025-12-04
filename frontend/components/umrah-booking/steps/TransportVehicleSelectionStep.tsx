@@ -47,7 +47,13 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
   const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [loadingTransports, setLoadingTransports] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
-  const [routeTypeFilter, setRouteTypeFilter] = useState<RouteType | 'all'>('all');
+  // Default route type filter to "airporttocity" if accommodation is iqama
+  const [routeTypeFilter, setRouteTypeFilter] = useState<RouteType | 'all'>(() => {
+    // For individual bookings: check step3Data.accommodationType
+    // For group bookings: check step2Data (but group bookings don't have iqama)
+    const accommodationType = step3Data?.accommodationType;
+    return accommodationType === 'iqama' ? 'airporttocity' : 'all';
+  });
   const [availableRoutes, setAvailableRoutes] = useState<TransportRouteMaster[]>([]);
   const [routeTransports, setRouteTransports] = useState<TransportMaster[]>([]);
   // Track selected vehicles with quantities
@@ -138,6 +144,31 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
         const routes: TransportRouteMaster[] = response.data.transportRouteMasters || [];
         setAvailableRoutes(routes);
 
+        // For iqama accommodation: Auto-select "Jeddah → Jeddah" route if arrival airport is Jeddah
+        const accommodationType = step3Data?.accommodationType;
+        if (accommodationType === 'iqama') {
+          const arrivalAirport = locationMasters.find(
+            (lm) => lm.id === step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
+          );
+          const arrivalCityName = arrivalAirport?.cityMaster?.name || arrivalAirport?.city || '';
+          const isJeddah = arrivalCityName.toLowerCase().includes('jeddah');
+          
+          if (isJeddah) {
+            // Find "Jeddah → Jeddah" route with routeType "airporttocity"
+            const jeddahRoute = routes.find(route => {
+              const city1Name = route.city1?.name?.toLowerCase() || '';
+              const city2Name = route.city2?.name?.toLowerCase() || '';
+              const isJeddahToJeddah = city1Name.includes('jeddah') && city2Name.includes('jeddah');
+              return isJeddahToJeddah && route.routeType === 'airporttocity';
+            });
+            
+            if (jeddahRoute) {
+              setSelectedRouteId(jeddahRoute.id);
+              return; // Exit early, don't try to match determined route
+            }
+          }
+        }
+
         // Auto-select determined route if it exists
         const matchingRoute = findRouteByCities(routes, determinedRoute);
         if (matchingRoute) {
@@ -200,6 +231,14 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
 
     loadTransports();
   }, [selectedRouteId]);
+
+  // Update route type filter when accommodation type changes to iqama
+  useEffect(() => {
+    const accommodationType = step3Data?.accommodationType;
+    if (accommodationType === 'iqama' && routeTypeFilter !== 'airporttocity') {
+      setRouteTypeFilter('airporttocity');
+    }
+  }, [step3Data?.accommodationType, routeTypeFilter]);
 
   // Initialize selected vehicles from data when component mounts or data changes
   useEffect(() => {

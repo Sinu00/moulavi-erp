@@ -5,13 +5,13 @@ import { Card } from '@/components/ui/card';
 import { UploadCloud, File, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Step5Data, Step1Data, Step3Data } from '@/lib/umrah/types';
+import { Step5Data, Step6Data, Step1Data, Step3Data } from '@/lib/umrah/types';
 
 interface DocumentsStepProps {
-  data: Step5Data;
+  data: Step5Data | Step6Data;
   step1Data: Step1Data;
   step3Data: Step3Data;
-  onChange: (data: Partial<Step5Data>) => void;
+  onChange: (data: Partial<Step5Data> | Partial<Step6Data>) => void;
   onStep1DataChange?: (data: Partial<Step1Data>) => void;
   disabled?: boolean;
 }
@@ -26,8 +26,8 @@ export const DocumentsStep: React.FC<DocumentsStepProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Get the uploaded ZIP file from step5Data
-  const zipFile = data.panCardZipFile || null;
+  // Get the uploaded ZIP file from step5Data or step6Data
+  const zipFile = (data as Step5Data | Step6Data).panCardZipFile || null;
 
   const handleFileSelect = (file: File) => {
     // Validate file type - accept ZIP files

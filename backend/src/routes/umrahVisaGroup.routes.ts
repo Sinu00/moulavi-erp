@@ -473,9 +473,9 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         for (const movement of step3Data.movements) {
           // Get LocationMaster for "from" location
           const fromLocation = locationMap.get(movement.fromLocationId);
-          if (!fromLocation) {
+            if (!fromLocation) {
             throw new Error(`Invalid fromLocationId in movement: ${movement.fromLocationId}`);
-          }
+            }
 
           // Get LocationMaster for "to" location
           const toLocation = locationMap.get(movement.toLocationId);
@@ -502,12 +502,12 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
           const timeToUse = movement.time && movement.time.trim() !== '' ? movement.time : '12:00';
           if (!movement.date) {
             throw new Error(`Missing date for movement from ${movement.fromLocationId} to ${movement.toLocationId}`);
-          }
+            }
 
           const travelDateTime = combineDateTime(movement.date, timeToUse);
           if (!travelDateTime) {
             throw new Error(`Invalid travel date/time for movement from ${movement.fromLocationId} to ${movement.toLocationId}`);
-          }
+            }
 
           movementDetailsToCreate.push({
             bookingId: booking.id,
@@ -538,31 +538,31 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
 
             if (!fromLocation || !toLocation) {
               throw new Error(`Invalid location IDs in transport segment`);
-            }
+          }
 
             const timeToUse = segment.travelTime && segment.travelTime.trim() !== '' ? segment.travelTime : '12:00';
-            if (!segment.travelDate) {
+          if (!segment.travelDate) {
               throw new Error(`Missing travel date for transport segment`);
-            }
+          }
 
-            const travelDateTime = combineDateTime(segment.travelDate, timeToUse);
-            if (!travelDateTime) {
+          const travelDateTime = combineDateTime(segment.travelDate, timeToUse);
+          if (!travelDateTime) {
               throw new Error(`Invalid travel date/time for transport segment`);
-            }
+          }
 
-            movementDetailsToCreate.push({
-              bookingId: booking.id,
-              travelDateTime,
+          movementDetailsToCreate.push({
+            bookingId: booking.id,
+            travelDateTime,
               fromCityId: fromLocation.cityId,
               fromLocationId: fromLocation.id,
               toCityId: toLocation.cityId,
               toLocationId: toLocation.id,
-            });
-          }
+          });
         }
+      }
 
         // Process ziyaraths (old format) - simplified: ziyarath movements already have explicit from/to
-        if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths) && step3Data.ziyaraths.length > 0) {
+      if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths) && step3Data.ziyaraths.length > 0) {
           // Note: Old format ziyaraths need "from" location inferred, but we'll use the last transport destination
           // This is a simplified backward compatibility approach
           let lastLocationId: string | null = null;
@@ -574,9 +574,9 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
             lastLocationId = lastMovement.toLocationId;
             lastCityId = lastMovement.toCityId;
           } else if (hotelBookingsData.length > 0) {
-            const lastHotel = hotelBookingsData[hotelBookingsData.length - 1];
-            const lastHotelLocation = locationMap.get(lastHotel.hotelId);
-            if (lastHotelLocation) {
+          const lastHotel = hotelBookingsData[hotelBookingsData.length - 1];
+          const lastHotelLocation = locationMap.get(lastHotel.hotelId);
+          if (lastHotelLocation) {
               lastLocationId = lastHotelLocation.id;
               lastCityId = lastHotelLocation.cityId;
             }

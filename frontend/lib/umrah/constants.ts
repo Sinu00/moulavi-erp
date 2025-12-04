@@ -76,6 +76,46 @@ export const STEPS = [
   },
 ] as const;
 
+// Steps for individual Umrah visa bookings
+export const INDIVIDUAL_STEPS = [
+  {
+    id: 1,
+    title: 'Booking Mode',
+    description: 'Choose booking type',
+    icon: 'Users',
+  },
+  {
+    id: 2,
+    title: 'Travel Details',
+    description: 'Flight and transport information',
+    icon: 'Plane',
+  },
+  {
+    id: 3,
+    title: 'Accommodation',
+    description: 'Hotel or Iqama details',
+    icon: 'Home',
+  },
+  {
+    id: 4,
+    title: 'Transport',
+    description: 'Select transport vehicle (optional)',
+    icon: 'Truck',
+  },
+  {
+    id: 5,
+    title: 'Movements',
+    description: 'Review and edit movement details',
+    icon: 'Truck',
+  },
+  {
+    id: 6,
+    title: 'Documents',
+    description: 'Upload required documents',
+    icon: 'FileText',
+  },
+] as const;
+
 export const API_ENDPOINTS = {
   AIRPORTS: '/location-masters/active?locationType=AIRPORT',
   CITIES: '/city-masters/active',

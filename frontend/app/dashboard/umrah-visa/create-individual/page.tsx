@@ -16,12 +16,14 @@ import { partyAPI } from '@/lib/api';
 // Import our new components and hooks
 import { useUmrahBooking, useMasterData } from '@/hooks/useUmrahBooking';
 import { StepProgress, LoadingSpinner } from '@/components/umrah-booking/shared';
+import { INDIVIDUAL_STEPS } from '@/lib/umrah/constants';
 import { BookingModeStep } from '@/components/umrah-booking/steps/BookingModeStep';
 import { TravelDetailsStep } from '@/components/umrah-booking/steps/TravelDetailsStep';
 import { AccommodationStep } from '@/components/umrah-booking/steps/AccommodationStep';
 import { TransportVehicleSelectionStep } from '@/components/umrah-booking/steps/TransportVehicleSelectionStep';
+import { MovementDetailsStep } from '@/components/umrah-booking/steps/MovementDetailsStep';
 import { DocumentsStep } from '@/components/umrah-booking/steps/DocumentsStep';
-import { validateStep1, validateStep2, validateStep3, validateStep4, validateStep5 } from '@/lib/umrah/validation';
+import { validateStep1, validateStep2, validateStep3, validateStep4, validateStep5Movements, validateStep6 } from '@/lib/umrah/validation';
 
 interface Party {
   id: string;
@@ -49,6 +51,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
     updateStep3Data,
     updateStep4Data,
     updateStep5Data,
+    updateStep6Data,
     setCurrentStep,
     loadPartyData,
     submitStep,
@@ -106,9 +109,11 @@ export default function AdminCreateIndividualUmrahVisaPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step2Data);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, masterData.locationMasters);
+        return validateStep4(bookingState.step4Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 5:
-        return validateStep5(bookingState.step5Data, bookingState.step1Data, bookingState.step3Data, false);
+        return validateStep5Movements(bookingState.step5Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, bookingState.step4Data, masterData.locationMasters);
+      case 6:
+        return validateStep6(bookingState.step6Data, bookingState.step1Data, bookingState.step3Data, false);
       default:
         return null;
     }
@@ -127,7 +132,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
     }
 
     const success = await submitStep(bookingState.currentStep);
-    if (success && bookingState.currentStep === 5) {
+    if (success && bookingState.currentStep === 6) {
       router.push('/dashboard/umrah-visa/bookings');
     }
   };
@@ -194,11 +199,31 @@ export default function AdminCreateIndividualUmrahVisaPage() {
 
       case 5:
         return (
-          <DocumentsStep
+          <MovementDetailsStep
             data={bookingState.step5Data}
             step1Data={bookingState.step1Data}
+            step2Data={bookingState.step2Data}
             step3Data={bookingState.step3Data}
+            step4Data={bookingState.step4Data}
+            locationMasters={masterData.locationMasters}
+            arrivalAirportId={bookingState.step2Data.arrivalAirportId}
+            departureAirportId={bookingState.step2Data.departureAirportId}
+            arrivalDate={bookingState.step2Data.arrivalDate}
+            departureDate={bookingState.step2Data.departureDate}
+            arrivalTime={bookingState.step2Data.arrivalTime}
+            departureTime={bookingState.step2Data.departureTime}
             onChange={updateStep5Data}
+            disabled={isLoading}
+          />
+        );
+
+      case 6:
+        return (
+          <DocumentsStep
+            data={bookingState.step6Data || { panCardZipFile: null }}
+            step1Data={bookingState.step1Data}
+            step3Data={bookingState.step3Data}
+            onChange={updateStep6Data}
             disabled={isLoading}
           />
         );
@@ -324,6 +349,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                   currentStep={bookingState.currentStep}
                   completedSteps={bookingState.completedSteps}
                   onStepClick={goToStep}
+                  steps={[...INDIVIDUAL_STEPS]}
                 />
 
                 {/* Step Content */}
@@ -342,7 +368,8 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                           {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
                           {bookingState.currentStep === 3 && 'Select accommodation type and details'}
                           {bookingState.currentStep === 4 && 'Select transport vehicle (optional)'}
-                          {bookingState.currentStep === 5 && 'Upload required documents'}
+                          {bookingState.currentStep === 5 && 'Review and edit movement details'}
+                          {bookingState.currentStep === 6 && 'Upload required documents'}
                         </p>
                       </div>
                     </div>
@@ -389,8 +416,8 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                   disabled={isLoading || !selectedPartyId}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
-                  {isLoading ? 'Processing...' : bookingState.currentStep < 5 ? 'Next' : 'Submit Application'}
-                  {bookingState.currentStep < 5 && <ChevronRight className="h-4 w-4 ml-2" />}
+                  {isLoading ? 'Processing...' : bookingState.currentStep < 6 ? 'Next' : 'Submit Application'}
+                  {bookingState.currentStep < 6 && <ChevronRight className="h-4 w-4 ml-2" />}
                 </Button>
               </div>
             </div>

@@ -167,7 +167,7 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
     const user = (req as any).user;
     
     // Parse JSON strings from FormData (if FormData) or use req.body directly (if JSON)
-    let step1Data, step2Data, step3Data, step4Data, partyId;
+    let step1Data, step2Data, step3Data, step4Data, step5Data: { movements?: any[] } | undefined, partyId;
     
     if (req.body.step1) {
       // FormData mode - parse JSON strings
@@ -176,6 +176,7 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
       step2Data = JSON.parse(req.body.step2);
       step3Data = JSON.parse(req.body.step3);
       step4Data = req.body.step4 ? JSON.parse(req.body.step4) : undefined;
+      step5Data = req.body.step5 ? JSON.parse(req.body.step5) : undefined;
       
       // Convert date strings to Date objects for step3Data hotel bookings
       if (step3Data.hotelBookings && Array.isArray(step3Data.hotelBookings)) {
@@ -260,6 +261,20 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
         if (hotel.hotelId) allLocationIds.add(hotel.hotelId);
         // Note: hotel.cityId is now a CityMaster ID (no longer needs conversion)
         if (hotel.cityId) allCityIds.add(hotel.cityId);
+      });
+    }
+    
+    // For iqama bookings: Add Jeddah City Center location if movements exist
+    // We'll fetch it by name and city if needed
+    if (step3Data.accommodationType === 'iqama' && step5Data?.movements && step5Data.movements.length > 0) {
+      // Check if any movement has a toLocationId that might be Jeddah City Center
+      step5Data.movements.forEach((movement: any) => {
+        if (movement.toLocationId) {
+          allLocationIds.add(movement.toLocationId);
+        }
+        if (movement.fromLocationId) {
+          allLocationIds.add(movement.fromLocationId);
+        }
       });
     }
 
@@ -461,102 +476,125 @@ router.post('/create-booking', authenticate, upload.single('panCardZipFile'), as
         }
       }
 
-      // 6.5. Create UmrahMovementDetail entries (automatically from hotel bookings)
-      // Movement details should be created for hotel bookings regardless of transport selection
-      // They represent the route: airport → hotel 1 → hotel 2 → ... → airport
-      if (step3Data.accommodationType === 'hotel' && step3Data.hotelBookings && step3Data.hotelBookings.length > 0) {
-        const movementDetailsToCreate: Array<{
-          bookingId: string;
-          travelDateTime: Date;
-          fromCityId: string;
-          fromLocationId: string;
-          toCityId: string;
-          toLocationId: string;
-        }> = [];
+      // 6.5. Create UmrahMovementDetail entries from step5Data.movements (unified model)
+      // NEW: Simple unified approach - movements are already sorted chronologically
+      const movementDetailsToCreate: Array<{
+        bookingId: string;
+        travelDateTime: Date;
+        fromCityId: string;
+        fromLocationId: string;
+        toCityId: string;
+        toLocationId: string;
+      }> = [];
 
-        // Get arrival and departure airports from pre-fetched maps
-        const arrivalAirport = locationMap.get(step2Data.arrivalAirportId);
-        const departureAirport = locationMap.get(step2Data.departureAirportId);
+      // Helper: Find or create Viabadr city
+      const getViabadrCityId = async (countryId: string): Promise<string> => {
+        // Try to find existing Viabadr city
+        let viabadrCity = await prisma.cityMaster.findFirst({
+          where: {
+            name: { equals: 'Viabadr', mode: 'insensitive' },
+            countryId: countryId,
+            isActive: true,
+          },
+        });
 
-        if (!arrivalAirport || !departureAirport) {
-          throw new Error('Invalid airport IDs');
+        // If not found, create it (using the same country as Madinah)
+        if (!viabadrCity) {
+          viabadrCity = await prisma.cityMaster.create({
+            data: {
+              name: 'Viabadr',
+              countryId: countryId,
+              isActive: true,
+            },
+          });
         }
 
-        // 1. Arrival Airport → First Hotel
-        const firstHotel = step3Data.hotelBookings[0];
-        const firstHotelLocation = locationMap.get(firstHotel.hotelId);
+        return viabadrCity.id;
+      };
 
-        if (firstHotelLocation && arrivalAirport.cityId && firstHotelLocation.cityId) {
-          const arrivalDateTime = combineDateTime(step2Data.arrivalDate, step2Data.arrivalTime);
-          if (arrivalDateTime) {
-            movementDetailsToCreate.push({
-              bookingId: booking.id,
-              travelDateTime: arrivalDateTime,
-              fromCityId: arrivalAirport.cityId,
-              fromLocationId: arrivalAirport.id,
-              toCityId: firstHotelLocation.cityId,
-              toLocationId: firstHotelLocation.id,
+      // Process unified movements array from step5Data
+      if (step5Data?.movements && Array.isArray(step5Data.movements) && step5Data.movements.length > 0) {
+        for (const movement of step5Data.movements) {
+          // Get LocationMaster for "from" location
+          let fromLocation = locationMap.get(movement.fromLocationId);
+          if (!fromLocation) {
+            // Try to fetch it if not in pre-fetched map (e.g., for iqama bookings)
+            const fetchedFromLocation = await prisma.locationMaster.findUnique({
+              where: { id: movement.fromLocationId },
+              select: { id: true, cityId: true, locationType: true },
             });
+            if (fetchedFromLocation) {
+              locationMap.set(fetchedFromLocation.id, fetchedFromLocation);
+              fromLocation = fetchedFromLocation;
+            }
           }
-        }
+          if (!fromLocation) {
+            throw new Error(`Invalid fromLocationId in movement: ${movement.fromLocationId}`);
+          }
 
-        // 2. Inter-hotel movements (Hotel 1 → Hotel 2, Hotel 2 → Hotel 3, etc.)
-        for (let i = 1; i < step3Data.hotelBookings.length; i++) {
-          const prevHotel = step3Data.hotelBookings[i - 1];
-          const currHotel = step3Data.hotelBookings[i];
-
-          const prevHotelLocation = locationMap.get(prevHotel.hotelId);
-          const currHotelLocation = locationMap.get(currHotel.hotelId);
-
-          if (prevHotelLocation && currHotelLocation && 
-              prevHotelLocation.cityId && currHotelLocation.cityId &&
-              prevHotelLocation.cityId !== currHotelLocation.cityId) {
-            // Only create movement if hotels are in different cities
-            const travelDate = currHotel.checkInDate;
-            const travelDateTime = new Date(travelDate);
-            travelDateTime.setHours(12, 0, 0, 0); // Default to noon
-
-            movementDetailsToCreate.push({
-              bookingId: booking.id,
-              travelDateTime,
-              fromCityId: prevHotelLocation.cityId,
-              fromLocationId: prevHotelLocation.id,
-              toCityId: currHotelLocation.cityId,
-              toLocationId: currHotelLocation.id,
+          // Get LocationMaster for "to" location
+          let toLocation = locationMap.get(movement.toLocationId);
+          if (!toLocation) {
+            // Try to fetch it if not in pre-fetched map (e.g., Jeddah City Center for iqama)
+            const fetchedToLocation = await prisma.locationMaster.findUnique({
+              where: { id: movement.toLocationId },
+              select: { id: true, cityId: true, locationType: true },
             });
+            if (fetchedToLocation) {
+              locationMap.set(fetchedToLocation.id, fetchedToLocation);
+              toLocation = fetchedToLocation;
+            }
           }
-        }
+          if (!toLocation) {
+            throw new Error(`Invalid toLocationId in movement: ${movement.toLocationId}`);
+          }
 
-        // 3. Last Hotel → Departure Airport
-        const lastHotel = step3Data.hotelBookings[step3Data.hotelBookings.length - 1];
-        const lastHotelLocation = locationMap.get(lastHotel.hotelId);
-
-        if (lastHotelLocation && lastHotelLocation.cityId && departureAirport.cityId &&
-            lastHotelLocation.cityId !== departureAirport.cityId) {
-          // Only create movement if last hotel is in different city than departure airport
-          const departureDateTime = combineDateTime(step2Data.departureDate, step2Data.departureTime);
-          if (departureDateTime) {
-            movementDetailsToCreate.push({
-              bookingId: booking.id,
-              travelDateTime: departureDateTime,
-              fromCityId: lastHotelLocation.cityId,
-              fromLocationId: lastHotelLocation.id,
-              toCityId: departureAirport.cityId,
-              toLocationId: departureAirport.id,
+          // Check if Viabadr override is enabled - always use Viabadr for "To" city
+          let toCityId = toLocation.cityId;
+          if (movement.viabadrOverride) {
+            // Get the "To" location's city to get the countryId for Viabadr
+            const toCity = await prisma.cityMaster.findUnique({
+              where: { id: toLocation.cityId },
+              select: { name: true, countryId: true },
             });
-          }
-        }
 
-        // Create all movement details
-        if (movementDetailsToCreate.length > 0) {
-          await Promise.all(
-            movementDetailsToCreate.map((movement) =>
-              tx.umrahMovementDetail.create({
-                data: movement,
-              })
-            )
-          );
+            if (toCity) {
+              // Always use Viabadr city for "To" when override is enabled
+              toCityId = await getViabadrCityId(toCity.countryId);
+            }
+          }
+
+          // Combine date and time
+          const timeToUse = movement.time && movement.time.trim() !== '' ? movement.time : '12:00';
+          if (!movement.date) {
+            throw new Error(`Missing date for movement from ${movement.fromLocationId} to ${movement.toLocationId}`);
+          }
+
+          const travelDateTime = combineDateTime(movement.date, timeToUse);
+          if (!travelDateTime) {
+            throw new Error(`Invalid travel date/time for movement from ${movement.fromLocationId} to ${movement.toLocationId}`);
+          }
+
+          movementDetailsToCreate.push({
+            bookingId: booking.id,
+            travelDateTime,
+            fromCityId: fromLocation.cityId,
+            fromLocationId: fromLocation.id,
+            toCityId: toCityId, // Use Viabadr cityId if override is enabled
+            toLocationId: toLocation.id,
+          });
         }
+      }
+
+      // Create all movement details
+      if (movementDetailsToCreate.length > 0) {
+        await Promise.all(
+          movementDetailsToCreate.map((movement) =>
+            tx.umrahMovementDetail.create({
+              data: movement,
+            })
+          )
+        );
       }
 
       // 7. Create UmrahPassenger (all passengers)

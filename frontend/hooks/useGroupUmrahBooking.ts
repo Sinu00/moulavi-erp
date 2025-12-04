@@ -241,14 +241,14 @@ export const useGroupUmrahBooking = () => {
         return false;
       }
 
-      setBookingState(prev => ({
-        ...prev,
-        completedSteps: [...prev.completedSteps, 3],
-        currentStep: 4,
-      }));
-      setStepDataHashes(prev => ({ ...prev, 3: generateStepDataHash(3) }));
+        setBookingState(prev => ({
+          ...prev,
+          completedSteps: [...prev.completedSteps, 3],
+          currentStep: 4,
+        }));
+        setStepDataHashes(prev => ({ ...prev, 3: generateStepDataHash(3) }));
       toast.success('Transport vehicle selected');
-      return true;
+        return true;
     } catch (error) {
       console.error('Error validating step 3:', error);
       toast.error('Failed to validate transport selection');
