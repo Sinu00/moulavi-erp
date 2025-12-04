@@ -20,6 +20,7 @@ interface UmrahVisaBooking {
   groupName?: string;
   passengerCount: number;
   status: string;
+  visaType?: 'individual_visa' | 'group_visa';
   createdAt: string;
   partyId: string;
 }
@@ -95,8 +96,10 @@ export default function AdminAddToExistingBookingPage() {
       setLoadingBookings(true);
       const response = await umrahVisaAPI.getBookings({ page: 1, limit: 1000 });
       const allBookings = response.data.bookings || [];
-      // Filter bookings by selected party
-      const filteredBookings = allBookings.filter((booking: UmrahVisaBooking) => booking.partyId === selectedPartyId);
+      // Filter bookings by selected party and only show group bookings
+      const filteredBookings = allBookings.filter((booking: UmrahVisaBooking) => 
+        booking.partyId === selectedPartyId && booking.visaType === 'group_visa'
+      );
       setBookings(filteredBookings);
     } catch (error) {
       console.error('Error loading bookings:', error);
@@ -308,21 +311,21 @@ export default function AdminAddToExistingBookingPage() {
             /* Form - Show after party selection */
             <div className="max-w-3xl mx-auto">
               <Card className="shadow-lg">
-                <CardHeader>
-                  <CardTitle>Add Group to Existing Booking</CardTitle>
-                  <CardDescription>
+                <CardHeader className="p-4 lg:p-6">
+                  <CardTitle className="text-lg lg:text-xl">Add Group to Existing Booking</CardTitle>
+                  <CardDescription className="text-sm lg:text-base">
                     Enter the new group details to add to an existing booking
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-6">
+                <CardContent className="p-4 lg:p-6">
+                  <form onSubmit={handleSubmit} className="space-y-4 lg:space-y-6">
                     {/* Select Existing Booking */}
                     <div className="space-y-2">
                       <Label htmlFor="existingBookingId">Select Existing Booking *</Label>
                       {loadingBookings ? (
                         <div className="text-sm text-gray-500 py-2">Loading bookings...</div>
                       ) : bookings.length === 0 ? (
-                        <div className="text-sm text-gray-500 py-2">No bookings found for this party. Please create a booking first.</div>
+                        <div className="text-sm text-gray-500 py-2">No group bookings found for this party. Please create a group booking first.</div>
                       ) : (
                         <Select
                           value={formData.existingBookingId}
@@ -391,7 +394,7 @@ export default function AdminAddToExistingBookingPage() {
                           onDragOver={handleDragOver}
                           onDragLeave={handleDragLeave}
                           onClick={() => fileInputRef.current?.click()}
-                          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+                          className={`border-2 border-dashed rounded-lg p-6 lg:p-12 text-center cursor-pointer transition-colors ${
                             isDragging
                               ? 'border-indigo-500 bg-indigo-50'
                               : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/50'
@@ -405,25 +408,25 @@ export default function AdminAddToExistingBookingPage() {
                             className="hidden"
                           />
                           
-                          <div className="flex flex-col items-center justify-center space-y-4">
-                            <UploadCloud className={`w-16 h-16 ${isDragging ? 'text-indigo-500' : 'text-gray-400'}`} />
+                          <div className="flex flex-col items-center justify-center space-y-3 lg:space-y-4">
+                            <UploadCloud className={`w-12 h-12 lg:w-16 lg:h-16 ${isDragging ? 'text-indigo-500' : 'text-gray-400'}`} />
                             <div>
-                              <p className="text-lg font-medium text-gray-700 mb-1">
+                              <p className="text-base lg:text-lg font-medium text-gray-700 mb-1">
                                 {isDragging ? 'Drop your ZIP file here' : 'Click to upload or drag and drop'}
                               </p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs lg:text-sm text-gray-500">
                                 ZIP file containing all PAN cards (MAX. 50MB)
                               </p>
                             </div>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50">
-                          <div className="flex items-center space-x-3">
-                            <File className="h-8 w-8 text-indigo-600" />
-                            <div>
-                              <p className="font-medium text-gray-900">{zipFile.name}</p>
-                              <p className="text-sm text-gray-500">
+                        <div className="flex items-center justify-between p-3 lg:p-4 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="flex items-center space-x-2 lg:space-x-3 min-w-0 flex-1">
+                            <File className="h-6 w-6 lg:h-8 lg:w-8 text-indigo-600 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-gray-900 text-sm lg:text-base truncate">{zipFile.name}</p>
+                              <p className="text-xs lg:text-sm text-gray-500">
                                 {(zipFile.size / (1024 * 1024)).toFixed(2)} MB
                               </p>
                             </div>
@@ -433,7 +436,7 @@ export default function AdminAddToExistingBookingPage() {
                             variant="ghost"
                             size="sm"
                             onClick={handleRemoveFile}
-                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                            className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 flex-shrink-0 ml-2"
                           >
                             <X className="h-4 w-4" />
                           </Button>
@@ -441,19 +444,20 @@ export default function AdminAddToExistingBookingPage() {
                       )}
                     </div>
 
-                    <div className="flex justify-end space-x-3 pt-4">
+                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => router.push('/dashboard/umrah-visa/bookings')}
                         disabled={loading}
+                        className="w-full sm:w-auto"
                       >
                         Cancel
                       </Button>
                       <Button
                         type="submit"
                         disabled={loading || !selectedPartyId}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                        className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white"
                       >
                         {loading ? 'Adding Group...' : 'Add Group to Booking'}
                       </Button>

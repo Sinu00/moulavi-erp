@@ -314,7 +314,7 @@ export default function AdminCreateGroupUmrahVisaPage() {
         </div>
 
         {/* Content */}
-        <div className="p-4 lg:p-8 pb-24">
+        <div className="p-4 lg:p-8 pb-24 lg:pb-6">
           {!selectedPartyId ? (
             /* Party Selection Screen - Show first */
             <div className="max-w-2xl mx-auto mt-12">
@@ -387,21 +387,21 @@ export default function AdminCreateGroupUmrahVisaPage() {
                 />
 
                 {/* Step Content */}
-                <div className="mb-8 mt-6">
-                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-indigo-100 to-indigo-200 flex items-center justify-center">
+                <div className="mb-6 lg:mb-8 mt-4 lg:mt-6">
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 lg:p-6 shadow-sm">
+                    <div className="flex items-center space-x-3 mb-4 lg:mb-6">
+                      <div className="h-8 w-8 lg:h-10 lg:w-10 rounded-lg bg-gradient-to-r from-indigo-100 to-indigo-200 flex items-center justify-center flex-shrink-0">
                         {(() => {
                           const map: any = { Users, Plane, Home, Truck, User };
                           const Icon = map[steps[bookingState.currentStep - 1].icon];
-                          return <Icon className="h-5 w-5 text-indigo-600" />;
+                          return <Icon className="h-4 w-4 lg:h-5 lg:w-5 text-indigo-600" />;
                         })()}
                       </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base lg:text-lg font-semibold text-gray-900">
                           {steps[bookingState.currentStep - 1].title}
                         </h3>
-                        <p className="text-sm text-gray-600">{steps[bookingState.currentStep - 1].description}</p>
+                        <p className="text-xs lg:text-sm text-gray-600">{steps[bookingState.currentStep - 1].description}</p>
                       </div>
                     </div>
                     {renderStepContent()}
@@ -414,16 +414,16 @@ export default function AdminCreateGroupUmrahVisaPage() {
 
         {/* Fixed Navigation Buttons Footer */}
         {selectedPartyId && (
-          <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-gray-200 px-6 py-4 shadow-lg z-10">
-            <div className="flex justify-between">
-              <div className="flex space-x-3">
+          <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-gray-200 px-3 lg:px-6 py-3 lg:py-4 shadow-lg z-10">
+            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-0">
+              <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3">
                 {bookingState.currentStep > 1 && (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={prevStep}
                     disabled={isLoading}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    className="w-full sm:w-auto border-gray-300 text-gray-700 hover:bg-gray-50"
                   >
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Previous
@@ -434,25 +434,25 @@ export default function AdminCreateGroupUmrahVisaPage() {
                   variant="outline"
                   onClick={() => router.push('/dashboard/umrah-visa/bookings')}
                   disabled={isLoading}
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="w-full sm:w-auto border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </Button>
               </div>
 
-              <div className="flex space-x-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-3">
                 <Button
                   type="button"
                   onClick={nextStep}
                   disabled={isLoading || !selectedPartyId}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
                   {isLoading ? 'Processing...' : bookingState.currentStep < 5 ? 'Next' : 'Submit Application'}
                   {bookingState.currentStep < 5 && <ChevronRight className="h-4 w-4 ml-2" />}
                 </Button>
                 {/* Show indicator if step has unsaved changes (only for steps 1-4, not step 5) */}
                 {bookingState.currentStep < 5 && bookingState.completedSteps.includes(bookingState.currentStep) && hasStepDataChanged(bookingState.currentStep) && (
-                  <div className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                  <div className="flex items-center justify-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
                     <span>•</span>
                     <span className="ml-1">Unsaved changes</span>
                   </div>

@@ -333,7 +333,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
         </div>
 
         {/* Content */}
-        <div className="p-4 lg:p-8 pb-24">
+        <div className="p-4 lg:p-8 pb-24 lg:pb-6">
           {!selectedPartyId ? (
             /* Party Selection Screen - Show first */
             <div className="max-w-2xl mx-auto mt-12">
@@ -406,17 +406,17 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                 />
 
                 {/* Step Content */}
-                <div className="mb-8 mt-6">
-                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-r from-indigo-100 to-indigo-200 flex items-center justify-center">
-                        <span className="text-indigo-600 font-semibold">{bookingState.currentStep}</span>
+                <div className="mb-6 lg:mb-8 mt-4 lg:mt-6">
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 lg:p-6 shadow-sm">
+                    <div className="flex items-center space-x-3 mb-4 lg:mb-6">
+                      <div className="h-8 w-8 lg:h-10 lg:w-10 rounded-lg bg-gradient-to-r from-indigo-100 to-indigo-200 flex items-center justify-center flex-shrink-0">
+                        <span className="text-indigo-600 font-semibold text-sm lg:text-base">{bookingState.currentStep}</span>
                       </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base lg:text-lg font-semibold text-gray-900">
                           Step {bookingState.currentStep}
                         </h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-xs lg:text-sm text-gray-600">
                           {bookingState.currentStep === 1 && 'Choose your booking type'}
                           {bookingState.currentStep === 2 && 'Enter travel details and flight information'}
                           {bookingState.currentStep === 3 && 'Select accommodation type and details'}
@@ -436,16 +436,16 @@ export default function AdminCreateIndividualUmrahVisaPage() {
 
         {/* Fixed Navigation Buttons Footer */}
         {selectedPartyId && (
-          <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-gray-200 px-6 py-4 shadow-lg z-10">
-            <div className="flex justify-between">
-              <div className="flex space-x-3">
+          <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t border-gray-200 px-3 lg:px-6 py-3 lg:py-4 shadow-lg z-10">
+            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-0">
+              <div className="flex flex-col sm:flex-row gap-2 sm:space-x-3">
                 {bookingState.currentStep > 1 && (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={prevStep}
                     disabled={isLoading}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    className="w-full sm:w-auto border-gray-300 text-gray-700 hover:bg-gray-50"
                   >
                     <ChevronLeft className="h-4 w-4 mr-2" />
                     Previous
@@ -456,7 +456,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                   variant="outline"
                   onClick={() => router.push('/dashboard/umrah-visa/bookings')}
                   disabled={isLoading}
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="w-full sm:w-auto border-gray-300 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </Button>
@@ -467,7 +467,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
                   type="button"
                   onClick={nextStep}
                   disabled={isLoading || !selectedPartyId}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
                   {isLoading ? 'Processing...' : bookingState.currentStep < 6 ? 'Next' : 'Submit Application'}
                   {bookingState.currentStep < 6 && <ChevronRight className="h-4 w-4 ml-2" />}
