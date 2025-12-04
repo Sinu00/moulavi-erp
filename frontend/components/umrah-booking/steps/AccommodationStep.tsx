@@ -196,6 +196,8 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
                   totalDays={coverage.totalDays}
                   coveragePercentage={coverage.coveragePercentage}
                   remainingDays={coverage.remainingDays}
+                  totalBookedDays={coverage.totalBookedDays}
+                  daysBeyond={coverage.daysBeyond}
                 />
               )}
             </div>
@@ -215,6 +217,8 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
             onAddBooking={addHotelBooking}
             disabled={disabled}
             showAddButton={true}
+            arrivalDate={arrivalDate}
+            departureDate={departureDate}
           />
         </div>
       )}

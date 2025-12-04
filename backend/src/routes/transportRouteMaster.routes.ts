@@ -18,7 +18,7 @@ const createTransportRouteMasterValidation = [
     if (value === null || value === undefined || value === '') return true;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }).withMessage('city4Id must be a valid UUID or null'),
-  body('routeType').isIn(['citytocity', 'airporttocity', 'citytoairport', 'tripandtour', 'fulltrip']),
+  body('routeType').isIn(['airporttocity', 'citytoairport', 'tripandtour', 'fulltrip']),
   body('isActive').isBoolean().optional(),
 ];
 
@@ -33,7 +33,7 @@ const updateTransportRouteMasterValidation = [
     if (value === null || value === undefined || value === '') return true;
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }).withMessage('city4Id must be a valid UUID or null'),
-  body('routeType').isIn(['citytocity', 'airporttocity', 'citytoairport', 'tripandtour', 'fulltrip']).optional(),
+  body('routeType').isIn(['airporttocity', 'citytoairport', 'tripandtour', 'fulltrip']).optional(),
   body('isActive').isBoolean().optional(),
 ];
 

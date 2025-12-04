@@ -68,15 +68,15 @@ export default function GroupUmrahVisaPage() {
     },
     {
       id: 3,
-      title: 'Movement Details',
-      description: 'Transportation and movement',
-      icon: 'Home',
-    },
-    {
-      id: 4,
       title: 'Transport Vehicle Selection',
       description: 'Select transport vehicle for your route',
       icon: 'Truck',
+    },
+    {
+      id: 4,
+      title: 'Movement Details',
+      description: 'Transportation and movement',
+      icon: 'Home',
     },
     {
       id: 5,
@@ -109,9 +109,9 @@ export default function GroupUmrahVisaPage() {
       case 2:
         return validateStep2(bookingState.step2Data, masterData.airports, bookingState.step1Data);
       case 3:
-        return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
+        return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step2Data, masterData.locationMasters);
       case 4:
-        return validateStep4(bookingState.step4Data);
+        return validateStep4(bookingState.step4Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 5:
         return validateStep5(bookingState.step5Data, bookingState.step1Data, bookingState.step3Data, true); // true = isGroupVisa
       default:
@@ -173,28 +173,27 @@ export default function GroupUmrahVisaPage() {
         );
 
       case 3:
+        return (
+          <TransportVehicleSelectionStep
+            data={bookingState.step3Data}
+            step1Data={bookingState.step1Data}
+            step2Data={bookingState.step2Data}
+            locationMasters={masterData.locationMasters}
+            onChange={updateStep3Data}
+            disabled={isLoading}
+          />
+        );
+
+      case 4:
         // Find arrival airport in locationMasters to get cityId
         const arrivalAirport = masterData.locationMasters?.find(
           (lm) => lm.id === bookingState.step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
         );
         
-        // Debug logging
-        if (bookingState.step2Data.arrivalAirportId) {
-          console.log('[GroupUmrahVisaPage] Step 3 - Debug Info:', {
-            arrivalAirportId: bookingState.step2Data.arrivalAirportId,
-            locationMastersCount: masterData.locationMasters?.length || 0,
-            found: !!arrivalAirport,
-            arrivalAirport: arrivalAirport,
-            city: arrivalAirport?.city,
-            cityMaster: arrivalAirport?.cityMaster,
-            hotelBookingsCount: (bookingState.step2Data.hotelBookings || []).length,
-          });
-        }
-        
         return (
           <MovementDetailsStep
-            data={bookingState.step3Data}
-            onChange={updateStep3Data}
+            data={bookingState.step4Data}
+            onChange={updateStep4Data}
             locations={masterData.locations}
             locationMasters={masterData.locationMasters}
             hotelBookings={bookingState.step2Data.hotelBookings || []}
@@ -206,18 +205,7 @@ export default function GroupUmrahVisaPage() {
             departureTime={bookingState.step2Data.departureTime}
             arrivalAirport={arrivalAirport}
             getAllHotelsForLocation={getHotelsForLocation}
-            disabled={isLoading}
-          />
-        );
-
-      case 4:
-        return (
-          <TransportVehicleSelectionStep
-            data={bookingState.step4Data}
-            step1Data={bookingState.step1Data}
-            step2Data={bookingState.step2Data}
-            locationMasters={masterData.locationMasters}
-            onChange={updateStep4Data}
+            step3Data={bookingState.step3Data}
             disabled={isLoading}
           />
         );

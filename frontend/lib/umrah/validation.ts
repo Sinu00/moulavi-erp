@@ -54,8 +54,8 @@ export const calculateDuration = (arrival: string, departure: string) => {
 };
 
 export const calculateHotelCoverage = (arrivalDate: string, departureDate: string, hotelBookings: any[]) => {
-  if (!arrivalDate || !departureDate || !hotelBookings) {
-    return { totalCovered: 0, uncoveredDates: [], remainingDays: 0 };
+  if (!arrivalDate || !departureDate || !hotelBookings || hotelBookings.length === 0) {
+    return { totalCovered: 0, uncoveredDates: [], remainingDays: 0, totalBookedDays: 0 };
   }
 
   const arrival = new Date(arrivalDate);
@@ -69,16 +69,23 @@ export const calculateHotelCoverage = (arrivalDate: string, departureDate: strin
   }
 
   const coveredDates = new Set<string>();
+  let totalBookedDays = 0; // Total days booked across all hotels (may exceed trip duration)
+  
   hotelBookings.forEach(booking => {
     if (booking.checkInDate && booking.checkOutDate) {
       const checkIn = new Date(booking.checkInDate);
       const checkOut = new Date(booking.checkOutDate);
       const current = new Date(checkIn);
       
+      // Calculate total booked days for this hotel
+      let hotelDays = 0;
       while (current < checkOut) {
-        coveredDates.add(current.toISOString().split('T')[0]);
+        const dateStr = current.toISOString().split('T')[0];
+        coveredDates.add(dateStr);
+        hotelDays++;
         current.setDate(current.getDate() + 1);
       }
+      totalBookedDays += hotelDays;
     }
   });
 
@@ -87,7 +94,8 @@ export const calculateHotelCoverage = (arrivalDate: string, departureDate: strin
   return {
     totalCovered: coveredDates.size,
     uncoveredDates,
-    remainingDays: uncoveredDates.length
+    remainingDays: uncoveredDates.length,
+    totalBookedDays, // Total days booked (may exceed trip duration)
   };
 };
 
@@ -135,6 +143,9 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
 
   // Hotel bookings validation for group bookings (hotels moved to Step 2)
   if (data.hotelBookings && data.hotelBookings.length > 0) {
+    const arrival = new Date(data.arrivalDate);
+    const departure = new Date(data.departureDate);
+    
     for (const booking of data.hotelBookings) {
       if (!booking.cityId || !booking.hotelId || !booking.checkInDate || !booking.checkOutDate) {
         return 'Please fill in all hotel booking details';
@@ -143,8 +154,19 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
       const checkIn = new Date(booking.checkInDate);
       const checkOut = new Date(booking.checkOutDate);
       
+      // Check-out must be after check-in
       if (checkOut <= checkIn) {
         return 'Check-out date must be after check-in date';
+      }
+      
+      // Check-in must not be before arrival date
+      if (checkIn < arrival) {
+        return `Hotel check-in date (${booking.checkInDate}) cannot be before arrival date (${data.arrivalDate})`;
+      }
+      
+      // Check-out must not be after departure date
+      if (checkOut > departure) {
+        return `Hotel check-out date (${booking.checkOutDate}) cannot be after departure date (${data.departureDate})`;
       }
     }
 
@@ -157,25 +179,55 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
   return null;
 };
 
-export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDate: string, step2Data?: { passengerCount?: number }): string | null => {
-  // Check if this is an individual booking (has accommodationType) or group booking (has transportSegments)
+export const validateStep3 = (
+  data: Step3Data, 
+  arrivalDate: string, 
+  departureDate: string, 
+  step2Data?: { passengerCount?: number; arrivalAirportId?: string },
+  locationMasters?: any[]
+): string | null => {
+  // Check if this is an individual booking (has accommodationType) or group booking (has transport selections)
   const isIndividualBooking = !!data.accommodationType;
-  const isGroupBooking = !isIndividualBooking && data.transportSegments !== undefined;
+  const isGroupBooking = !isIndividualBooking && (data.selectedTransports !== undefined || data.selectedTransport !== undefined);
 
-  // For group bookings: Step 3 is movement details only
+  // For group bookings: Step 3 is transport vehicle selection
   if (isGroupBooking) {
-    // Validate transport segments (manual movement)
-    if (!data.transportSegments || data.transportSegments.length === 0) {
-      return 'Please add movement segments';
+    // Check if arrival airport is Jeddah or Madinah - transport is mandatory
+    if (step2Data?.arrivalAirportId && locationMasters) {
+      const arrivalAirport = locationMasters.find(
+        (lm: any) => lm.id === step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
+      );
+      if (arrivalAirport) {
+        const airportCity = (arrivalAirport.city || arrivalAirport.cityMaster?.name || '').toLowerCase().trim();
+        const isJeddahOrMadinah = 
+          airportCity.includes('jeddah') || 
+          airportCity.includes('madinah') || 
+          airportCity.includes('madina') || 
+          airportCity.includes('medina');
+        
+        if (isJeddahOrMadinah && !data.selectedTransports && !data.selectedTransport) {
+          return 'Transport is mandatory for arrivals at Jeddah or Madinah airports. Please select at least one transport vehicle.';
+        }
+      }
     }
 
-    // Validate transport segments
-    for (const segment of data.transportSegments) {
-      if (!segment.fromLocationId || !segment.toLocationId) {
-        return 'Please fill in from and to locations for all movement segments';
+    // Validate transport selection
+    if (!data.selectedTransports && !data.selectedTransport) {
+      return 'Please select at least one transport vehicle';
+    }
+
+    if (data.selectedTransports && data.selectedTransports.length > 0) {
+      for (const transport of data.selectedTransports) {
+        if (!transport.routeId || !transport.transportId || !transport.vehicleTypeId) {
+          return 'Please complete all transport selections';
+        }
+        if (transport.quantity && transport.quantity < 1) {
+          return 'Transport quantity must be at least 1';
+        }
       }
-      if (!segment.travelDate) {
-        return 'Travel date is required for all movement segments';
+    } else if (data.selectedTransport) {
+      if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
+        return 'Please complete transport selection';
       }
     }
     return null; // Group booking validation complete
@@ -236,80 +288,38 @@ export const validateStep3 = (data: Step3Data, arrivalDate: string, departureDat
 
 export const validateStep4 = (
   data: Step4Data, 
-  step1Data?: Step1Data, 
-  step2Data?: Step2Data, 
-  step3Data?: Step3Data,
-  locationMasters?: any[]
+  arrivalDate?: string,
+  departureDate?: string
 ): string | null => {
-  // Step 4: Transport Vehicle Selection
-  // Transport is optional unless: arrivalAirport is Jeddah AND accommodationType is hotel
+  // Step 4: Movement Details (for group bookings)
+  // Validate movements array
   
-  // Check if transport is required
-  const isTransportRequired = (() => {
-    if (!step2Data?.arrivalAirportId || !step3Data?.accommodationType) {
-      return false;
+  // Check if this is a group booking (has movements)
+  const isGroupBooking = data.movements !== undefined;
+  
+  if (isGroupBooking) {
+    // Validate unified movements array
+    if (!data.movements || data.movements.length === 0) {
+      return 'Please add movements. Select transport routes in Step 3 to auto-generate, or add manually.';
     }
-    
-    // Check if arrival airport is Jeddah
-    const arrivalAirport = locationMasters?.find(
-      (lm) => lm.id === step2Data.arrivalAirportId && lm.locationType === 'AIRPORT'
-    );
-    
-    const isJeddah = arrivalAirport && (
-      arrivalAirport.code === 'JED' || 
-      arrivalAirport.name?.toLowerCase().includes('jeddah')
-    );
-    
-    return isJeddah && step3Data.accommodationType === 'hotel';
-  })();
-  
-  // Check if we have either single or multiple transport selection
-  const hasSingleTransport = !!data.selectedTransport;
-  const hasMultipleTransports = !!(data.selectedTransports && data.selectedTransports.length > 0);
-  
-  // If transport is required, validate it
-  if (isTransportRequired) {
-    if (!hasSingleTransport && !hasMultipleTransports) {
-      return 'Please select a transport vehicle for your route (required for Jeddah arrival with hotel accommodation)';
-    }
-  }
-  
-  // Validate single transport if provided
-  if (hasSingleTransport && data.selectedTransport) {
-    if (!data.selectedTransport.routeId || !data.selectedTransport.transportId || !data.selectedTransport.vehicleTypeId) {
-      return 'Invalid transport selection. Please select again.';
-    }
-  }
-  
-  // Validate multiple transports if provided (for fulltrip routes)
-  if (hasMultipleTransports) {
-    if (!data.selectedTransports || data.selectedTransports.length === 0) {
-      return 'Please select at least one vehicle for your route.';
-    }
-    
-    // Validate each transport in the array
-    for (const transport of data.selectedTransports) {
-      if (!transport.routeId || !transport.transportId || !transport.vehicleTypeId || !transport.price) {
-        return 'Invalid transport selection. Please select again.';
+
+    // Validate each movement
+    for (const movement of data.movements) {
+      if (!movement.fromLocationId || !movement.toLocationId) {
+        return 'Please fill in from and to locations for all movements';
       }
-      if (!transport.quantity || transport.quantity < 1) {
-        return 'Each selected vehicle must have a quantity of at least 1.';
+      if (!movement.date) {
+        return 'Date is required for all movements';
+      }
+      if (!movement.time) {
+        return 'Time is required for all movements';
       }
     }
-    
-    // Check if total capacity meets passenger count
-    if (step2Data?.passengerCount) {
-      const totalCapacity = data.selectedTransports.reduce((sum, t) => {
-        // We need to get the vehicle type capacity, but we don't have it here
-        // This will be validated in the component itself
-        return sum;
-      }, 0);
-      
-      // Note: Capacity validation is done in the UI component
-      // We just validate the structure here
-    }
+    return null; // Group booking validation complete
   }
   
+  // For individual bookings, Step4Data might not have movements
+  // (Individual bookings use different flow)
   return null;
 };
 

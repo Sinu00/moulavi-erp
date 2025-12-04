@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Step4Data, Step2Data, Step1Data, Step3Data, LocationMaster } from '@/lib/umrah/types';
 import { transportRouteMasterAPI, transportMasterAPI } from '@/lib/api';
 import { toast } from 'sonner';
-import { Truck, Loader2, Users, MapPin, Plus, Minus } from 'lucide-react';
+import { Truck, Loader2, Users, MapPin, Plus, Minus, Star } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -25,12 +25,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TransportRouteMaster, TransportMaster, RouteType } from '@/types';
 
 interface TransportVehicleSelectionStepProps {
-  data: Step4Data;
+  data: Step3Data; // Now Step 3 is transport selection
   step1Data: Step1Data;
   step2Data: Step2Data;
   step3Data?: Step3Data; // Optional: for individual bookings where hotels are in step3
   locationMasters?: LocationMaster[];
-  onChange: (data: Partial<Step4Data>) => void;
+  onChange: (data: Partial<Step3Data>) => void; // Now updates Step3Data
   disabled?: boolean;
 }
 
@@ -67,20 +67,14 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
 
     // Get hotel cities - check both step2Data (group bookings) and step3Data (individual bookings)
     const hotelBookings = step2Data.hotelBookings || step3Data?.hotelBookings || [];
-    const hotelCities = new Set<string>();
-    hotelBookings.forEach((booking) => {
-      const hotel = locationMasters.find((lm) => lm.id === booking.hotelId && lm.locationType === 'HOTEL');
-      if (hotel?.cityMaster?.id) {
-        hotelCities.add(hotel.cityMaster.id);
-      }
-    });
 
-    // Add hotel cities in order (preserve order from hotel bookings)
+    // Add hotel cities in order (preserve ALL hotel bookings including duplicates)
+    // This ensures routes like Jeddah → Makkah → Madinah → Makkah → Jeddah are preserved
     hotelBookings.forEach((booking) => {
       const hotel = locationMasters.find((lm) => lm.id === booking.hotelId && lm.locationType === 'HOTEL');
       const cityId = hotel?.cityMaster?.id;
-      if (cityId && !cityIds.includes(cityId)) {
-        cityIds.push(cityId);
+      if (cityId) {
+        cityIds.push(cityId); // Always add, even if duplicate
       }
     });
 
@@ -330,8 +324,8 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                 <SelectItem value="all">All Route Types</SelectItem>
                 <SelectItem value="fulltrip">Full Trip</SelectItem>
                 <SelectItem value="airporttocity">Airport to City</SelectItem>
-                <SelectItem value="citytocity">City to City</SelectItem>
                 <SelectItem value="citytoairport">City to Airport</SelectItem>
+                <SelectItem value="tripandtour">Trip and Tour</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -395,21 +389,55 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {routeTransports.map((transport) => {
-                    if (!transport.vehicleType) return null;
-                    const quantity = selectedVehicles.get(transport.id) || 0;
-                    const price = Number(transport.price);
-                    const total = price * quantity;
-                    const isSelected = quantity > 0;
+                  {(() => {
+                    // Calculate the best recommendation: vehicle closest to passenger count
+                    const passengerCount = step1Data?.passengerCount || step2Data?.passengerCount || 0;
+                    let recommendedTransportId: string | null = null;
+                    
+                    if (selectedRouteId && passengerCount > 0) {
+                      // Find vehicles that can accommodate passengers
+                      const suitableVehicles = routeTransports
+                        .filter(t => t.vehicleType && t.vehicleType.paxCount >= passengerCount && t.vehicleType.paxCount > 0)
+                        .map(t => ({
+                          id: t.id,
+                          paxCount: t.vehicleType!.paxCount,
+                          difference: t.vehicleType!.paxCount - passengerCount, // How much extra capacity
+                        }));
+                      
+                      // Select the one with smallest difference (closest match)
+                      if (suitableVehicles.length > 0) {
+                        const bestMatch = suitableVehicles.reduce((best, current) => 
+                          current.difference < best.difference ? current : best
+                        );
+                        recommendedTransportId = bestMatch.id;
+                      }
+                    }
+                    
+                    return routeTransports.map((transport) => {
+                      if (!transport.vehicleType) return null;
+                      const quantity = selectedVehicles.get(transport.id) || 0;
+                      const price = Number(transport.price);
+                      const total = price * quantity;
+                      const isSelected = quantity > 0;
+                      
+                      // Only recommend the vehicle closest to passenger count
+                      const isRecommended = transport.id === recommendedTransportId;
+                    
                     return (
                       <TableRow 
                         key={transport.id}
-                        className={isSelected ? 'bg-red-50' : ''}
+                        className={isSelected ? 'bg-red-50' : isRecommended ? 'bg-red-50' : ''}
                       >
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <Truck className={`h-4 w-4 ${isSelected ? 'text-red-600' : 'text-gray-400'}`} />
                             <span className="font-medium text-gray-900">{transport.vehicleType.vehicleName}</span>
+                            {isRecommended && (
+                              <div className="flex items-center space-x-1 text-red-600" title="Recommended: Matches route and fits passenger count">
+                                <Star className="h-3.5 w-3.5 fill-red-600" />
+                                <span className="text-xs font-medium">Recommended</span>
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -457,7 +485,8 @@ export const TransportVehicleSelectionStep: React.FC<TransportVehicleSelectionSt
                         </TableCell>
                       </TableRow>
                     );
-                  })}
+                  });
+                  })()}
                 </TableBody>
               </Table>
             </div>

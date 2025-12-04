@@ -31,12 +31,16 @@ export const useHotelCoverage = ({
   const coveredDays = totalDays - coverage.remainingDays;
   const coveragePercentage =
     totalDays > 0 ? Math.round((coveredDays / totalDays) * 100) : 0;
+  
+  // Calculate days beyond trip duration
+  const daysBeyond = Math.max(0, (coverage.totalBookedDays || 0) - totalDays);
 
   return {
     ...coverage,
     totalDays,
     coveredDays,
     coveragePercentage,
+    daysBeyond, // Days booked beyond the trip duration
   };
 };
 

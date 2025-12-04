@@ -30,11 +30,13 @@ export const useGroupUmrahBooking = () => {
       hotelBookings: [], // Moved from step3Data for group bookings
     },
     step3Data: {
-      transportSegments: [],
-      ziyaraths: [],
+      // Step 3 is now transport vehicle selection
+      selectedTransport: undefined,
+      selectedTransports: undefined,
     },
     step4Data: {
-      selectedTransport: undefined,
+      // Step 4 is now movement details
+      movements: [], // NEW: Unified movements array
     },
     step5Data: {
       passengers: [{
@@ -224,65 +226,15 @@ export const useGroupUmrahBooking = () => {
   };
 
   const submitStep3 = async () => {
-    setIsLoading(true);
-    try {
-      // Use passengerCount from step2Data for paxCount in transport segments
-      const passengerCount = bookingState.step2Data.passengerCount || 1;
-      
-      const step3Payload = {
-        ...bookingState.step3Data,
-        // Don't include hotelBookings here - they're already validated in step2
-        // Ensure transportSegments have required fields for backend
-        transportSegments: (bookingState.step3Data.transportSegments || []).map(segment => ({
-          ...segment,
-          vehicleType: '', // Keep empty - will be updated later in admin UI
-          paxCount: passengerCount, // Use passengerCount from step1
-        })),
-      };
-
-      const response = await fetch(`${API_URL}/umrah-visa/group/step3`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-        body: JSON.stringify(step3Payload),
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        setBookingState(prev => ({
-          ...prev,
-          completedSteps: [...prev.completedSteps, 3],
-          currentStep: 4,
-        }));
-        setStepDataHashes(prev => ({ ...prev, 3: generateStepDataHash(3) }));
-        toast.success('Step 3 validated successfully');
-        return true;
-      } else {
-        toast.error(data.error || 'Failed to validate step 3');
-        return false;
-      }
-    } catch (error) {
-      console.error('Error validating step 3:', error);
-      toast.error('Failed to validate step 3');
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const submitStep4 = async () => {
-    // Step 4: Transport Vehicle Selection - just validate and move to next step
+    // Step 3: Transport Vehicle Selection - just validate and move to next step
     setIsLoading(true);
     try {
       // Validate that at least one transport has quantity > 0
       const hasTransports = !!(
-        bookingState.step4Data.selectedTransports && 
-        bookingState.step4Data.selectedTransports.length > 0 &&
-        bookingState.step4Data.selectedTransports.some(st => st.quantity > 0)
-      );
+        bookingState.step3Data.selectedTransports && 
+        bookingState.step3Data.selectedTransports.length > 0 &&
+        bookingState.step3Data.selectedTransports.some(st => st.quantity > 0)
+      ) || !!bookingState.step3Data.selectedTransport;
       
       if (!hasTransports) {
         toast.error('Please select at least one transport vehicle');
@@ -291,15 +243,38 @@ export const useGroupUmrahBooking = () => {
 
       setBookingState(prev => ({
         ...prev,
+        completedSteps: [...prev.completedSteps, 3],
+        currentStep: 4,
+      }));
+      setStepDataHashes(prev => ({ ...prev, 3: generateStepDataHash(3) }));
+      toast.success('Transport vehicle selected');
+      return true;
+    } catch (error) {
+      console.error('Error validating step 3:', error);
+      toast.error('Failed to validate transport selection');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitStep4 = async () => {
+    // Step 4: Movement Details - just validate and move to next step
+    setIsLoading(true);
+    try {
+      // Movements are validated in the validation function
+      // Just move to next step if valid
+      setBookingState(prev => ({
+        ...prev,
         completedSteps: [...prev.completedSteps, 4],
         currentStep: 5,
       }));
       setStepDataHashes(prev => ({ ...prev, 4: generateStepDataHash(4) }));
-      toast.success('Transport vehicle selected');
+      toast.success('Step 4 validated successfully');
       return true;
     } catch (error) {
       console.error('Error validating step 4:', error);
-      toast.error('Failed to validate transport selection');
+      toast.error('Failed to validate step 4');
       return false;
     } finally {
       setIsLoading(false);
@@ -311,11 +286,19 @@ export const useGroupUmrahBooking = () => {
 
     setIsLoading(true);
     try {
-      // Copy hotel bookings from step2Data to step3Data for backend compatibility
-      // The backend will convert ziyaraths to transport segments
-      const step3DataWithHotels = {
-        ...bookingState.step3Data,
+      // Step 3 is transport selection, Step 4 is movements
+      // Backend expects: step3 = movements, step4 = transport
+      // So we need to swap them for backend compatibility
+      const step3PayloadForBackend = {
+        // Movements from step4Data
+        movements: bookingState.step4Data.movements || [],
         hotelBookings: bookingState.step2Data.hotelBookings || [],
+      };
+      
+      const step4PayloadForBackend = {
+        // Transport selections from step3Data
+        selectedTransport: bookingState.step3Data.selectedTransport,
+        selectedTransports: bookingState.step3Data.selectedTransports,
       };
 
       // Create FormData for file upload
@@ -331,13 +314,8 @@ export const useGroupUmrahBooking = () => {
       formData.append('partyId', partyId);
       formData.append('step1', JSON.stringify(bookingState.step1Data));
       formData.append('step2', JSON.stringify(bookingState.step2Data));
-      formData.append('step3', JSON.stringify(step3DataWithHotels));
-      formData.append('step4', JSON.stringify({
-        selectedTransport: bookingState.step4Data.selectedTransport,
-        selectedTransports: bookingState.step4Data.selectedTransports,
-        // passengerCount removed - backend reads from step2Data
-        // No passengers array needed - backend will create from passengerCount
-      }));
+      formData.append('step3', JSON.stringify(step3PayloadForBackend));
+      formData.append('step4', JSON.stringify(step4PayloadForBackend));
 
       const response = await fetch(`${API_URL}/umrah-visa/group/create-booking`, {
         method: 'POST',

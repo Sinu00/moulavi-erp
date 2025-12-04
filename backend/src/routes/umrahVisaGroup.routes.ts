@@ -432,7 +432,8 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         }
       }
 
-      // 6.5. Create UmrahMovementDetail entries from step3Data (transportSegments and ziyaraths)
+      // 6.5. Create UmrahMovementDetail entries from step3Data.movements (unified model)
+      // NEW: Simple unified approach - movements are already sorted chronologically
       const movementDetailsToCreate: Array<{
         bookingId: string;
         travelDateTime: Date;
@@ -442,173 +443,175 @@ router.post('/group/create-booking', authenticate, upload.single('panCardZipFile
         toLocationId: string;
       }> = [];
 
-      // Process transportSegments
-      // Frontend sends: fromLocationId/toLocationId = City IDs, fromHotelId/toHotelId = LocationMaster IDs
-      // Database needs: fromCityId/toCityId = City IDs, fromLocationId/toLocationId = LocationMaster IDs
-      if (step3Data.transportSegments && Array.isArray(step3Data.transportSegments)) {
-        for (const segment of step3Data.transportSegments) {
-          // Map frontend data to database structure
-          let fromCityId: string;
-          let fromLocationId: string;
-          let toCityId: string;
-          let toLocationId: string;
+      // Helper: Find or create Viabadr city
+      const getViabadrCityId = async (countryId: string): Promise<string> => {
+        // Try to find existing Viabadr city
+        let viabadrCity = await prisma.cityMaster.findFirst({
+          where: {
+            name: { equals: 'Viabadr', mode: 'insensitive' },
+            countryId: countryId,
+            isActive: true,
+          },
+        });
 
-          // Handle "from" location using pre-fetched maps
-          if (segment.fromHotelId) {
-            // fromHotelId is the LocationMaster ID (specific hotel/airport)
-            const fromLocation = locationMap.get(segment.fromHotelId);
-            if (!fromLocation) {
-              throw new Error(`Invalid fromHotelId in transport segment: ${segment.fromHotelId}`);
-            }
-            fromLocationId = fromLocation.id; // LocationMaster ID
-            fromCityId = fromLocation.cityId; // City ID from LocationMaster
-          } else if (segment.fromLocationId) {
-            // fromLocationId could be a City ID or LocationMaster ID
-            const resolvedLocationId = resolveLocationId(segment.fromLocationId);
-            if (!resolvedLocationId) {
-              throw new Error(`No LocationMaster found for fromLocationId: ${segment.fromLocationId}`);
-            }
-            const fromLocation = locationMap.get(resolvedLocationId);
-            if (!fromLocation) {
-              throw new Error(`Invalid fromLocationId in transport segment: ${segment.fromLocationId}`);
-            }
-            fromCityId = fromLocation.cityId;
-            fromLocationId = fromLocation.id;
-          } else {
-            throw new Error(`Missing from location in transport segment`);
+        // If not found, create it (using the same country as Madinah)
+        if (!viabadrCity) {
+          viabadrCity = await prisma.cityMaster.create({
+            data: {
+              name: 'Viabadr',
+              countryId: countryId,
+              isActive: true,
+            },
+          });
+        }
+
+        return viabadrCity.id;
+      };
+
+      // Process unified movements array (simplified!)
+      if (step3Data.movements && Array.isArray(step3Data.movements) && step3Data.movements.length > 0) {
+        for (const movement of step3Data.movements) {
+          // Get LocationMaster for "from" location
+          const fromLocation = locationMap.get(movement.fromLocationId);
+          if (!fromLocation) {
+            throw new Error(`Invalid fromLocationId in movement: ${movement.fromLocationId}`);
           }
 
-          // Handle "to" location using pre-fetched maps
-          if (segment.toHotelId) {
-            // toHotelId is the LocationMaster ID (specific hotel/airport)
-            const toLocation = locationMap.get(segment.toHotelId);
-            if (!toLocation) {
-              throw new Error(`Invalid toHotelId in transport segment: ${segment.toHotelId}`);
-            }
-            toLocationId = toLocation.id; // LocationMaster ID
-            toCityId = toLocation.cityId; // City ID from LocationMaster
-          } else if (segment.toLocationId) {
-            // toLocationId could be a City ID or LocationMaster ID
-            const resolvedLocationId = resolveLocationId(segment.toLocationId);
-            if (!resolvedLocationId) {
-              throw new Error(`No LocationMaster found for toLocationId: ${segment.toLocationId}`);
-            }
-            const toLocation = locationMap.get(resolvedLocationId);
-            if (!toLocation) {
-              throw new Error(`Invalid toLocationId in transport segment: ${segment.toLocationId}`);
-            }
-            toCityId = toLocation.cityId;
-            toLocationId = toLocation.id;
-          } else {
-            throw new Error(`Missing to location in transport segment`);
+          // Get LocationMaster for "to" location
+          const toLocation = locationMap.get(movement.toLocationId);
+          if (!toLocation) {
+            throw new Error(`Invalid toLocationId in movement: ${movement.toLocationId}`);
           }
 
-          // Combine travelDate and travelTime into travelDateTime
-          // If time is missing or empty, default to 12:00 PM (noon)
-          const timeToUse = segment.travelTime && segment.travelTime.trim() !== '' 
-            ? segment.travelTime 
-            : '12:00'; // Default to noon if time is not provided
+          // Check if Viabadr override is enabled - always use Viabadr for "To" city
+          let toCityId = toLocation.cityId;
+          if (movement.viabadrOverride) {
+            // Get the "To" location's city to get the countryId for Viabadr
+            const toCity = await prisma.cityMaster.findUnique({
+              where: { id: toLocation.cityId },
+              select: { name: true, countryId: true },
+            });
 
-          if (!segment.travelDate) {
-            throw new Error(`Missing travel date for transport segment from ${fromLocationId} to ${toLocationId}`);
+            if (toCity) {
+              // Always use Viabadr city for "To" when override is enabled
+              toCityId = await getViabadrCityId(toCity.countryId);
+            }
           }
 
-          const travelDateTime = combineDateTime(segment.travelDate, timeToUse);
+          // Combine date and time
+          const timeToUse = movement.time && movement.time.trim() !== '' ? movement.time : '12:00';
+          if (!movement.date) {
+            throw new Error(`Missing date for movement from ${movement.fromLocationId} to ${movement.toLocationId}`);
+          }
 
+          const travelDateTime = combineDateTime(movement.date, timeToUse);
           if (!travelDateTime) {
-            throw new Error(`Invalid travel date/time for transport segment from ${fromLocationId} to ${toLocationId}. Date: ${segment.travelDate}, Time: ${timeToUse}`);
+            throw new Error(`Invalid travel date/time for movement from ${movement.fromLocationId} to ${movement.toLocationId}`);
           }
 
           movementDetailsToCreate.push({
             bookingId: booking.id,
             travelDateTime,
-            fromCityId,
-            fromLocationId,
-            toCityId,
-            toLocationId,
+            fromCityId: fromLocation.cityId,
+            fromLocationId: fromLocation.id,
+            toCityId: toCityId, // Use Viabadr cityId if override is enabled
+            toLocationId: toLocation.id,
           });
         }
-      }
+      } else if (step3Data.transportSegments || step3Data.ziyaraths) {
+        // BACKWARD COMPATIBILITY: Handle old format (transportSegments + ziyaraths)
+        // This code path can be removed after migration is complete
+        console.warn('[umrahVisaGroup] Using legacy transportSegments/ziyaraths format. Please migrate to unified movements array.');
 
-      // Process ziyaraths
-      if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths) && step3Data.ziyaraths.length > 0) {
-        // Create a combined list of all movements (transport segments + ziyaraths) for sorting
-        const transportMovements = movementDetailsToCreate.map((md) => ({
-          type: 'transport' as const,
-          travelDateTime: md.travelDateTime,
-          data: md,
-        }));
+        // Process transportSegments (old format)
+        if (step3Data.transportSegments && Array.isArray(step3Data.transportSegments)) {
+          for (const segment of step3Data.transportSegments) {
+            const fromLocationId = segment.fromHotelId || segment.fromLocationId;
+            const toLocationId = segment.toHotelId || segment.toLocationId;
 
-        const ziyarathMovements = step3Data.ziyaraths.map((z: { id: string; ziyarathId: string; date: Date | string; time: string }) => ({
-          type: 'ziyarath' as const,
-          travelDateTime: combineDateTime(
-            z.date instanceof Date ? z.date.toISOString().split('T')[0] : z.date,
-            z.time
-          ),
-          data: z,
-        }));
+            if (!fromLocationId || !toLocationId) {
+              throw new Error(`Missing location IDs in transport segment`);
+            }
 
-        // Sort all movements by date/time
-        const allMovements = [...transportMovements, ...ziyarathMovements]
-          .filter((m) => m.travelDateTime !== null)
-          .sort((a, b) => {
-            const dateA = a.travelDateTime as Date;
-            const dateB = b.travelDateTime as Date;
-            return dateA.getTime() - dateB.getTime();
-          });
+            const fromLocation = locationMap.get(fromLocationId);
+            const toLocation = locationMap.get(toLocationId);
 
-        // Process ziyaraths in chronological order
-        // Track current location as we iterate (simpler than nested loops)
-        let currentCityId: string | null = null;
-        let currentLocationId: string | null = null;
+            if (!fromLocation || !toLocation) {
+              throw new Error(`Invalid location IDs in transport segment`);
+            }
 
-        // Initialize current location from last hotel booking if available
-        if (hotelBookingsData.length > 0) {
-          const lastHotel = hotelBookingsData[hotelBookingsData.length - 1];
-          const lastHotelLocation = locationMap.get(lastHotel.hotelId);
-          if (lastHotelLocation) {
-            currentCityId = lastHotelLocation.cityId;
-            currentLocationId = lastHotelLocation.id;
+            const timeToUse = segment.travelTime && segment.travelTime.trim() !== '' ? segment.travelTime : '12:00';
+            if (!segment.travelDate) {
+              throw new Error(`Missing travel date for transport segment`);
+            }
+
+            const travelDateTime = combineDateTime(segment.travelDate, timeToUse);
+            if (!travelDateTime) {
+              throw new Error(`Invalid travel date/time for transport segment`);
+            }
+
+            movementDetailsToCreate.push({
+              bookingId: booking.id,
+              travelDateTime,
+              fromCityId: fromLocation.cityId,
+              fromLocationId: fromLocation.id,
+              toCityId: toLocation.cityId,
+              toLocationId: toLocation.id,
+            });
           }
         }
 
-        for (const movement of allMovements) {
-          if (movement.type === 'transport') {
-            // Update current location to transport segment's destination
-            const transportData = movement.data as any;
-            currentCityId = transportData.toCityId;
-            currentLocationId = transportData.toLocationId;
-          } else if (movement.type === 'ziyarath') {
-            const ziyarath = movement.data as any;
+        // Process ziyaraths (old format) - simplified: ziyarath movements already have explicit from/to
+        if (step3Data.ziyaraths && Array.isArray(step3Data.ziyaraths) && step3Data.ziyaraths.length > 0) {
+          // Note: Old format ziyaraths need "from" location inferred, but we'll use the last transport destination
+          // This is a simplified backward compatibility approach
+          let lastLocationId: string | null = null;
+          let lastCityId: string | null = null;
 
-            // Get ziyarath's LocationMaster using pre-fetched map
+          // Get last location from transport segments or hotel bookings
+          if (movementDetailsToCreate.length > 0) {
+            const lastMovement = movementDetailsToCreate[movementDetailsToCreate.length - 1];
+            lastLocationId = lastMovement.toLocationId;
+            lastCityId = lastMovement.toCityId;
+          } else if (hotelBookingsData.length > 0) {
+            const lastHotel = hotelBookingsData[hotelBookingsData.length - 1];
+            const lastHotelLocation = locationMap.get(lastHotel.hotelId);
+            if (lastHotelLocation) {
+              lastLocationId = lastHotelLocation.id;
+              lastCityId = lastHotelLocation.cityId;
+            }
+          }
+
+          for (const ziyarath of step3Data.ziyaraths) {
             const ziyarathLocation = locationMap.get(ziyarath.ziyarathId);
             if (!ziyarathLocation) {
               throw new Error(`Invalid ziyarath location ID: ${ziyarath.ziyarathId}`);
             }
 
-            // Use current location as "from" location
-            if (!currentCityId || !currentLocationId) {
-              throw new Error(`Cannot determine 'from' location for ziyarath ${ziyarath.ziyarathId}. No previous movement found.`);
+            if (!lastLocationId || !lastCityId) {
+              throw new Error(`Cannot determine 'from' location for ziyarath ${ziyarath.ziyarathId}`);
             }
 
-            // travelDateTime was already calculated during sorting
-            const travelDateTime = movement.travelDateTime as Date;
+            const ziyarathDate = ziyarath.date instanceof Date 
+              ? ziyarath.date.toISOString().split('T')[0] 
+              : ziyarath.date;
+            const travelDateTime = combineDateTime(ziyarathDate, ziyarath.time);
+            if (!travelDateTime) {
+              throw new Error(`Invalid travel date/time for ziyarath`);
+            }
 
-            const ziyarathMovement = {
+            movementDetailsToCreate.push({
               bookingId: booking.id,
               travelDateTime,
-              fromCityId: currentCityId,
-              fromLocationId: currentLocationId,
+              fromCityId: lastCityId,
+              fromLocationId: lastLocationId,
               toCityId: ziyarathLocation.cityId,
-              toLocationId: ziyarath.ziyarathId,
-            };
+              toLocationId: ziyarathLocation.id,
+            });
 
-            movementDetailsToCreate.push(ziyarathMovement);
-
-            // Update current location to ziyarath's location
-            currentCityId = ziyarathLocation.cityId;
-            currentLocationId = ziyarath.ziyarathId;
+            // Update last location to ziyarath location
+            lastLocationId = ziyarathLocation.id;
+            lastCityId = ziyarathLocation.cityId;
           }
         }
       }

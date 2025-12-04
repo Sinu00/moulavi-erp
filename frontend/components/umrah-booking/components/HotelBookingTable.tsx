@@ -16,6 +16,8 @@ interface HotelBookingTableProps {
   disabled?: boolean;
   showAddButton?: boolean;
   emptyStateMessage?: string;
+  arrivalDate?: string; // For date range validation
+  departureDate?: string; // For date range validation
 }
 
 export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
@@ -29,6 +31,8 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
   disabled = false,
   showAddButton = false,
   emptyStateMessage,
+  arrivalDate,
+  departureDate,
 }) => {
   // Store raw input values for BRN fields to preserve commas while typing
   const [brnInputs, setBrnInputs] = useState<{ [key: number]: string }>({});
@@ -102,10 +106,10 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
               Check-in
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Check-out
+              Duration
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
-              Duration
+              Check-out
             </th>
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
               BRN
@@ -177,39 +181,26 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                   <Input
                     type="date"
                     value={booking.checkInDate}
+                    min={arrivalDate} // Visual guidance only
+                    max={departureDate} // Visual guidance only
                     onChange={(e) => {
-                      onUpdateBooking(index, 'checkInDate', e.target.value);
+                      const selectedDate = e.target.value;
+                      // Allow any date to be entered - validation happens on next step
+                      onUpdateBooking(index, 'checkInDate', selectedDate);
                       // If duration is set, recalculate check-out date
                       const durationValue = durationInputs[index] ?? (duration > 0 ? duration.toString() : '');
                       const durationNum = parseInt(durationValue, 10);
-                      if (!isNaN(durationNum) && durationNum > 0 && e.target.value) {
-                        const checkIn = new Date(e.target.value);
+                      if (!isNaN(durationNum) && durationNum > 0 && selectedDate) {
+                        const checkIn = new Date(selectedDate);
                         const checkOut = new Date(checkIn);
                         checkOut.setDate(checkOut.getDate() + durationNum);
+                        // Allow check-out to exceed departure date - user can see this in coverage indicator
                         const checkOutStr = checkOut.toISOString().split('T')[0];
                         onUpdateBooking(index, 'checkOutDate', checkOutStr);
-                      } else if (e.target.value && booking.checkOutDate) {
+                      } else if (selectedDate && booking.checkOutDate) {
                         // If check-out exists but no duration set, recalculate duration
-                        const checkIn = new Date(e.target.value);
+                        const checkIn = new Date(selectedDate);
                         const checkOut = new Date(booking.checkOutDate);
-                        const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-                        setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
-                      }
-                    }}
-                    className="w-full"
-                    disabled={disabled}
-                  />
-                </td>
-                <td className="border border-gray-200 p-3">
-                  <Input
-                    type="date"
-                    value={booking.checkOutDate}
-                    onChange={(e) => {
-                      onUpdateBooking(index, 'checkOutDate', e.target.value);
-                      // Update duration when check-out changes manually
-                      if (e.target.value && booking.checkInDate) {
-                        const checkIn = new Date(booking.checkInDate);
-                        const checkOut = new Date(e.target.value);
                         const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
                         setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
                       }
@@ -235,6 +226,7 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                         const checkIn = new Date(booking.checkInDate);
                         const checkOut = new Date(checkIn);
                         checkOut.setDate(checkOut.getDate() + durationNum);
+                        // Allow check-out to exceed departure date - user can see this in coverage indicator
                         const checkOutStr = checkOut.toISOString().split('T')[0];
                         onUpdateBooking(index, 'checkOutDate', checkOutStr);
                       } else if (inputValue === '' || inputValue === '0') {
@@ -264,6 +256,33 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
                     }}
                     className="w-full"
                     disabled={disabled || !booking.checkInDate}
+                  />
+                </td>
+                <td className="border border-gray-200 p-3">
+                  <Input
+                    type="date"
+                    value={booking.checkOutDate}
+                    min={booking.checkInDate || arrivalDate} // Visual guidance only
+                    max={departureDate} // Visual guidance only
+                    onChange={(e) => {
+                      const selectedDate = e.target.value;
+                      // Allow any date to be entered - validation happens on next step
+                      // Only validate that check-out is after check-in
+                      if (booking.checkInDate && selectedDate <= booking.checkInDate) {
+                        return; // Don't update if before or equal to check-in
+                      }
+                      
+                      onUpdateBooking(index, 'checkOutDate', selectedDate);
+                      // Update duration when check-out changes manually
+                      if (selectedDate && booking.checkInDate) {
+                        const checkIn = new Date(booking.checkInDate);
+                        const checkOut = new Date(selectedDate);
+                        const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                        setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
+                      }
+                    }}
+                    className="w-full"
+                    disabled={disabled}
                   />
                 </td>
                 <td className="border border-gray-200 p-3">

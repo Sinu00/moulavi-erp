@@ -22,29 +22,60 @@ export interface Step2Data {
   hotelBookings?: HotelBooking[]; // For group bookings, hotels are in Step 2
 }
 
-export interface Step3Data {
-  accommodationType?: 'hotel' | 'iqama'; // Made optional for group bookings
-  iqamaDetails?: IqamaDetails;
-  hotelBookings?: HotelBooking[]; // For backward compatibility and submission
-  transportSegments?: TransportBooking[];
-  ziyarah?: ZiyarahBooking[];
-  ziyaraths?: Array<{
-    id: string; // Unique ID for this entry
-    ziyarathId: string; // LocationMaster ID of the ziyarath
-    date: string; // yyyy-MM-dd
-    time: string; // HH:mm
-  }>;
+// Unified Movement interface - replaces transportSegments and ziyaraths
+export interface Movement {
+  id: string; // Unique ID for this movement
+  type: 'transport' | 'ziyarath';
+  fromLocationId: string; // LocationMaster ID (hotel/airport/ziyarath)
+  toLocationId: string; // LocationMaster ID
+  date: string; // yyyy-MM-dd
+  time: string; // HH:mm
+  paxCount?: number;
+  price?: number;
+  viabadrOverride?: boolean; // If true, display/store "Viabadr" instead of "Madinah" for toLocation city
 }
 
-export interface Step4Data {
-  // Single transport selection (for non-fulltrip routes)
+export interface Step3Data {
+  // For group bookings: transport vehicle selection (Step 3 is transport selection)
   selectedTransport?: {
     routeId: string;
     transportId: string;
     vehicleTypeId: string;
     price: number;
   };
-  // Multiple transport selection (for fulltrip routes only)
+  selectedTransports?: Array<{
+    routeId: string;
+    transportId: string;
+    vehicleTypeId: string;
+    price: number;
+    quantity: number;
+  }>;
+  // For individual bookings: accommodation details
+  accommodationType?: 'hotel' | 'iqama';
+  iqamaDetails?: IqamaDetails;
+  hotelBookings?: HotelBooking[];
+  // OLD: Kept for backward compatibility during migration
+  movements?: Movement[];
+  transportSegments?: TransportBooking[];
+  ziyarah?: ZiyarahBooking[];
+  ziyaraths?: Array<{
+    id: string;
+    ziyarathId: string;
+    date: string;
+    time: string;
+  }>;
+}
+
+export interface Step4Data {
+  // For group bookings: movements array (Step 4 is movement details)
+  movements?: Movement[];
+  // For individual bookings: transport selection (backward compatibility)
+  selectedTransport?: {
+    routeId: string;
+    transportId: string;
+    vehicleTypeId: string;
+    price: number;
+  };
   selectedTransports?: Array<{
     routeId: string;
     transportId: string;

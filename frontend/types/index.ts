@@ -548,7 +548,7 @@ export interface UpdateUserRoleMasterRequest {
 }
 
 // Transport Route Master Types
-export type RouteType = 'citytocity' | 'airporttocity' | 'citytoairport' | 'tripandtour' | 'fulltrip';
+export type RouteType = 'airporttocity' | 'citytoairport' | 'tripandtour' | 'fulltrip';
 
 export interface TransportRouteMaster {
   id: string;
