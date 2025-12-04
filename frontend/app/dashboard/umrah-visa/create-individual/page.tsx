@@ -113,7 +113,7 @@ export default function AdminCreateIndividualUmrahVisaPage() {
       case 5:
         return validateStep5Movements(bookingState.step5Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, bookingState.step4Data, masterData.locationMasters);
       case 6:
-        return validateStep6(bookingState.step6Data, bookingState.step1Data, bookingState.step3Data, false);
+        return validateStep6(bookingState.step6Data || { panCardZipFile: null }, bookingState.step1Data, bookingState.step3Data, false);
       default:
         return null;
     }

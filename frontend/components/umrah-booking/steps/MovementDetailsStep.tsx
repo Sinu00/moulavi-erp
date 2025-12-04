@@ -100,7 +100,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   const areHotelsValid = React.useMemo(() => {
     if (actualHotelBookings.length === 0) return false;
     return actualHotelBookings.every(
-      (booking) =>
+      (booking: HotelBooking) =>
         booking.cityId &&
         booking.hotelId &&
         booking.checkInDate &&
@@ -190,7 +190,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
     }
 
     // Check if transport is still selected - if not, clear movements
-    const hasTransport = transportData?.selectedTransports?.length > 0 || !!transportData?.selectedTransport;
+    const hasTransport = (transportData?.selectedTransports?.length ?? 0) > 0 || !!transportData?.selectedTransport;
     if (!hasTransport) {
       // Clear movements if no transport is selected
       if (movements.length > 0) {
@@ -243,7 +243,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
         }
         
     // Only generate if transport routes are selected
-    if (hasTransport) {
+    if (hasTransport && transportData) {
       const selectedRoutes = getSelectedRoutes(transportData, availableRoutes);
       
       if (selectedRoutes.length > 0) {
@@ -294,7 +294,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   const movements = (data as Step4Data | Step5Data).movements || [];
   
   // Check if transport routes are selected
-  const hasTransportSelected = transportData?.selectedTransports?.length > 0 || !!transportData?.selectedTransport;
+  const hasTransportSelected = (transportData?.selectedTransports?.length ?? 0) > 0 || !!transportData?.selectedTransport;
   
   // Determine the transport step number for messages
   const transportStepNumber = isIndividualBooking ? 4 : 3;

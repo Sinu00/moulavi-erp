@@ -1,7 +1,7 @@
 // Umrah Visa Booking Validation Utilities
 
 import { BOOKING_LIMITS, FLIGHT_NUMBER_REGEX } from './constants';
-import { Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Passenger } from './types';
+import { Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Step6Data, Passenger } from './types';
 
 export const formatFlightNumber = (value: string): string => {
   // Remove all invalid characters and convert to uppercase

@@ -73,11 +73,11 @@ export default function UmrahVisaNewPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step2Data);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, masterData.locationMasters);
+        return validateStep4(bookingState.step4Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
       case 5:
         return validateStep5Movements(bookingState.step5Data, bookingState.step1Data, bookingState.step2Data, bookingState.step3Data, bookingState.step4Data, masterData.locationMasters);
       case 6:
-        return validateStep6(bookingState.step6Data, bookingState.step1Data, bookingState.step3Data, false);
+        return validateStep6(bookingState.step6Data || { panCardZipFile: null }, bookingState.step1Data, bookingState.step3Data, false);
       default:
         return null;
     }

@@ -264,10 +264,12 @@ const sendEmail = async (mailOptions: nodemailer.SendMailOptions): Promise<void>
 
   // Log SMTP configuration (masked)
   console.log(`${logPrefix} SMTP Configuration:`);
-  console.log(`${logPrefix}   Host: ${transporter.options.host || 'not set'}`);
-  console.log(`${logPrefix}   Port: ${transporter.options.port || 'not set'}`);
-  console.log(`${logPrefix}   Secure: ${transporter.options.secure || false}`);
-  console.log(`${logPrefix}   User: ${transporter.options.auth?.user ? `${transporter.options.auth.user.substring(0, 3)}***` : 'not set'}`);
+  const smtpOptions = transporter.options as any;
+  console.log(`${logPrefix}   Host: ${smtpOptions.host || process.env.SMTP_HOST || 'not set'}`);
+  console.log(`${logPrefix}   Port: ${smtpOptions.port || process.env.SMTP_PORT || 'not set'}`);
+  console.log(`${logPrefix}   Secure: ${smtpOptions.secure || process.env.SMTP_SECURE === 'true' || false}`);
+  const authUser = smtpOptions.auth?.user || process.env.SMTP_USER;
+  console.log(`${logPrefix}   User: ${authUser ? `${authUser.substring(0, 3)}***` : 'not set'}`);
 
   try {
     // Verify SMTP connection in development
@@ -346,7 +348,8 @@ export const sendCredentialsEmail = async (
   };
   
   console.log('[EMAIL] Email template generated');
-  console.log('[EMAIL] HTML length:', mailOptions.html?.length || 0);
+  const htmlLength = typeof mailOptions.html === 'string' ? mailOptions.html.length : 0;
+  console.log('[EMAIL] HTML length:', htmlLength);
   
   try {
     await sendEmail(mailOptions);
@@ -400,7 +403,8 @@ export const sendServiceConfirmationEmail = async (
   };
   
   console.log('[EMAIL] Email template generated');
-  console.log('[EMAIL] HTML length:', mailOptions.html?.length || 0);
+  const htmlLength = typeof mailOptions.html === 'string' ? mailOptions.html.length : 0;
+  console.log('[EMAIL] HTML length:', htmlLength);
   
   try {
     await sendEmail(mailOptions);
@@ -499,7 +503,8 @@ export const sendBillEmail = async (
   };
   
   console.log('[EMAIL] Email template generated with PDF attachment');
-  console.log('[EMAIL] HTML length:', mailOptions.html?.length || 0);
+  const htmlLength = typeof mailOptions.html === 'string' ? mailOptions.html.length : 0;
+  console.log('[EMAIL] HTML length:', htmlLength);
   console.log('[EMAIL] Attachment filename:', mailOptions.attachments?.[0]?.filename || 'N/A');
   
   try {

@@ -15,7 +15,7 @@ export const useHotelCoverage = ({
 }: UseHotelCoverageParams) => {
   const coverage = useMemo(() => {
     if (!arrivalDate || !departureDate || !hotelBookings) {
-      return { totalCovered: 0, uncoveredDates: [], remainingDays: 0 };
+      return { totalCovered: 0, uncoveredDates: [], remainingDays: 0, totalBookedDays: 0 };
     }
     return calculateHotelCoverage(arrivalDate, departureDate, hotelBookings);
   }, [arrivalDate, departureDate, hotelBookings]);
