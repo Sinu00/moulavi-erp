@@ -25,7 +25,6 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
-  ArrowUpDown,
   X
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -53,8 +52,6 @@ export default function PartyDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<'createdAt' | 'passengerCount' | 'status'>('createdAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -88,8 +85,6 @@ export default function PartyDashboardPage() {
         limit: String(pagination.limit),
         search: searchTerm || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
-        sortBy: sortBy,
-        sortOrder: sortOrder,
       };
       
       const response = await umrahVisaAPI.getBookings(params);
@@ -146,7 +141,7 @@ export default function PartyDashboardPage() {
     if (!mounted || !user || !hasRole('party')) return;
     loadBookings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, user, pagination.page, pagination.limit, searchTerm, statusFilter, sortBy, sortOrder]);
+  }, [mounted, user, pagination.page, pagination.limit, searchTerm, statusFilter]);
 
   const getStatusBadge = (status: string) => {
     if (!status) {
@@ -190,13 +185,6 @@ export default function PartyDashboardPage() {
 
   const handleStatusFilterChange = (value: string) => {
     setStatusFilter(value);
-    setPagination(prev => ({ ...prev, page: 1 }));
-  };
-
-  const handleSortChange = (value: string) => {
-    const [field, order] = value.split('-') as [typeof sortBy, typeof sortOrder];
-    setSortBy(field);
-    setSortOrder(order);
     setPagination(prev => ({ ...prev, page: 1 }));
   };
 
@@ -268,9 +256,9 @@ export default function PartyDashboardPage() {
             </div>
             
             {/* Search and Filters */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               {/* Search Bar */}
-              <div className="relative">
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type="text"
@@ -289,42 +277,23 @@ export default function PartyDashboardPage() {
                 )}
               </div>
               
-              {/* Filters Row */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                {/* Status Filter */}
-                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="documents_downloaded">Documents Downloaded</SelectItem>
-                    <SelectItem value="group_assigned">Group Assigned</SelectItem>
-                    <SelectItem value="voucher">Voucher</SelectItem>
-                    <SelectItem value="bill">Bill</SelectItem>
-                    <SelectItem value="booking_success">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {/* Sort */}
-                <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <ArrowUpDown className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="createdAt-desc">Newest First</SelectItem>
-                    <SelectItem value="createdAt-asc">Oldest First</SelectItem>
-                    <SelectItem value="passengerCount-desc">Most Passengers</SelectItem>
-                    <SelectItem value="passengerCount-asc">Fewest Passengers</SelectItem>
-                    <SelectItem value="status-asc">Status A-Z</SelectItem>
-                    <SelectItem value="status-desc">Status Z-A</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Status Filter */}
+              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="documents_downloaded">Documents Downloaded</SelectItem>
+                  <SelectItem value="group_assigned">Group Assigned</SelectItem>
+                  <SelectItem value="voucher">Voucher</SelectItem>
+                  <SelectItem value="bill">Bill</SelectItem>
+                  <SelectItem value="booking_success">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           

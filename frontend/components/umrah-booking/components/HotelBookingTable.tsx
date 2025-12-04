@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Hotel } from 'lucide-react';
@@ -89,8 +90,10 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+    <>
+      {/* Desktop Table View */}
+      <div className="hidden lg:block overflow-x-auto">
+        <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
         <thead>
           <tr className="bg-gray-50">
             <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">
@@ -354,7 +357,235 @@ export const HotelBookingTable: React.FC<HotelBookingTableProps> = ({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="lg:hidden space-y-4">
+        {hotelBookings.map((booking, index) => {
+          const location = locations.find((l) => l.id === booking.cityId);
+          const hotel = hotels.find((h) => h.id === booking.hotelId);
+          const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
+          const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+          const duration =
+            checkIn && checkOut
+              ? Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24))
+              : 0;
+
+          return (
+            <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-red-600">{index + 1}</span>
+                  </div>
+                  <h4 className="font-semibold text-gray-900">Hotel Booking #{index + 1}</h4>
+                </div>
+                {onRemoveBooking && hotelBookings.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onRemoveBooking(index)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    disabled={disabled}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-gray-600">City *</Label>
+                  <Select
+                    value={booking.cityId || undefined}
+                    onValueChange={(value) => onUpdateBooking(index, 'cityId', value)}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select city" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations
+                        .filter((location) => location.id && location.id.trim() !== '')
+                        .map((location) => (
+                          <SelectItem key={location.id} value={location.id}>
+                            {location.destinationName}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-gray-600">Hotel *</Label>
+                  <Select
+                    value={booking.hotelId || undefined}
+                    onValueChange={(value) => onUpdateBooking(index, 'hotelId', value)}
+                    disabled={disabled || !booking.cityId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select hotel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getHotelsForLocation(booking.cityId)
+                        .filter((hotel) => hotel.id && hotel.id.trim() !== '')
+                        .map((hotel) => (
+                          <SelectItem key={hotel.id} value={hotel.id}>
+                            {hotel.name || hotel.hotelName}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-gray-600">Check-in *</Label>
+                    <Input
+                      type="date"
+                      value={booking.checkInDate}
+                      min={arrivalDate}
+                      max={departureDate}
+                      onChange={(e) => {
+                        const selectedDate = e.target.value;
+                        onUpdateBooking(index, 'checkInDate', selectedDate);
+                        const durationValue = durationInputs[index] ?? (duration > 0 ? duration.toString() : '');
+                        const durationNum = parseInt(durationValue, 10);
+                        if (!isNaN(durationNum) && durationNum > 0 && selectedDate) {
+                          const checkIn = new Date(selectedDate);
+                          const checkOut = new Date(checkIn);
+                          checkOut.setDate(checkOut.getDate() + durationNum);
+                          const checkOutStr = checkOut.toISOString().split('T')[0];
+                          onUpdateBooking(index, 'checkOutDate', checkOutStr);
+                        } else if (selectedDate && booking.checkOutDate) {
+                          const checkIn = new Date(selectedDate);
+                          const checkOut = new Date(booking.checkOutDate);
+                          const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                          setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
+                        }
+                      }}
+                      className="w-full"
+                      disabled={disabled}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-gray-600">Check-out *</Label>
+                    <Input
+                      type="date"
+                      value={booking.checkOutDate}
+                      min={booking.checkInDate || arrivalDate}
+                      max={departureDate}
+                      onChange={(e) => {
+                        const selectedDate = e.target.value;
+                        if (booking.checkInDate && selectedDate <= booking.checkInDate) {
+                          return;
+                        }
+                        onUpdateBooking(index, 'checkOutDate', selectedDate);
+                        if (selectedDate && booking.checkInDate) {
+                          const checkIn = new Date(booking.checkInDate);
+                          const checkOut = new Date(selectedDate);
+                          const newDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                          setDurationInputs(prev => ({ ...prev, [index]: newDuration > 0 ? newDuration.toString() : '' }));
+                        }
+                      }}
+                      className="w-full"
+                      disabled={disabled}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-gray-600">Duration (Days)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Days"
+                    value={durationInputs[index] ?? (duration > 0 ? duration.toString() : '')}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      setDurationInputs(prev => ({ ...prev, [index]: inputValue }));
+                      const durationNum = parseInt(inputValue, 10);
+                      if (!isNaN(durationNum) && durationNum > 0 && booking.checkInDate) {
+                        const checkIn = new Date(booking.checkInDate);
+                        const checkOut = new Date(checkIn);
+                        checkOut.setDate(checkOut.getDate() + durationNum);
+                        const checkOutStr = checkOut.toISOString().split('T')[0];
+                        onUpdateBooking(index, 'checkOutDate', checkOutStr);
+                      } else if (inputValue === '' || inputValue === '0') {
+                        onUpdateBooking(index, 'checkOutDate', '');
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const inputValue = e.target.value.trim();
+                      const durationNum = parseInt(inputValue, 10);
+                      if (inputValue === '' || isNaN(durationNum) || durationNum <= 0) {
+                        setDurationInputs(prev => ({ ...prev, [index]: '' }));
+                        if (inputValue !== '' && booking.checkInDate) {
+                          const checkIn = booking.checkInDate ? new Date(booking.checkInDate) : null;
+                          const checkOut = booking.checkOutDate ? new Date(booking.checkOutDate) : null;
+                          if (checkIn && checkOut) {
+                            const calculatedDuration = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+                            setDurationInputs(prev => ({ ...prev, [index]: calculatedDuration > 0 ? calculatedDuration.toString() : '' }));
+                          }
+                        }
+                      } else {
+                        setDurationInputs(prev => ({ ...prev, [index]: durationNum.toString() }));
+                      }
+                    }}
+                    className="w-full"
+                    disabled={disabled || !booking.checkInDate}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-gray-600">BRN (comma-separated for multiple)</Label>
+                  <Input
+                    type="text"
+                    placeholder="Enter BRN (comma-separated for multiple)"
+                    value={brnInputs[index] ?? (booking.brn?.join(', ') || '')}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      setBrnInputs(prev => ({ ...prev, [index]: inputValue }));
+                      const brnArray = inputValue
+                        .split(',')
+                        .map(brn => brn.trim())
+                        .filter(brn => brn.length > 0);
+                      onUpdateBooking(index, 'brn', brnArray.length > 0 ? brnArray : []);
+                    }}
+                    onBlur={(e) => {
+                      const inputValue = e.target.value.trim();
+                      const brnArray = inputValue
+                        .split(',')
+                        .map(brn => brn.trim())
+                        .filter(brn => brn.length > 0);
+                      if (brnArray.length > 0) {
+                        setBrnInputs(prev => ({ ...prev, [index]: brnArray.join(', ') }));
+                      } else {
+                        setBrnInputs(prev => ({ ...prev, [index]: '' }));
+                      }
+                      onUpdateBooking(index, 'brn', brnArray.length > 0 ? brnArray : []);
+                    }}
+                    className="w-full"
+                    disabled={disabled}
+                  />
+                  <div className="text-xs text-gray-500">
+                    {booking.brn && booking.brn.length > 0 ? (
+                      <span className="text-blue-600 font-medium">
+                        {booking.brn.length} BRN{booking.brn.length > 1 ? 's' : ''} entered
+                      </span>
+                    ) : (
+                      <span>Separate multiple BRNs with commas</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 };
 

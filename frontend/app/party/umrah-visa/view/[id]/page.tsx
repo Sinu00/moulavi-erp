@@ -223,7 +223,7 @@ export default function ViewUmrahVisaBookingPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4">
                     <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Group Name</p>
                       <p className="text-xl font-bold text-red-600">{booking.groupName || 'N/A'}</p>
@@ -275,7 +275,7 @@ export default function ViewUmrahVisaBookingPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
                     <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                       <div className="flex items-center gap-2 mb-2">
                         <Mail className="h-4 w-4 text-red-600" />
@@ -510,7 +510,7 @@ export default function ViewUmrahVisaBookingPage() {
                   {booking.accommodationType === 'iqama' && (
                     <>
                       {booking.sponsorIqamaDetails ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4">
                           <div className="bg-red-50 rounded-lg p-4 border border-red-100">
                             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Iqama Number</p>
                             <p className="text-base font-bold text-red-600">{booking.sponsorIqamaDetails.iqamaNumber || 'N/A'}</p>
@@ -595,7 +595,7 @@ export default function ViewUmrahVisaBookingPage() {
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-red-200">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:gap-4 pt-4 border-t border-red-200">
                                     <div className="bg-white rounded-lg p-3 border border-red-100">
                                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">From</p>
                                       <div className="flex items-center gap-2">

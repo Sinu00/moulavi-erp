@@ -174,14 +174,14 @@ export default function AddToExistingBookingPage() {
       >
         <div className="p-4 sm:p-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Add Group to Existing Booking</CardTitle>
-            <CardDescription>
+          <CardHeader className="p-4 lg:p-6">
+            <CardTitle className="text-lg lg:text-xl">Add Group to Existing Booking</CardTitle>
+            <CardDescription className="text-sm lg:text-base">
               Enter the new group details and select which existing booking to add this group to
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <CardContent className="p-4 lg:p-6">
+            <form onSubmit={handleSubmit} className="space-y-4 lg:space-y-6">
               {/* Select Existing Booking */}
               <div className="space-y-2">
                 <Label htmlFor="existingBookingId">Select Existing Booking *</Label>

@@ -114,7 +114,7 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
     <div className="space-y-6">
       <div className="space-y-4">
         <Label className="text-base font-medium">Select Accommodation Type *</Label>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
             className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
               data.accommodationType === 'hotel'
@@ -230,7 +230,7 @@ export const AccommodationStep: React.FC<AccommodationStepProps> = ({
       )}
 
       {data.accommodationType === 'iqama' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="iqamaNumber">Iqama Number *</Label>
             <Input
