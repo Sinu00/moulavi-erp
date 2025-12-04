@@ -9,11 +9,11 @@ import { Step3Data, Location, Hotel as HotelType, HotelBooking } from '@/lib/umr
 import { useHotelCoverage } from '../hooks/useHotelCoverage';
 import { HotelBookingTable } from '../components/HotelBookingTable';
 import { HotelCoverageIndicator } from '../components/HotelCoverageIndicator';
-import { REGEXP_ONLY_DIGITS_AND_CHARS } from "input-otp";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
+  REGEXP_ONLY_DIGITS_AND_CHARS,
 } from "@/components/ui/input-otp";
 
 interface AccommodationStepProps {
