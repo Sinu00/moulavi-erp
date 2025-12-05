@@ -257,6 +257,15 @@ export const umrahVisaAPI = {
     api.patch(`/umrah-visa/${id}/movement-details`, { movementDetails }),
   createMovementDetail: (id: string, data: any) => api.post(`/umrah-visa/${id}/movement-details`, data),
   deleteMovementDetail: (rowId: string) => api.delete(`/umrah-visa/movement-details/${rowId}`),
+  
+  // Ziyarath counts
+  getZiyarathCounts: (dates: string[], excludeBookingId?: string) => {
+    const params: any = { dates: dates.join(',') };
+    if (excludeBookingId) {
+      params.excludeBookingId = excludeBookingId;
+    }
+    return api.get('/umrah-visa/ziyarath-counts', { params });
+  },
 
   fetchFromSheet: () => api.post('/umrah-visa/invoice/fetch-from-sheet'),
   

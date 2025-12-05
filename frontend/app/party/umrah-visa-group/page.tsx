@@ -18,6 +18,7 @@ import { MovementDetailsStep } from '@/components/umrah-booking/steps/MovementDe
 import { TransportVehicleSelectionStep } from '@/components/umrah-booking/steps/TransportVehicleSelectionStep';
 import { GroupDocumentsStep } from '@/components/umrah-booking/steps/GroupDocumentsStep';
 import { validateStep1, validateStep2, validateStep3, validateStep4, validateStep5 } from '@/lib/umrah/validation';
+import { umrahVisaAPI } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -102,7 +103,7 @@ export default function GroupUmrahVisaPage() {
   }, [router, loadPartyData, loadInitialData]);
 
 
-  const validateCurrentStep = () => {
+  const validateCurrentStep = async (): Promise<string | null> => {
     switch (bookingState.currentStep) {
       case 1:
         return validateStep1(bookingState.step1Data);
@@ -111,7 +112,30 @@ export default function GroupUmrahVisaPage() {
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step2Data, masterData.locationMasters);
       case 4:
-        return validateStep4(bookingState.step4Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate);
+        // Fetch ziyarath counts for validation
+        const ziyarathMovements = bookingState.step4Data.movements?.filter(m => m.type === 'ziyarath' && m.date) || [];
+        const ziyarathDates = ziyarathMovements.map(m => m.date!).filter((date, index, self) => self.indexOf(date) === index);
+        
+        let ziyarathCounts: { [date: string]: number } = {};
+        if (ziyarathDates.length > 0) {
+          try {
+            const response = await umrahVisaAPI.getZiyarathCounts(
+              ziyarathDates,
+              bookingState.bookingId || undefined
+            );
+            ziyarathCounts = response.data || {};
+          } catch (error) {
+            console.error('Error fetching ziyarath counts for validation:', error);
+            // Continue with validation even if counts fetch fails
+          }
+        }
+        
+        return validateStep4(
+          bookingState.step4Data,
+          bookingState.step2Data.arrivalDate,
+          bookingState.step2Data.departureDate,
+          ziyarathCounts
+        );
       case 5:
         return validateStep5(bookingState.step5Data, bookingState.step1Data, bookingState.step3Data, true); // true = isGroupVisa
       default:
@@ -120,7 +144,7 @@ export default function GroupUmrahVisaPage() {
   };
 
   const nextStep = async () => {
-    const validationError = validateCurrentStep();
+    const validationError = await validateCurrentStep();
     if (validationError) {
       toast.error(validationError);
       return;
@@ -207,6 +231,7 @@ export default function GroupUmrahVisaPage() {
             getAllHotelsForLocation={getHotelsForLocation}
             step3Data={bookingState.step3Data}
             disabled={isLoading}
+            bookingId={bookingState.bookingId}
           />
         );
 

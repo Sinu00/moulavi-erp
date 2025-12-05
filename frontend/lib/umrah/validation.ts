@@ -289,7 +289,8 @@ export const validateStep3 = (
 export const validateStep4 = (
   data: Step4Data, 
   arrivalDate?: string,
-  departureDate?: string
+  departureDate?: string,
+  ziyarathCounts?: { [date: string]: number }
 ): string | null => {
   // Step 4: Movement Details (for group bookings)
   // Validate movements array
@@ -315,6 +316,19 @@ export const validateStep4 = (
         return 'Time is required for all movements';
       }
     }
+
+    // Validate ziyarath counts if counts are provided
+    if (ziyarathCounts) {
+      const ziyarathMovements = data.movements.filter(m => m.type === 'ziyarath' && m.date);
+      for (const movement of ziyarathMovements) {
+        const date = movement.date!;
+        const count = ziyarathCounts[date] || 0;
+        if (count >= 10) {
+          return `Date ${date} has reached the maximum limit of 10 ziyaraths. Please choose another date.`;
+        }
+      }
+    }
+
     return null; // Group booking validation complete
   }
   

@@ -137,6 +137,100 @@ router.get('/bookings', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/umrah-visa/ziyarath-counts - Get ziyarath counts per date
+// IMPORTANT: This route must be defined BEFORE /:bookingId to avoid route conflicts
+router.get('/ziyarath-counts', authenticate, async (req, res) => {
+  try {
+    const { dates, excludeBookingId } = req.query;
+    
+    if (!dates || typeof dates !== 'string') {
+      return res.status(400).json({ error: 'dates parameter is required (comma-separated date strings)' });
+    }
+
+    // Parse dates from comma-separated string
+    const dateArray = dates.split(',').map(d => d.trim()).filter(Boolean);
+    
+    if (dateArray.length === 0) {
+      return res.json({});
+    }
+
+    // Convert dates to Date objects and find min/max for query range
+    const dateObjects = dateArray.map(dateStr => {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date format: ${dateStr}`);
+      }
+      date.setHours(0, 0, 0, 0);
+      return { date, dateStr };
+    });
+
+    if (dateObjects.length === 0) {
+      return res.json({});
+    }
+
+    const timestamps = dateObjects.map(d => d.date.getTime());
+    const minDate = new Date(Math.min(...timestamps));
+    const maxDate = new Date(Math.max(...timestamps));
+    maxDate.setHours(23, 59, 59, 999);
+
+    // Build where clause - query all ziyarath movements in the date range
+    const whereClause: any = {
+      toLocation: {
+        locationType: 'ZIYARAT',
+      },
+      travelDateTime: {
+        gte: minDate,
+        lte: maxDate,
+      },
+    };
+
+    // Exclude current booking if provided (and is a valid UUID)
+    if (excludeBookingId && typeof excludeBookingId === 'string') {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(excludeBookingId)) {
+        whereClause.bookingId = {
+          not: excludeBookingId,
+        };
+      }
+    }
+
+    // Query all ziyarath movements for the date range
+    const movements = await prisma.umrahMovementDetail.findMany({
+      where: whereClause,
+      select: {
+        travelDateTime: true,
+      },
+    });
+
+    // Count ziyaraths per date (only for requested dates)
+    const counts: { [date: string]: number } = {};
+    
+    // Initialize all requested dates with 0
+    dateArray.forEach(dateStr => {
+      counts[dateStr] = 0;
+    });
+
+    // Count movements by date (only count if date matches one of the requested dates)
+    movements.forEach(movement => {
+      // Extract date in YYYY-MM-DD format, handling timezone correctly
+      const date = new Date(movement.travelDateTime);
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      if (counts.hasOwnProperty(dateStr)) {
+        counts[dateStr] = (counts[dateStr] || 0) + 1;
+      }
+    });
+
+    res.json(counts);
+  } catch (error) {
+    console.error('Error fetching ziyarath counts:', error);
+    res.status(500).json({ error: 'Failed to fetch ziyarath counts' });
+  }
+});
+
 // GET /api/umrah-visa/:bookingId - Get complete booking details
 router.get('/:bookingId', authenticate, async (req, res) => {
   try {

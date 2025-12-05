@@ -37,6 +37,7 @@ interface MovementDetailsStepProps {
   getAllHotelsForLocation?: (locationId: string) => any[];
   onLoadOptions?: (index: number, fromId?: string, toId?: string) => void;
   disabled?: boolean;
+  bookingId?: string | null; // Optional booking ID for ziyarath count exclusion
 }
 
 export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
@@ -58,6 +59,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
   getAllHotelsForLocation,
   onLoadOptions,
   disabled = false,
+  bookingId = null,
 }) => {
   const [availableRoutes, setAvailableRoutes] = React.useState<TransportRouteMaster[]>([]);
   const [loadingRoutes, setLoadingRoutes] = React.useState(false);
@@ -419,6 +421,7 @@ export const MovementDetailsStep: React.FC<MovementDetailsStepProps> = ({
             onAddMovement={addMovementAfter}
             disabled={disabled}
             emptyMessage={`No movements. Select transport routes in Step ${transportStepNumber} to auto-generate movements, or add manually.`}
+            bookingId={bookingId}
           />
         </div>
       </Card>

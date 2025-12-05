@@ -1,10 +1,11 @@
 // Unified Movements Table - displays all movements (transport + ziyarath) in one table
-import React from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { X, Plus } from 'lucide-react';
 import { Movement, LocationMaster } from '@/lib/umrah/types';
+import { umrahVisaAPI } from '@/lib/api';
 
 interface MovementsTableProps {
   movements: Movement[];
@@ -14,6 +15,7 @@ interface MovementsTableProps {
   onAddMovement?: (index: number) => void; // Add movement after this index
   disabled?: boolean;
   emptyMessage?: string;
+  bookingId?: string | null; // Optional booking ID to exclude from counts
 }
 
 export const MovementsTable: React.FC<MovementsTableProps> = ({
@@ -24,7 +26,12 @@ export const MovementsTable: React.FC<MovementsTableProps> = ({
   onAddMovement,
   disabled = false,
   emptyMessage = 'No movements. Complete hotel bookings to auto-generate movements.',
+  bookingId = null,
 }) => {
+  // State to track ziyarath counts per date
+  const [ziyarathCounts, setZiyarathCounts] = useState<{ [date: string]: number }>({});
+  const [loadingCounts, setLoadingCounts] = useState(false);
+
   // Get location name by ID
   const getLocationName = (locationId: string): string => {
     const location = locationMasters.find((lm) => lm.id === locationId);
@@ -53,6 +60,84 @@ export const MovementsTable: React.FC<MovementsTableProps> = ({
       lm.locationType === 'ZIYARAT'
     );
   };
+
+  // Get color class for ziyarath date based on count
+  const getZiyarathDateColorClass = (date: string): string => {
+    if (!date) return '';
+    const count = ziyarathCounts[date] || 0;
+    console.log(`Date ${date} has count: ${count}, ziyarathCounts:`, ziyarathCounts);
+    if (count >= 10) {
+      return '!bg-red-50 !border-red-500 border-2';
+    } else if (count >= 5) {
+      return '!bg-yellow-50 !border-yellow-500 border-2';
+    } else if (count >= 1) {
+      return '!bg-green-50 !border-green-500 border-2';
+    }
+    return '';
+  };
+
+  // Fetch ziyarath counts
+  const fetchZiyarathCounts = useCallback(async (dates: string[]) => {
+    if (dates.length === 0) {
+      setZiyarathCounts({});
+      return;
+    }
+
+    try {
+      setLoadingCounts(true);
+      console.log('Fetching ziyarath counts for dates:', dates, 'excluding booking:', bookingId);
+      const response = await umrahVisaAPI.getZiyarathCounts(
+        dates,
+        bookingId || undefined
+      );
+      console.log('Ziyarath counts response:', response.data);
+      setZiyarathCounts(response.data || {});
+    } catch (error: any) {
+      console.error('Error fetching ziyarath counts:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      // Don't show error to user, just log it
+      // Set empty counts on error to prevent UI issues
+      setZiyarathCounts({});
+    } finally {
+      setLoadingCounts(false);
+    }
+  }, [bookingId]);
+
+  // Use ref to store debounce timeout
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Extract ziyarath dates and fetch counts when they change (with debouncing)
+  useEffect(() => {
+    // Filter and validate ziyarath dates (must be in YYYY-MM-DD format)
+    const ziyarathDates = movements
+      .filter(m => m.type === 'ziyarath' && m.date && /^\d{4}-\d{2}-\d{2}$/.test(m.date))
+      .map(m => m.date!)
+      .filter((date, index, self) => self.indexOf(date) === index); // Unique dates
+
+    console.log('Ziyarath dates extracted:', ziyarathDates);
+
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set new timeout
+    debounceTimeoutRef.current = setTimeout(() => {
+      if (ziyarathDates.length > 0) {
+        fetchZiyarathCounts(ziyarathDates);
+      } else {
+        setZiyarathCounts({});
+      }
+    }, 500);
+
+    // Cleanup on unmount
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [movements, fetchZiyarathCounts]);
 
   if (movements.length === 0) {
     return (
@@ -116,7 +201,11 @@ export const MovementsTable: React.FC<MovementsTableProps> = ({
                   value={movement.date || ''}
                   onChange={(e) => onUpdateMovement(index, 'date', e.target.value)}
                   disabled={disabled}
-                  className="w-full"
+                  className={`w-full ${
+                    movement.type === 'ziyarath' && movement.date
+                      ? getZiyarathDateColorClass(movement.date)
+                      : ''
+                  }`}
                 />
               </td>
               <td className="border border-gray-200 p-3">
