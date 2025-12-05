@@ -18,25 +18,32 @@ interface InputOTPContextValue {
 
 const InputOTPContext = React.createContext<InputOTPContextValue | null>(null)
 
-interface InputOTPProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'maxLength' | 'pattern'> {
+interface InputOTPProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'maxLength' | 'pattern' | 'children'> {
   value?: string
   onChange?: (value: string) => void
   maxLength?: number
   pattern?: string | RegExp
   containerClassName?: string
+  children?: React.ReactNode
 }
 
 const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
-  ({ className, containerClassName, value = "", onChange, maxLength = 6, pattern, disabled, ...props }, ref) => {
+  ({ className, containerClassName, value = "", onChange, maxLength = 6, pattern, disabled, children, ...props }, ref) => {
     const [internalValue, setInternalValue] = React.useState(value)
     const [activeIndex, setActiveIndex] = React.useState<number | null>(null)
     const inputRef = React.useRef<HTMLInputElement>(null)
     
     // Merge refs: support both callback refs and RefObject
     React.useEffect(() => {
+      if (!ref) return
+      
       if (typeof ref === 'function') {
         ref(inputRef.current)
-      } else if (ref) {
+        // Cleanup: call with null when component unmounts
+        return () => {
+          ref(null)
+        }
+      } else if (ref && 'current' in ref) {
         (ref as React.MutableRefObject<HTMLInputElement | null>).current = inputRef.current
       }
     }, [ref])
@@ -45,7 +52,7 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
       setInternalValue(value)
     }, [value])
 
-    const handleChange = (newValue: string) => {
+    const handleChange = React.useCallback((newValue: string) => {
       // Limit to maxLength first
       let limitedValue = newValue.slice(0, maxLength)
       
@@ -59,11 +66,17 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
         const charClassMatch = patternStr.match(/\[([^\]]+)\]/)
         if (charClassMatch) {
           // Use the character class to filter characters one by one
-          const charClassRegex = new RegExp(`^[${charClassMatch[1]}]$`)
-          limitedValue = limitedValue
-            .split('')
-            .filter(char => charClassRegex.test(char))
-            .join('')
+          // Escape special regex characters in the character class to prevent issues
+          try {
+            const charClassRegex = new RegExp(`^[${charClassMatch[1]}]$`)
+            limitedValue = limitedValue
+              .split('')
+              .filter(char => charClassRegex.test(char))
+              .join('')
+          } catch (e) {
+            // If regex construction fails, fall back to basic validation
+            console.warn('Invalid regex pattern in character class, skipping pattern validation')
+          }
         } else {
           // For other patterns, check if the entire value matches
           // If it doesn't match, keep the previous value (don't update)
@@ -76,7 +89,7 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
       
       setInternalValue(limitedValue)
       onChange?.(limitedValue)
-    }
+    }, [maxLength, pattern, onChange])
 
     const slots = React.useMemo(() => {
       return Array.from({ length: maxLength }, (_, index) => ({
@@ -93,7 +106,7 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
       maxLength,
       disabled,
       inputRef: inputRef,
-    }), [slots, internalValue, maxLength, disabled])
+    }), [slots, internalValue, maxLength, disabled, handleChange])
 
     return (
       <InputOTPContext.Provider value={contextValue}>
@@ -116,7 +129,7 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
             className={cn("sr-only", className)}
             {...props}
           />
-          {props.children}
+          {children}
         </div>
       </InputOTPContext.Provider>
     )
