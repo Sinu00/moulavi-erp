@@ -323,6 +323,86 @@ router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) =>
   }
 });
 
+// GET /api/umrah-visa/:bookingId/download-confirmation - Download confirmation image
+router.get('/:bookingId/download-confirmation', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const user = (req as any).user;
+
+    // Only admin/staff can download confirmation images
+    if (user.role === 'party') {
+      return res.status(403).json({ error: 'Only admin/staff can download confirmation images' });
+    }
+
+    // Get booking with iqama details
+    const booking = await prisma.umrahVisaBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        sponsorIqamaDetails: true,
+      },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    if (booking.accommodationType !== 'iqama') {
+      return res.status(400).json({ 
+        error: 'Confirmation image is only available for iqama accommodation bookings'
+      });
+    }
+
+    if (!booking.sponsorIqamaDetails) {
+      return res.status(404).json({ error: 'Iqama details not found for this booking' });
+    }
+
+    const confirmationImagePath = booking.sponsorIqamaDetails.confirmationImagePath;
+    if (!confirmationImagePath) {
+      return res.status(404).json({ error: 'Confirmation image not found for this booking' });
+    }
+
+    // Try to find the document with confirmation_image type
+    const confirmationDoc = await prisma.document.findFirst({
+      where: {
+        bookingId,
+        documentType: 'confirmation_image',
+        isDeleted: false,
+      },
+    });
+
+    // Use document filePath if found, otherwise use the path from iqama details
+    const filePath = confirmationDoc?.filePath || confirmationImagePath;
+    const fileName = confirmationDoc?.fileName || 'confirmation-image.jpg';
+
+    // Handle file download based on storage type
+    if (isS3Configured()) {
+      // Generate presigned URL for S3 file
+      try {
+        const downloadUrl = await generateDownloadUrl(filePath);
+        res.json({
+          downloadUrl,
+          fileName,
+          fileSize: confirmationDoc?.fileSize || null,
+          mimeType: confirmationDoc?.mimeType || 'image/jpeg',
+        });
+      } catch (error) {
+        console.error('Error generating download URL:', error);
+        res.status(500).json({ error: 'Failed to generate download URL' });
+      }
+    } else {
+      // Serve local file
+      if (fs.existsSync(filePath)) {
+        res.download(filePath, fileName);
+      } else {
+        res.status(404).json({ error: 'File not found on server' });
+      }
+    }
+  } catch (error) {
+    console.error('Error downloading confirmation image:', error);
+    res.status(500).json({ error: 'Failed to download confirmation image' });
+  }
+});
+
 // POST /api/umrah-visa/:bookingId/mark-ready-for-voucher - Mark hotel booking as ready for voucher (Admin/Staff only)
 router.post('/:bookingId/mark-ready-for-voucher', authenticate, async (req, res) => {
   try {

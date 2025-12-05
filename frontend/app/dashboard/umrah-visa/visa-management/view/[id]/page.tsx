@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
-import { umrahVisaAPI } from '@/lib/api';
+import { umrahVisaAPI, uploadAPI } from '@/lib/api';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ export default function ViewUmrahVisaBookingPage() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState<any>(null);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [downloadingConfirmation, setDownloadingConfirmation] = useState(false);
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -123,6 +124,41 @@ export default function ViewUmrahVisaBookingPage() {
       toast.error(error.response?.data?.error || error.message || 'Failed to download zip file');
     } finally {
       setDownloadingZip(false);
+    }
+  };
+
+  const handleDownloadConfirmationImage = async () => {
+    if (!booking || !bookingId || downloadingConfirmation) return;
+    
+    const confirmationImagePath = booking.sponsorIqamaDetails?.confirmationImagePath;
+    if (!confirmationImagePath) {
+      toast.error('Confirmation image not found');
+      return;
+    }
+
+    try {
+      setDownloadingConfirmation(true);
+      toast.info('Downloading confirmation image...');
+
+      // Use the dedicated download confirmation endpoint which handles presigned URLs
+      const response = await umrahVisaAPI.downloadConfirmation(bookingId);
+      
+      if (response.data.downloadUrl) {
+        const link = document.createElement('a');
+        link.href = response.data.downloadUrl;
+        link.download = response.data.fileName || 'confirmation-image.jpg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Confirmation image downloaded successfully!');
+      } else {
+        toast.error('Download URL not available');
+      }
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast.error(error.response?.data?.error || error.message || 'Failed to download confirmation image');
+    } finally {
+      setDownloadingConfirmation(false);
     }
   };
 
@@ -578,27 +614,42 @@ export default function ViewUmrahVisaBookingPage() {
                   {booking.accommodationType === 'iqama' && (
                     <>
                       {booking.sponsorIqamaDetails ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Iqama Number</p>
-                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaNumber || 'N/A'}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Holder Name</p>
-                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaSponserName || 'N/A'}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Date of Birth</p>
-                            <p className="text-sm font-medium text-gray-900">{formatDate(booking.sponsorIqamaDetails.sponserDob)}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mobile Number</p>
-                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
-                          </div>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Iqama Number</p>
+                              <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaNumber || 'N/A'}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Holder Name</p>
+                              <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaSponserName || 'N/A'}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Date of Birth</p>
+                              <p className="text-sm font-medium text-gray-900">{formatDate(booking.sponsorIqamaDetails.sponserDob)}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mobile Number</p>
+                              <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
+                            </div>
                             <div className="space-y-1 sm:col-span-2">
                               <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">National Short Address</p>
-                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserNationalShortAddress || 'N/A'}</p>
+                              <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserNationalShortAddress || 'N/A'}</p>
                             </div>
+                          </div>
+                          {booking.sponsorIqamaDetails.confirmationImagePath && (
+                            <div className="flex items-center justify-end">
+                              <Button
+                                onClick={handleDownloadConfirmationImage}
+                                disabled={downloadingConfirmation}
+                                variant="outline"
+                                className="flex items-center gap-2"
+                              >
+                                <Download className="h-4 w-4" />
+                                {downloadingConfirmation ? 'Downloading...' : 'Download Confirmation Image'}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-center py-8 bg-gray-50 rounded-lg">

@@ -176,6 +176,8 @@ export const uploadAPI = {
   
   deleteDocument: (documentId: string) => api.delete(`/upload/${documentId}`),
   
+  getDocument: (documentId: string) => api.get(`/upload/${documentId}`),
+  
   // Party document methods - use partyDocumentAPI instead
   uploadPartyDocument: (partyId: string, file: File, documentType: string) =>
     partyDocumentAPI.uploadDocument(partyId, file, documentType),
@@ -217,6 +219,9 @@ export const umrahVisaAPI = {
 
   uploadConfirmation: (bookingId: string, confirmationImagePath: string) =>
     api.post(`/umrah-visa/${bookingId}/upload-confirmation`, { confirmationImagePath }),
+
+  downloadConfirmation: (bookingId: string) =>
+    api.get(`/umrah-visa/${bookingId}/download-confirmation`),
 
   markReadyForVoucher: (bookingId: string) =>
     api.post(`/umrah-visa/${bookingId}/mark-ready-for-voucher`),

@@ -15,18 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { 
   Search, 
-  Upload,
   Users,
   Menu,
   RefreshCw,
@@ -35,7 +25,7 @@ import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
 import { UmrahVisaBooking, UmrahVisaStatus } from '@/types';
-import { umrahVisaAPI } from '@/lib/api';
+import { umrahVisaAPI, uploadAPI } from '@/lib/api';
 import { UMRAH_VISA_STATUS_CONFIG } from '@/lib/constants';
 
 export default function TripInfoPage() {
@@ -48,13 +38,6 @@ export default function TripInfoPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'iqama' | 'hotel'>('iqama');
-  
-  // Dialog states
-  const [showUploadConfirmationDialog, setShowUploadConfirmationDialog] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<UmrahVisaBooking | null>(null);
-  
-  // Form states
-  const [confirmationImage, setConfirmationImage] = useState<File | null>(null);
 
   useEffect(() => {
     if (!user || !hasRole(['admin', 'staff'])) {
@@ -122,28 +105,29 @@ export default function TripInfoPage() {
 
   // Action Handlers
 
-  const handleUploadConfirmation = async () => {
-    if (!confirmationImage || !selectedBooking) {
+  const handleUploadConfirmation = async (booking: UmrahVisaBooking, file: File) => {
+    if (!file || !booking.id) {
       toast.error('Please select an image');
       return;
     }
 
-    if (!selectedBooking.id) return;
-
     try {
-      // For testing: Use dummy image path instead of actual upload
-      toast.info('Uploading confirmation image... (Test mode)');
-      const imagePath = `/uploads/test-confirmation-${Date.now()}.jpg`;
-
-      const token = localStorage.getItem('accessToken');
+      toast.info('Uploading confirmation image...');
       
-      // Update booking with confirmation
-      const response = await umrahVisaAPI.uploadConfirmation(selectedBooking.id, imagePath);
+      // First, upload the actual file
+      const uploadResponse = await uploadAPI.uploadDocument(
+        booking.id,
+        file,
+        'confirmation_image'
+      );
+      
+      // Get the file path from the upload response
+      const imagePath = uploadResponse.data.document.filePath;
+      
+      // Then update booking with confirmation image path
+      const response = await umrahVisaAPI.uploadConfirmation(booking.id, imagePath);
 
       toast.success('Confirmation uploaded successfully! Status changed to Booking Success');
-      setShowUploadConfirmationDialog(false);
-      setConfirmationImage(null);
-      setSelectedBooking(null);
       fetchBookings();
     } catch (error: any) {
       toast.error(error.message || 'Failed to upload confirmation');
@@ -164,29 +148,7 @@ export default function TripInfoPage() {
   };
 
   const renderActionButton = (booking: UmrahVisaBooking) => {
-    if (booking.accommodationType === 'iqama') {
-      // Iqama bookings: Show upload confirmation button
-      return (
-        <div className="flex flex-col gap-1">
-          <div className="text-xs text-gray-500 text-center">
-            Downloads: {booking.documentsDownloadCount || 0}/1
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                setSelectedBooking(booking);
-                setShowUploadConfirmationDialog(true);
-              }}
-              className="flex items-center gap-1 whitespace-nowrap"
-            >
-              <Upload className="h-3 w-3" />
-              Upload Image
-            </Button>
-          </div>
-        </div>
-      );
-    } else if (booking.accommodationType === 'hotel') {
+    if (booking.accommodationType === 'hotel') {
       // Hotel bookings: Show Done button
       return (
         <Button
@@ -329,13 +291,16 @@ export default function TripInfoPage() {
                       <TableHead className="w-[180px]">Return Details</TableHead>
                       <TableHead className="w-[220px]">{activeTab === 'iqama' ? 'Iqama Details' : 'Hotel Details'}</TableHead>
                       <TableHead className="w-[150px]">Updated By</TableHead>
+                      {activeTab === 'iqama' && (
+                        <TableHead className="w-[180px]">Upload Image</TableHead>
+                      )}
                       <TableHead className="w-[280px]">Status & Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={activeTab === 'iqama' ? 8 : 7} className="text-center py-8 text-gray-500">
                           {searchQuery 
                             ? 'No trips found matching your search' 
                             : 'No trip information available'}
@@ -504,6 +469,30 @@ export default function TripInfoPage() {
                               </div>
                             </TableCell>
 
+                            {/* Upload Image Column (only for iqama tab) */}
+                            {activeTab === 'iqama' && (
+                              <TableCell>
+                                <div className="space-y-2">
+                                  <div className="text-xs text-gray-500 text-center">
+                                    Downloads: {booking.documentsDownloadCount || 0}/1
+                                  </div>
+                                  <Input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        handleUploadConfirmation(booking, file);
+                                        // Reset input after upload
+                                        e.target.value = '';
+                                      }
+                                    }}
+                                    className="text-xs cursor-pointer"
+                                  />
+                                </div>
+                              </TableCell>
+                            )}
+
                             {/* Status & Action */}
                             <TableCell>
                               <div className="flex items-center justify-between gap-3">
@@ -527,37 +516,6 @@ export default function TripInfoPage() {
           </Card>
         </div>
       </div>
-
-      {/* Upload Confirmation Dialog */}
-      <Dialog open={showUploadConfirmationDialog} onOpenChange={setShowUploadConfirmationDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload Confirmation Image</DialogTitle>
-            <DialogDescription>
-              Upload the booking confirmation image
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="confirmationImage">Confirmation Image</Label>
-              <Input
-                id="confirmationImage"
-                type="file"
-                accept="image/*"
-                onChange={(e) => setConfirmationImage(e.target.files?.[0] || null)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUploadConfirmationDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUploadConfirmation}>
-              Upload
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
