@@ -13,27 +13,46 @@ export interface BillPdfData {
 }
 
 // Helper function to find Chrome executable (same as voucher PDF)
+// NOTE: In production, prefer bundled Chromium (comes with Puppeteer) for reliability
 function findChromeExecutable(): string | undefined {
-  const possiblePaths = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.CHROME_PATH,
-  ];
+  const fs = require('fs');
+  const os = require('os');
+  const platform = os.platform();
 
-  for (const path of possiblePaths) {
-    if (path) {
-      try {
-        const fs = require('fs');
-        if (fs.existsSync(path)) {
-          return path;
-        }
-      } catch {
-        // Continue to next path
-      }
+  // Check environment variable first (useful for production when explicitly set)
+  if (process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH) {
+    const envPath = process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (envPath && fs.existsSync(envPath)) {
+      return envPath;
     }
   }
 
-  return undefined; // Will use bundled Chromium
+  // For production on Linux, prefer bundled Chromium to avoid snap/installation issues
+  if (platform === 'linux' && !process.env.USE_SYSTEM_CHROME) {
+    return undefined; // Use bundled Chromium
+  }
+
+  const possiblePaths: string[] = [];
+
+  if (platform === 'win32') {
+    possiblePaths.push(
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
+    );
+  } else if (platform === 'darwin') {
+    possiblePaths.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    );
+  }
+
+  for (const path of possiblePaths.filter(Boolean)) {
+    if (path && fs.existsSync(path)) {
+      return path;
+    }
+  }
+
+  return undefined; // Will use bundled Chromium (recommended for production)
 }
 
 // Generate HTML template for bill
@@ -454,7 +473,7 @@ export async function generateBillPDF(data: BillPdfData): Promise<Buffer> {
   console.log(`${logPrefix} Amount: ₹${data.amount?.toLocaleString('en-IN') || '0'}`);
   
   try {
-    // Try to use system Chrome first (more reliable on Windows)
+    // Prefer bundled Chromium for production reliability
     console.log(`${logPrefix} Finding Chrome executable...`);
     const chromePath = findChromeExecutable();
     
@@ -467,17 +486,38 @@ export async function generateBillPDF(data: BillPdfData): Promise<Buffer> {
         '--disable-gpu',
         '--disable-software-rasterizer',
         '--single-process',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-client-side-phishing-detection',
+        '--disable-default-apps',
+        '--disable-features=TranslateUI',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--disable-renderer-backgrounding',
+        '--disable-sync',
+        '--disable-translate',
+        '--metrics-recording-only',
+        '--no-first-run',
+        '--safebrowsing-disable-auto-update',
+        '--enable-automation',
+        '--password-store=basic',
+        '--use-mock-keychain',
       ],
       timeout: 60000,
     };
 
-    // Use system Chrome/Chromium if available, otherwise use bundled Chromium
+    // Use system Chrome/Chromium only if explicitly provided
     if (chromePath) {
       console.log(`${logPrefix} ✓ Using system browser: ${chromePath}`);
       launchOptions.executablePath = chromePath;
     } else {
-      console.log(`${logPrefix} ✓ Using bundled Chromium (default)`);
-      console.log(`${logPrefix}   Note: If errors occur, set CHROME_PATH environment variable`);
+      console.log(`${logPrefix} ✓ Using bundled Chromium (recommended for production)`);
+      console.log(`${logPrefix}   Note: Bundled Chromium is more reliable and doesn't require system installation`);
     }
 
     console.log(`${logPrefix} Launching browser...`);

@@ -470,20 +470,29 @@ function generateVoucherHTML(data: VoucherPdfData): string {
 }
 
 // Helper to find Chrome/Chromium executable (Windows, Linux, macOS)
+// NOTE: In production, prefer bundled Chromium (comes with Puppeteer) for reliability
 function findChromeExecutable(): string | undefined {
   const fs = require('fs');
   const os = require('os');
   const platform = os.platform();
 
-  // Check environment variable first (useful for production)
+  // Check environment variable first (useful for production when explicitly set)
+  // If CHROME_PATH is explicitly set, use it (user knows what they're doing)
   if (process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH) {
     const envPath = process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH;
-    if (fs.existsSync(envPath!)) {
-      return envPath!;
+    if (envPath && fs.existsSync(envPath)) {
+      return envPath;
     }
   }
 
-  // Platform-specific paths
+  // For production on Linux, prefer bundled Chromium to avoid snap/installation issues
+  // Only check for system Chrome if explicitly requested via USE_SYSTEM_CHROME env var
+  if (platform === 'linux' && !process.env.USE_SYSTEM_CHROME) {
+    // Skip system Chrome detection on Linux - use bundled Chromium
+    return undefined;
+  }
+
+  // Platform-specific paths (mainly for Windows and macOS, or when USE_SYSTEM_CHROME is set)
   const possiblePaths: string[] = [];
 
   if (platform === 'win32') {
@@ -495,14 +504,13 @@ function findChromeExecutable(): string | undefined {
       process.env.PROGRAMFILES + '\\Google\\Chrome\\Application\\chrome.exe',
       process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
     );
-  } else if (platform === 'linux') {
-    // Linux paths (common production locations)
+  } else if (platform === 'linux' && process.env.USE_SYSTEM_CHROME) {
+    // Linux paths - only check if USE_SYSTEM_CHROME is set
+    // Skip chromium-browser (requires snap) and /snap/bin/chromium
     possiblePaths.push(
       '/usr/bin/google-chrome',
       '/usr/bin/google-chrome-stable',
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/snap/bin/chromium',
+      '/usr/bin/chromium', // Only check this if not snap-based
     );
   } else if (platform === 'darwin') {
     // macOS paths
@@ -514,12 +522,26 @@ function findChromeExecutable(): string | undefined {
 
   // Check each path
   for (const path of possiblePaths.filter(Boolean)) {
-    if (fs.existsSync(path)) {
+    if (path && fs.existsSync(path)) {
+      // On Linux, verify it's not a snap-based chromium-browser wrapper
+      if (platform === 'linux' && path.includes('chromium')) {
+        try {
+          const { execSync } = require('child_process');
+          const realPath = execSync(`readlink -f "${path}"`, { encoding: 'utf8' }).trim();
+          // If it points to snap, skip it
+          if (realPath.includes('/snap/')) {
+            continue;
+          }
+        } catch (e) {
+          // If we can't check, skip to be safe
+          continue;
+        }
+      }
       return path;
     }
   }
 
-  return undefined; // Will use bundled Chromium
+  return undefined; // Will use bundled Chromium (recommended for production)
 }
 
 // Generate PDF from HTML using Puppeteer
@@ -538,7 +560,8 @@ export async function generateVoucherPDF(data: VoucherPdfData): Promise<Buffer> 
   console.log(`${logPrefix} Flight Details: ${data.flightDetails?.length || 0}`);
   
   try {
-    // Try to use system Chrome first (more reliable on Windows)
+    // Prefer bundled Chromium for production reliability
+    // Only use system Chrome if explicitly set via CHROME_PATH or USE_SYSTEM_CHROME
     console.log(`${logPrefix} Finding Chrome executable...`);
     const chromePath = findChromeExecutable();
     
@@ -551,17 +574,40 @@ export async function generateVoucherPDF(data: VoucherPdfData): Promise<Buffer> 
         '--disable-gpu',
         '--disable-software-rasterizer',
         '--single-process',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-client-side-phishing-detection',
+        '--disable-default-apps',
+        '--disable-features=TranslateUI',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--disable-renderer-backgrounding',
+        '--disable-sync',
+        '--disable-translate',
+        '--metrics-recording-only',
+        '--no-first-run',
+        '--safebrowsing-disable-auto-update',
+        '--enable-automation',
+        '--password-store=basic',
+        '--use-mock-keychain',
       ],
       timeout: 60000,
     };
 
-    // Use system Chrome/Chromium if available, otherwise use bundled Chromium
+    // Use system Chrome/Chromium only if explicitly provided
+    // Otherwise use bundled Chromium (most reliable for production)
     if (chromePath) {
       console.log(`${logPrefix} ✓ Using system browser: ${chromePath}`);
       launchOptions.executablePath = chromePath;
     } else {
-      console.log(`${logPrefix} ✓ Using bundled Chromium (default)`);
-      console.log(`${logPrefix}   Note: If errors occur, set CHROME_PATH environment variable`);
+      console.log(`${logPrefix} ✓ Using bundled Chromium (recommended for production)`);
+      console.log(`${logPrefix}   Note: Bundled Chromium is more reliable and doesn't require system installation`);
+      console.log(`${logPrefix}   To use system Chrome, set CHROME_PATH or USE_SYSTEM_CHROME environment variable`);
     }
 
     console.log(`${logPrefix} Launching browser...`);
