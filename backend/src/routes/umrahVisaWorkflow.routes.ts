@@ -6,6 +6,7 @@ import { generateVoucherNumber, formatTime, formatDate, generateRouteNumbersForV
 import { generateVoucherPDF } from '../services/pdfService';
 import { VoucherPdfData } from '../types/voucher';
 import { isS3Configured, generateDownloadUrl } from '../config/s3';
+import { combineDateTime } from '../utils/datetime';
 import fs from 'fs';
 
 const router = Router();
@@ -1448,6 +1449,237 @@ router.delete('/hotel-bookings/:id', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error deleting hotel booking:', error);
     res.status(500).json({ error: 'Failed to delete hotel booking' });
+  }
+});
+
+// Helper function to get Viabadr city ID
+const getViabadrCityId = async (countryId: string): Promise<string> => {
+  const viabadrCity = await prisma.cityMaster.findFirst({
+    where: {
+      countryId,
+      name: { equals: 'Viabadr', mode: 'insensitive' },
+    },
+  });
+  if (!viabadrCity) {
+    throw new Error(`Viabadr city not found for country ${countryId}`);
+  }
+  return viabadrCity.id;
+};
+
+// PATCH /api/umrah-visa/:bookingId/movement-details - Bulk update movement details
+router.patch('/:bookingId/movement-details', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { movementDetails } = req.body || {};
+    
+    if (!Array.isArray(movementDetails)) {
+      return res.status(400).json({ error: 'movementDetails must be an array' });
+    }
+
+    // Get existing movements
+    const existingMovements = await prisma.umrahMovementDetail.findMany({
+      where: { bookingId },
+    });
+    const existingIds = new Set(existingMovements.map(m => m.id));
+    const incomingIds = new Set(movementDetails.filter((m: any) => m.id && !m.id.startsWith('new-')).map((m: any) => m.id));
+
+    // Delete movements that are not in the incoming list
+    const toDelete = existingMovements.filter(m => !incomingIds.has(m.id));
+    if (toDelete.length > 0) {
+      await prisma.umrahMovementDetail.deleteMany({
+        where: { id: { in: toDelete.map(m => m.id) } },
+      });
+    }
+
+    // Update or create movements
+    for (const movement of movementDetails) {
+      const timeToUse = movement.time && movement.time.trim() !== '' ? movement.time : '12:00';
+      if (!movement.date) {
+        continue; // Skip invalid movements
+      }
+
+      const travelDateTime = combineDateTime(movement.date, timeToUse);
+      if (!travelDateTime) {
+        continue; // Skip invalid date/time
+      }
+
+      // Get location details
+      const fromLocation = await prisma.locationMaster.findUnique({
+        where: { id: movement.fromLocationId },
+        include: { cityMaster: true },
+      });
+      const toLocation = await prisma.locationMaster.findUnique({
+        where: { id: movement.toLocationId },
+        include: { cityMaster: true },
+      });
+
+      if (!fromLocation || !toLocation) {
+        continue; // Skip invalid locations
+      }
+
+      let toCityId = toLocation.cityId;
+      if (movement.viabadrOverride) {
+        const toCity = await prisma.cityMaster.findUnique({
+          where: { id: toLocation.cityId },
+          select: { name: true, countryId: true },
+        });
+        if (toCity) {
+          toCityId = await getViabadrCityId(toCity.countryId);
+        }
+      }
+
+      if (movement.id && !movement.id.startsWith('new-') && existingIds.has(movement.id)) {
+        // Update existing
+        await prisma.umrahMovementDetail.update({
+          where: { id: movement.id },
+          data: {
+            travelDateTime,
+            fromCityId: fromLocation.cityId,
+            fromLocationId: fromLocation.id,
+            toCityId,
+            toLocationId: toLocation.id,
+          },
+        });
+      } else {
+        // Create new
+        await prisma.umrahMovementDetail.create({
+          data: {
+            bookingId,
+            travelDateTime,
+            fromCityId: fromLocation.cityId,
+            fromLocationId: fromLocation.id,
+            toCityId,
+            toLocationId: toLocation.id,
+          },
+        });
+      }
+    }
+
+    // Return refreshed movements
+    const refreshed = await prisma.umrahMovementDetail.findMany({
+      where: { bookingId },
+      include: {
+        fromCity: true,
+        fromLocation: {
+          select: {
+            id: true,
+            name: true,
+            locationType: true,
+            city: true,
+            cityId: true,
+          },
+        },
+        toCity: true,
+        toLocation: {
+          select: {
+            id: true,
+            name: true,
+            locationType: true,
+            city: true,
+            cityId: true,
+          },
+        },
+      },
+      orderBy: { travelDateTime: 'asc' },
+    });
+
+    res.json({ movementDetails: refreshed });
+  } catch (error) {
+    console.error('Error updating movement details:', error);
+    res.status(500).json({ error: 'Failed to update movement details' });
+  }
+});
+
+// POST /api/umrah-visa/:bookingId/movement-details - Create a single movement detail
+router.post('/:bookingId/movement-details', authenticate, async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const { date, time, fromLocationId, toLocationId, viabadrOverride } = req.body || {};
+    
+    if (!date || !fromLocationId || !toLocationId) {
+      return res.status(400).json({ error: 'date, fromLocationId, and toLocationId are required' });
+    }
+
+    const timeToUse = time && time.trim() !== '' ? time : '12:00';
+    const travelDateTime = combineDateTime(date, timeToUse);
+    if (!travelDateTime) {
+      return res.status(400).json({ error: 'Invalid date/time' });
+    }
+
+    // Get location details
+    const fromLocation = await prisma.locationMaster.findUnique({
+      where: { id: fromLocationId },
+      include: { cityMaster: true },
+    });
+    const toLocation = await prisma.locationMaster.findUnique({
+      where: { id: toLocationId },
+      include: { cityMaster: true },
+    });
+
+    if (!fromLocation || !toLocation) {
+      return res.status(400).json({ error: 'Invalid location IDs' });
+    }
+
+    let toCityId = toLocation.cityId;
+    if (viabadrOverride) {
+      const toCity = await prisma.cityMaster.findUnique({
+        where: { id: toLocation.cityId },
+        select: { name: true, countryId: true },
+      });
+      if (toCity) {
+        toCityId = await getViabadrCityId(toCity.countryId);
+      }
+    }
+
+    const created = await prisma.umrahMovementDetail.create({
+      data: {
+        bookingId,
+        travelDateTime,
+        fromCityId: fromLocation.cityId,
+        fromLocationId: fromLocation.id,
+        toCityId,
+        toLocationId: toLocation.id,
+      },
+      include: {
+        fromCity: true,
+        fromLocation: {
+          select: {
+            id: true,
+            name: true,
+            locationType: true,
+            city: true,
+            cityId: true,
+          },
+        },
+        toCity: true,
+        toLocation: {
+          select: {
+            id: true,
+            name: true,
+            locationType: true,
+            city: true,
+            cityId: true,
+          },
+        },
+      },
+    });
+
+    res.json({ movementDetail: created });
+  } catch (error) {
+    console.error('Error creating movement detail:', error);
+    res.status(500).json({ error: 'Failed to create movement detail' });
+  }
+});
+
+// DELETE /api/umrah-visa/movement-details/:id - Delete a movement detail
+router.delete('/movement-details/:id', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.umrahMovementDetail.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error deleting movement detail:', error);
+    res.status(500).json({ error: 'Failed to delete movement detail' });
   }
 });
 

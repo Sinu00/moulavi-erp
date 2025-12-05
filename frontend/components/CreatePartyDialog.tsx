@@ -29,6 +29,7 @@ export default function CreatePartyDialog({
 }: CreatePartyDialogProps) {
   const [formData, setFormData] = useState({
     party_name: '',
+    party_code: '',
     email: '',
     contact_number: '',
     whatsapp_number: '',
@@ -63,6 +64,7 @@ export default function CreatePartyDialog({
       if (editingParty) {
         setFormData({
           party_name: editingParty.partyName,
+          party_code: editingParty.partyCode || '',
           email: editingParty.email,
           contact_number: editingParty.contactNumber || '',
           whatsapp_number: editingParty.whatsappNumber || '',
@@ -88,6 +90,7 @@ export default function CreatePartyDialog({
       } else {
         setFormData({
           party_name: '',
+          party_code: '',
           email: '',
           contact_number: '',
           whatsapp_number: '',
@@ -125,8 +128,14 @@ export default function CreatePartyDialog({
       newErrors.email = 'Please enter a valid email';
     }
 
-    if (!formData.customer_type) {
-      newErrors.customer_type = 'Customer type is required';
+    // Validate party_code if provided (must be unique, max 10 chars)
+    if (formData.party_code && formData.party_code.length > 10) {
+      newErrors.party_code = 'Party code must be 10 characters or less';
+    }
+
+    // Customer type is required only if is_customer is true
+    if (formData.is_customer && !formData.customer_type) {
+      newErrors.customer_type = 'Customer type is required when party is a customer';
     }
 
     if (!formData.account_currency_id) {
@@ -194,11 +203,11 @@ export default function CreatePartyDialog({
         contact => contact.contact_name?.trim() && contact.contact_number?.trim()
       );
       
-      // Ensure customer_type is not empty (validation should prevent this, but just in case)
+      // Ensure customer_type is set if is_customer is true
       const submitData = {
         ...formData,
         contacts: validContacts,
-        customer_type: formData.customer_type || 'direct' // fallback to direct if somehow empty
+        customer_type: formData.is_customer ? (formData.customer_type || 'direct') : undefined
       };
       
       console.log('Submitting party data:', submitData);
@@ -301,6 +310,23 @@ export default function CreatePartyDialog({
             {errors.party_name && (
               <p className="text-sm text-red-500">{errors.party_name}</p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="party_code">Party Code (3-digit unique ID)</Label>
+            <Input
+              id="party_code"
+              type="text"
+              value={formData.party_code}
+              onChange={(e) => handleInputChange('party_code', e.target.value.toUpperCase())}
+              placeholder="e.g., 001, 002"
+              maxLength={10}
+              className={errors.party_code ? 'border-red-500' : ''}
+            />
+            {errors.party_code && (
+              <p className="text-sm text-red-500">{errors.party_code}</p>
+            )}
+            <p className="text-xs text-gray-500">Optional: Unique 3-digit code for this party</p>
           </div>
 
           <div className="space-y-2">
@@ -544,24 +570,27 @@ export default function CreatePartyDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="customer_type">Customer Type *</Label>
-            <Select
-              value={formData.customer_type}
-              onValueChange={(value) => handleInputChange('customer_type', value)}
-            >
-              <SelectTrigger className={errors.customer_type ? 'border-red-500' : ''}>
-                <SelectValue placeholder="Select customer type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="direct">Direct</SelectItem>
-                <SelectItem value="b2b">B2B</SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.customer_type && (
-              <p className="text-sm text-red-500">{errors.customer_type}</p>
-            )}
-          </div>
+          {/* Customer Type - Only show if is_customer is true */}
+          {formData.is_customer && (
+            <div className="space-y-2">
+              <Label htmlFor="customer_type">Customer Type *</Label>
+              <Select
+                value={formData.customer_type}
+                onValueChange={(value) => handleInputChange('customer_type', value)}
+              >
+                <SelectTrigger className={errors.customer_type ? 'border-red-500' : ''}>
+                  <SelectValue placeholder="Select customer type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="direct">Direct</SelectItem>
+                  <SelectItem value="b2b">B2B</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.customer_type && (
+                <p className="text-sm text-red-500">{errors.customer_type}</p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="account_currency_id">Account Currency *</Label>

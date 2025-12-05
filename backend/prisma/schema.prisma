@@ -32,6 +32,7 @@ model User {
 
 model Party {
   id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partyCode             String?            @unique @map("party_code") @db.VarChar(10)
   partyName             String             @map("party_name") @db.VarChar(255)
   email                 String             @unique @db.VarChar(255)
   contactNumber         String?            @map("contact_number") @db.VarChar(20)
@@ -64,6 +65,7 @@ model Party {
 
   @@index([email])
   @@index([partyName])
+  @@index([partyCode])
   @@index([customerType])
   @@index([userId])
   @@index([accountCurrencyId])

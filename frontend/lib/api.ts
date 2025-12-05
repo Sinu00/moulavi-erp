@@ -247,6 +247,12 @@ export const umrahVisaAPI = {
   createHotelBooking: (id: string, data: any) => api.post(`/umrah-visa/${id}/hotel-bookings`, data),
   deleteHotelBooking: (rowId: string) => api.delete(`/umrah-visa/hotel-bookings/${rowId}`),
 
+  // Movement Details CRUD
+  updateMovementDetails: (id: string, movementDetails: any[]) =>
+    api.patch(`/umrah-visa/${id}/movement-details`, { movementDetails }),
+  createMovementDetail: (id: string, data: any) => api.post(`/umrah-visa/${id}/movement-details`, data),
+  deleteMovementDetail: (rowId: string) => api.delete(`/umrah-visa/movement-details/${rowId}`),
+
   fetchFromSheet: () => api.post('/umrah-visa/invoice/fetch-from-sheet'),
   
   generateBills: (bookingIds: string[]) => api.post('/umrah-visa/invoice/generate-bills', { bookingIds }),

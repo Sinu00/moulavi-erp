@@ -12,6 +12,12 @@ const router = Router();
 // Validation middleware
 const createPartyValidation = [
   body('party_name').isString().notEmpty().trim(),
+  body('party_code')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 10 })
+    .withMessage('Party code must be between 1 and 10 characters'),
   body('email')
     .isEmail()
     .normalizeEmail()
@@ -59,6 +65,7 @@ const createPartyValidation = [
     );
   }).withMessage('Contacts must be an array of objects with contact_name and contact_number'),
   body('customer_type')
+    .optional()
     .isIn(['direct', 'b2b'])
     .withMessage('Customer type must be either direct or b2b'),
   body('account_currency_id').isUUID().withMessage('Valid currency ID is required'),
@@ -79,6 +86,7 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const {
       party_name,
+      party_code,
       email,
       contact_number,
       whatsapp_number,
@@ -98,9 +106,25 @@ router.post(
       marketing_notification = false,
     } = req.body;
     
+    // Validate customer_type is required if is_customer is true
+    if (is_customer && !customer_type) {
+      return res.status(400).json({ error: 'Customer type is required when party is a customer' });
+    }
+    
     // Validate supplier service types if supplier is selected
     if (is_supplier && (!supplier_service_types || !Array.isArray(supplier_service_types) || supplier_service_types.length === 0)) {
       return res.status(400).json({ error: 'At least one supplier service type is required when is_supplier is true' });
+    }
+    
+    // Check if party_code already exists (if provided)
+    if (party_code) {
+      const existingPartyCode = await prisma.party.findUnique({
+        where: { partyCode: party_code }
+      });
+      
+      if (existingPartyCode) {
+        return res.status(400).json({ error: 'Party code already exists' });
+      }
     }
     
     // Check if party email already exists
@@ -144,6 +168,7 @@ router.post(
     const party = await prisma.party.create({
       data: {
         partyName: party_name,
+        partyCode: party_code || null,
         email,
         contactNumber: contact_number,
         whatsappNumber: whatsapp_number,
@@ -152,7 +177,7 @@ router.post(
         panNumber: pan_number,
         aadhaarNumber: aadhaar_number,
         supplierServiceTypes: supplier_service_types ? JSON.parse(JSON.stringify(supplier_service_types)) : null,
-        customerType: customer_type,
+        customerType: customer_type || 'direct', // Default to 'direct' if not provided
         accountCurrencyId: account_currency_id,
         isSupplier: is_supplier,
         isCustomer: is_customer,
@@ -411,6 +436,7 @@ router.put(
     const { id } = req.params;
     const {
       party_name,
+      party_code,
       contact_number,
       whatsapp_number,
       address,
@@ -434,10 +460,13 @@ router.put(
       where: { id },
       select: { 
         isSupplier: true,
+        isCustomer: true,
         userId: true,
         email: true,
         partyName: true,
-        whatsappNumber: true
+        whatsappNumber: true,
+        customerType: true,
+        partyCode: true
       }
     });
     
@@ -492,12 +521,44 @@ router.put(
       updateData.loginRequired = login_required;
     }
     
+    // Validate customer_type is required if is_customer is true
+    const willBeCustomer = is_customer !== undefined ? is_customer : existingParty.isCustomer;
+    if (willBeCustomer) {
+      // If customer_type is being updated or is_customer is being set to true, validate it
+      if (customer_type === undefined && is_customer === undefined) {
+        // Not updating customer type, use existing
+        if (!existingParty.customerType) {
+          return res.status(400).json({ error: 'Customer type is required when party is a customer' });
+        }
+      } else if (customer_type === undefined && is_customer === true) {
+        // Setting is_customer to true but no customer_type provided
+        if (!existingParty.customerType) {
+          return res.status(400).json({ error: 'Customer type is required when party is a customer' });
+        }
+      } else if (customer_type === '' || customer_type === null) {
+        // Explicitly setting empty customer_type when is_customer is true
+        return res.status(400).json({ error: 'Customer type is required when party is a customer' });
+      }
+    }
+    
+    // Check if party_code already exists (if provided and different from current)
+    if (party_code !== undefined && party_code !== existingParty.partyCode) {
+      const existingPartyCode = await prisma.party.findUnique({
+        where: { partyCode: party_code }
+      });
+      
+      if (existingPartyCode) {
+        return res.status(400).json({ error: 'Party code already exists' });
+      }
+    }
+    
     const willBeSupplier = is_supplier !== undefined ? is_supplier : existingParty?.isSupplier;
     if (willBeSupplier && supplier_service_types !== undefined && (!Array.isArray(supplier_service_types) || supplier_service_types.length === 0)) {
       return res.status(400).json({ error: 'At least one supplier service type is required when is_supplier is true' });
     }
     
     if (party_name !== undefined) updateData.partyName = party_name;
+    if (party_code !== undefined) updateData.partyCode = party_code || null;
     if (contact_number !== undefined) updateData.contactNumber = contact_number;
     if (whatsapp_number !== undefined) updateData.whatsappNumber = whatsapp_number;
     if (address !== undefined) updateData.address = address;

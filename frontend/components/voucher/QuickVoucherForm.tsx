@@ -89,33 +89,17 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
   const [airports, setAirports] = useState<any[]>([]);
   const [ziyaraths, setZiyaraths] = useState<any[]>([]);
   
-  // Route Selection (for prefill)
+  // Route Selection
+  const [selectedRouteType, setSelectedRouteType] = useState<RouteType | 'all'>('all');
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
-  const [selectedArrivalAirportId, setSelectedArrivalAirportId] = useState<string | null>(null);
-  const [selectedDepartureAirportId, setSelectedDepartureAirportId] = useState<string | null>(null);
-  const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [loadingTransports, setLoadingTransports] = useState(false);
-  const [routeTypeFilter, setRouteTypeFilter] = useState<RouteType | 'all'>('all');
-  // Separate route selection for transport (independent)
-  const [transportRouteId, setTransportRouteId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
-    reservationNumber: '',
     reservationDate: new Date().toISOString().split('T')[0],
     guestName: '',
     guestMobile: '',
     groupCode: '',
     paxCount: 1,
-    umrahVisaProvider: null as {
-      partyName: string;
-      address?: string;
-      city?: string;
-      state?: string;
-      country?: string;
-      contactNumber?: string;
-      whatsappNumber?: string;
-      email?: string;
-    } | null,
     hotelSchedules: [] as HotelSchedule[],
     movementDetails: [] as MovementDetail[],
     flightDetails: [] as FlightDetail[],
@@ -143,9 +127,8 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       setCities(citiesData);
       setLocations(locationsData);
       
-      // Filter routes by routeType = 'fulltrip'
-      const fullTripRoutes = routesData.filter((r: any) => r.routeType === 'fulltrip');
-      setRoutes(fullTripRoutes);
+      // Load all routes (not just fulltrip)
+      setRoutes(routesData);
       
       // Group locations by city and type
       const locationsByCityMap = new Map<string, any[]>();
@@ -185,31 +168,25 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     }
   };
 
-  // Filter routes by routeType
+  // Filter routes by selected route type
   const filteredRoutes = routes.filter((route: any) => {
-    if (routeTypeFilter === 'all') return true;
-    return route.routeType === routeTypeFilter;
+    if (selectedRouteType === 'all') return true;
+    return route.routeType === selectedRouteType;
   });
 
-  // Load transports when transport route is selected (independent from prefill route)
-  // Also load when selectedRouteId changes (for default)
+  // Load transports when route is selected
   useEffect(() => {
     const loadTransportsForRoute = async () => {
-      const routeToLoad = transportRouteId || selectedRouteId;
-      if (!routeToLoad) {
+      if (!selectedRouteId) {
         setTransports([]);
         return;
       }
 
       setLoadingTransports(true);
       try {
-        const response = await transportMasterAPI.getByRoute(routeToLoad);
+        const response = await transportMasterAPI.getByRoute(selectedRouteId);
         const transportsData = response.data.transportMasters || [];
         setTransports(transportsData);
-        // Set transportRouteId to selectedRouteId if not already set
-        if (!transportRouteId && selectedRouteId) {
-          setTransportRouteId(selectedRouteId);
-        }
       } catch (error: any) {
         console.error('Error loading transports:', error);
         toast.error('Failed to load transport vehicles');
@@ -220,18 +197,9 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     };
 
     loadTransportsForRoute();
-  }, [transportRouteId, selectedRouteId]);
+  }, [selectedRouteId]);
 
   // Helper functions
-  const getLocationsForCity = (cityName: string, locationType?: string) => {
-    if (!cityName) return [];
-    const cityKey = cityName.toLowerCase().trim();
-    const cityLocations = locationsByCity.get(cityKey) || [];
-    if (locationType) {
-      return cityLocations.filter((loc: any) => loc.locationType === locationType);
-    }
-    return cityLocations;
-  };
 
   const getHotelsForCity = (cityName: string) => {
     if (!cityName) return [];
@@ -244,6 +212,23 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     return ziyaraths.find((z: any) => 
       (z.city || '').toLowerCase().trim() === normalizedCity
     );
+  };
+
+  // Helper: Check if a city is Makkah or Madinah
+  const isZiyarathCity = (cityName: string): boolean => {
+    const normalized = cityName.toLowerCase().trim();
+    return normalized === 'makkah' || normalized === 'madinah' || normalized === 'madina';
+  };
+
+  // Helper: Find city center location for a city
+  const getCityCenterForCity = (cityName: string) => {
+    const normalizedCity = cityName.toLowerCase().trim();
+    return locations.find((loc: any) => {
+      const locCity = (loc.city || loc.cityMaster?.name || '').toLowerCase().trim();
+      const locName = (loc.name || '').toLowerCase();
+      return locCity === normalizedCity && 
+             (locName.includes('city center') || loc.code?.endsWith('CC'));
+    });
   };
 
   const calculateDays = (checkIn: string, checkOut: string) => {
@@ -314,12 +299,6 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     return '12:00';
   };
 
-  // Auto-generate route number
-  // Generate placeholder route number for display (read-only field)
-  // Backend will generate actual route numbers dynamically from the last route number in database
-  const generateRouteNumber = (index: number): string => {
-    return (index + 1).toString().padStart(5, '0'); // Placeholder for display only
-  };
 
   // Format route display
   const formatRouteDisplay = (route: any): string => {
@@ -330,6 +309,241 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       route.city4?.name,
     ].filter(Boolean);
     return cities.join(' → ');
+  };
+
+  // Generate movements based on route type
+  const generateMovementsForRoute = (
+    route: any,
+    routeCities: any[],
+    arrivalDate: string,
+    departureDate: string,
+    arrivalFlightData?: FlightDetail,
+    departureFlightData?: FlightDetail
+  ): { movements: MovementDetail[]; hotels: HotelSchedule[] } => {
+    const movements: MovementDetail[] = [];
+    let movementIndex = 0;
+    let hotels: HotelSchedule[] = [];
+    const routeType = route.routeType;
+
+    if (routeType === 'fulltrip') {
+      // Full trip: Airport → Hotel 1 → Ziyarath 1 → Hotel 2 → Ziyarath 2 → Airport
+      const totalDays = calculateDays(arrivalDate, departureDate);
+      const daysPerCity = Math.floor(totalDays / Math.max(routeCities.length - 1, 1));
+
+      // Hotels for middle cities only (exclude first and last)
+      const hotelCities = routeCities.length >= 3
+        ? routeCities.slice(1, -1)
+        : [];
+
+      hotels = hotelCities.map((city: any, idx: number) => {
+        const checkInDate = new Date(arrivalDate);
+        checkInDate.setDate(checkInDate.getDate() + (idx * daysPerCity));
+        const checkOutDate = new Date(checkInDate);
+        checkOutDate.setDate(checkOutDate.getDate() + daysPerCity);
+
+        return {
+          number: idx + 1,
+          cityId: city.id,
+          cityName: city.name,
+          locationId: '',
+          location: city.name,
+          hotelName: '',
+          checkIn: checkInDate.toISOString().split('T')[0],
+          checkOut: checkOutDate.toISOString().split('T')[0],
+          days: daysPerCity,
+        };
+      });
+
+      // 1) Arrival airport → first hotel
+      const arrivalAirportId = arrivalFlightData?.fromLocationId;
+      if (arrivalAirportId && hotels.length > 0) {
+        const arrivalAirport = airports.find(a => a.id === arrivalAirportId);
+        const firstHotel = hotels[0];
+        
+        if (arrivalAirport && firstHotel.cityId && firstHotel.cityName) {
+          movements.push({
+            sr: movementIndex + 1,
+            route: '',
+            date: arrivalDate,
+            time: arrivalFlightData?.etd ? subtractHours(arrivalFlightData.etd, 1) : '12:00',
+            fromCityId: arrivalAirport.cityId,
+            from: arrivalAirport.city || '',
+            fromLocationId: arrivalAirport.id,
+            fromLocation: arrivalAirport.name || '',
+            toCityId: firstHotel.cityId,
+            to: firstHotel.cityName,
+            toLocationId: '',
+            toLocation: '',
+          });
+          movementIndex++;
+        }
+      }
+
+      // 2) For each hotel: Hotel → Ziyarath (if applicable) → Next Hotel
+      for (let i = 0; i < hotels.length; i++) {
+        const currentHotel = hotels[i];
+        const isLastHotel = i === hotels.length - 1;
+        
+        if (!currentHotel.cityName) continue;
+
+        const hasZiyarath = isZiyarathCity(currentHotel.cityName);
+        const ziyarathLocation = hasZiyarath ? findZiyarathByCity(currentHotel.cityName) : null;
+        
+        if (hasZiyarath && ziyarathLocation && currentHotel.checkIn) {
+          const ziyarathDate = calculateZiyarathDate(currentHotel.checkIn);
+          const ziyarathTime = currentHotel.cityName.toLowerCase().trim() === 'makkah' ? '08:00' : '14:00';
+          
+          movements.push({
+            sr: movementIndex + 1,
+            route: '',
+            date: ziyarathDate,
+            time: ziyarathTime,
+            fromCityId: currentHotel.cityId,
+            from: currentHotel.cityName,
+            fromLocationId: '',
+            fromLocation: '',
+            toCityId: currentHotel.cityId,
+            to: currentHotel.cityName,
+            toLocationId: ziyarathLocation.id,
+            toLocation: ziyarathLocation.name,
+          });
+          movementIndex++;
+        }
+
+        // Move to next hotel
+        if (!isLastHotel) {
+          const nextHotel = hotels[i + 1];
+          if (nextHotel.cityId && nextHotel.cityName) {
+            const movementDate = hasZiyarath && currentHotel.checkIn 
+              ? calculateZiyarathDate(currentHotel.checkIn)
+              : currentHotel.checkOut || arrivalDate;
+            
+            movements.push({
+              sr: movementIndex + 1,
+              route: '',
+              date: movementDate,
+              time: '12:00',
+              fromCityId: currentHotel.cityId,
+              from: currentHotel.cityName,
+              fromLocationId: '',
+              fromLocation: '',
+              toCityId: nextHotel.cityId,
+              to: nextHotel.cityName,
+              toLocationId: '',
+              toLocation: '',
+            });
+            movementIndex++;
+          }
+        }
+      }
+
+      // 3) Last hotel → departure airport
+      const departureAirportId = departureFlightData?.toLocationId;
+      if (departureAirportId && hotels.length > 0) {
+        const departureAirport = airports.find(a => a.id === departureAirportId);
+        const lastHotel = hotels[hotels.length - 1];
+        const departureTime = departureFlightData?.etd || '12:00';
+        
+        if (departureAirport && lastHotel.cityId && lastHotel.cityName) {
+          movements.push({
+            sr: movementIndex + 1,
+            route: '',
+            date: departureDate,
+            time: calculateMovementTime(lastHotel.cityName || '', departureAirport.name || '', departureTime),
+            fromCityId: lastHotel.cityId,
+            from: lastHotel.cityName || '',
+            fromLocationId: '',
+            fromLocation: '',
+            toCityId: departureAirport.cityId,
+            to: departureAirport.city || '',
+            toLocationId: departureAirport.id,
+            toLocation: departureAirport.name || '',
+          });
+          movementIndex++;
+        }
+      }
+    } else if (routeType === 'airporttocity') {
+      // Airport to City: Airport → City Center
+      const arrivalAirportId = arrivalFlightData?.fromLocationId;
+      const destinationCity = routeCities[1];
+      
+      if (arrivalAirportId && destinationCity) {
+        const arrivalAirport = airports.find(a => a.id === arrivalAirportId);
+        const cityCenter = getCityCenterForCity(destinationCity.name);
+        
+        if (arrivalAirport && cityCenter) {
+          movements.push({
+            sr: movementIndex + 1,
+            route: '',
+            date: arrivalDate,
+            time: arrivalFlightData?.etd ? subtractHours(arrivalFlightData.etd, 1) : '12:00',
+            fromCityId: arrivalAirport.cityId,
+            from: arrivalAirport.city || '',
+            fromLocationId: arrivalAirport.id,
+            fromLocation: arrivalAirport.name || '',
+            toCityId: destinationCity.id,
+            to: destinationCity.name,
+            toLocationId: cityCenter.id,
+            toLocation: cityCenter.name,
+          });
+        }
+      }
+    } else if (routeType === 'citytocity') {
+      // City to City: City Center → City Center
+      const sourceCity = routeCities[0];
+      const destinationCity = routeCities[1];
+      
+      if (sourceCity && destinationCity) {
+        const sourceCityCenter = getCityCenterForCity(sourceCity.name);
+        const destCityCenter = getCityCenterForCity(destinationCity.name);
+        
+        if (sourceCityCenter && destCityCenter) {
+          movements.push({
+            sr: movementIndex + 1,
+            route: '',
+            date: arrivalDate,
+            time: '12:00',
+            fromCityId: sourceCity.id,
+            from: sourceCity.name,
+            fromLocationId: sourceCityCenter.id,
+            fromLocation: sourceCityCenter.name,
+            toCityId: destinationCity.id,
+            to: destinationCity.name,
+            toLocationId: destCityCenter.id,
+            toLocation: destCityCenter.name,
+          });
+        }
+      }
+    } else if (routeType === 'citytoairport') {
+      // City to Airport: City Center → Airport
+      const sourceCity = routeCities[0];
+      const departureAirportId = departureFlightData?.toLocationId;
+      
+      if (sourceCity && departureAirportId) {
+        const sourceCityCenter = getCityCenterForCity(sourceCity.name);
+        const departureAirport = airports.find(a => a.id === departureAirportId);
+        const departureTime = departureFlightData?.etd || '12:00';
+        
+        if (sourceCityCenter && departureAirport) {
+          movements.push({
+            sr: movementIndex + 1,
+            route: '',
+            date: departureDate,
+            time: calculateMovementTime(sourceCity.name, departureAirport.name || '', departureTime),
+            fromCityId: sourceCity.id,
+            from: sourceCity.name,
+            fromLocationId: sourceCityCenter.id,
+            fromLocation: sourceCityCenter.name,
+            toCityId: departureAirport.cityId,
+            to: departureAirport.city || '',
+            toLocationId: departureAirport.id,
+            toLocation: departureAirport.name || '',
+          });
+        }
+      }
+    }
+
+    return { movements, hotels };
   };
 
   // Auto-prefill from route
@@ -358,184 +572,21 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     const arrivalDate = arrivalFlightData?.date || formData.reservationDate;
     const departureDate = departureFlightData?.date || formData.reservationDate;
 
-    // Calculate hotel dates (estimate based on route flow)
-    const totalDays = calculateDays(arrivalDate, departureDate);
-    const daysPerCity = Math.floor(totalDays / Math.max(routeCities.length - 1, 1));
-
-    // Prefill Hotels (use middle cities) - only city, no hotel prefill
-    const hotelCities = routeCities.length >= 4 
-      ? routeCities.slice(1, -1) // city2 and city3 for 4-city route
-      : routeCities.length === 3
-      ? [routeCities[1]] // city2 for 3-city route
-      : routeCities.slice(1); // All except first for 2-city route
-
-    const newHotels: HotelSchedule[] = hotelCities.map((city: any, idx: number) => {
-      // Estimate check-in/check-out dates
-      const checkInDate = new Date(arrivalDate);
-      checkInDate.setDate(checkInDate.getDate() + (idx * daysPerCity));
-      const checkOutDate = new Date(checkInDate);
-      checkOutDate.setDate(checkOutDate.getDate() + daysPerCity);
-
-      return {
-        number: idx + 1,
-        cityId: city.id,
-        cityName: city.name,
-        locationId: '', // No prefill
-        location: city.name, // IMPORTANT: location should be city name (CityMaster), not hotel name
-        hotelName: '', // No prefill
-        checkIn: checkInDate.toISOString().split('T')[0],
-        checkOut: checkOutDate.toISOString().split('T')[0],
-        days: daysPerCity,
-      };
-    });
-
-    // Prefill Movements following the booking flow pattern:
-    // Airport → Hotel 1 → Ziyarath 1 → Hotel 2 → Ziyarath 2 → Airport
-    const newMovements: MovementDetail[] = [];
-    let movementIndex = 0;
-
-    // Helper: Check if a city is Makkah or Madinah
-    const isZiyarathCity = (cityName: string): boolean => {
-      const normalized = cityName.toLowerCase().trim();
-      return normalized === 'makkah' || normalized === 'madinah' || normalized === 'madina';
-    };
-
-    // Helper: Find ziyarath location for a city
-    const getZiyarathForCity = (cityName: string) => {
-      return findZiyarathByCity(cityName);
-    };
-
-    // 1) Arrival airport → first hotel
-    const arrivalAirportId = arrivalFlightData?.fromLocationId || selectedArrivalAirportId;
-    if (arrivalAirportId && newHotels.length > 0) {
-      const arrivalAirport = airports.find(a => a.id === arrivalAirportId);
-      const firstHotel = newHotels[0];
-      
-      if (firstHotel.cityId && firstHotel.cityName) {
-        newMovements.push({
-          sr: movementIndex + 1,
-          route: generateRouteNumber(movementIndex),
-          date: arrivalDate,
-          time: arrivalFlightData?.etd ? subtractHours(arrivalFlightData.etd, 1) : '12:00',
-          fromCityId: arrivalAirport?.cityId,
-          from: arrivalAirport?.city || '',
-          fromLocationId: arrivalAirport?.id,
-          fromLocation: arrivalAirport?.name || '',
-          toCityId: firstHotel.cityId,
-          to: firstHotel.cityName,
-          toLocationId: '', // Will be updated when hotel is selected
-          toLocation: '', // Will be updated when hotel is selected
-        });
-        movementIndex++;
-      }
-    }
-
-    // 2) For each hotel (except the last), add: Hotel → Ziyarath (if applicable) → Next Hotel
-    for (let i = 0; i < newHotels.length; i++) {
-      const currentHotel = newHotels[i];
-      const isLastHotel = i === newHotels.length - 1;
-      
-      if (!currentHotel.cityName) continue;
-
-      // Check if current hotel is in Makkah or Madinah (has ziyarath)
-      const hasZiyarath = isZiyarathCity(currentHotel.cityName);
-      const ziyarathLocation = hasZiyarath ? getZiyarathForCity(currentHotel.cityName) : null;
-      
-      if (hasZiyarath && ziyarathLocation && currentHotel.checkIn) {
-        // Add: Hotel → Ziyarath
-        const ziyarathDate = calculateZiyarathDate(currentHotel.checkIn);
-        const ziyarathTime = currentHotel.cityName.toLowerCase().trim() === 'makkah' ? '08:00' : '14:00';
-        
-        newMovements.push({
-          sr: movementIndex + 1,
-          route: generateRouteNumber(movementIndex),
-          date: ziyarathDate,
-          time: ziyarathTime,
-          fromCityId: currentHotel.cityId,
-          from: currentHotel.cityName,
-          fromLocationId: '', // Will be updated when hotel is selected
-          fromLocation: '', // Will be updated when hotel is selected
-          toCityId: currentHotel.cityId,
-          to: currentHotel.cityName,
-          toLocationId: ziyarathLocation.id,
-          toLocation: ziyarathLocation.name,
-        });
-        movementIndex++;
-      }
-
-      // If not the last hotel, add movement to next hotel
-      if (!isLastHotel) {
-        const nextHotel = newHotels[i + 1];
-        if (nextHotel.cityId && nextHotel.cityName) {
-          // IMPORTANT: After ziyarath (round trip), person returns to hotel
-          // So the next movement should start from the hotel, NOT from ziyarath
-          // From: current hotel (always), To: next hotel
-          const fromLocationId = ''; // Will be updated when hotel is selected
-          const fromLocation = ''; // Will be updated when hotel is selected
-          
-          // Estimate date based on current hotel check-out or ziyarath date
-          const movementDate = hasZiyarath && currentHotel.checkIn 
-            ? calculateZiyarathDate(currentHotel.checkIn)
-            : currentHotel.checkOut || arrivalDate;
-          
-          newMovements.push({
-            sr: movementIndex + 1,
-            route: generateRouteNumber(movementIndex),
-            date: movementDate,
-            time: '12:00',
-            fromCityId: currentHotel.cityId,
-            from: currentHotel.cityName,
-            fromLocationId: fromLocationId, // Hotel location (will be set when hotel selected)
-            fromLocation: fromLocation, // Hotel location (will be set when hotel selected)
-            toCityId: nextHotel.cityId,
-            to: nextHotel.cityName,
-            toLocationId: '', // Will be updated when hotel is selected
-            toLocation: '', // Will be updated when hotel is selected
-          });
-          movementIndex++;
-        }
-      }
-    }
-
-    // 3) Last hotel/ziyarath → departure airport
-    const departureFlightForMovement = formData.flightDetails.find(f => f.type === 'AD');
-    const departureAirportId = departureFlightForMovement?.toLocationId || selectedDepartureAirportId;
-    
-    if (departureAirportId && newHotels.length > 0) {
-      const departureAirport = airports.find(a => a.id === departureAirportId);
-      const lastHotel = newHotels[newHotels.length - 1];
-      const departureTime = departureFlightForMovement?.etd || '12:00';
-      
-      if (lastHotel.cityId && lastHotel.cityName) {
-        // IMPORTANT: After ziyarath (round trip), person returns to hotel
-        // So the departure movement should start from the hotel, NOT from ziyarath
-        // From: last hotel (always), To: departure airport
-        const fromLocationId = ''; // Will be updated when hotel is selected
-        const fromLocation = ''; // Will be updated when hotel is selected
-        
-        newMovements.push({
-          sr: movementIndex + 1,
-          route: generateRouteNumber(movementIndex),
-          date: departureDate,
-          time: calculateMovementTime(lastHotel.cityName || '', departureAirport?.name || '', departureTime),
-          fromCityId: lastHotel.cityId,
-          from: lastHotel.cityName || '',
-          fromLocationId: fromLocationId, // Hotel location (will be set when hotel selected)
-          fromLocation: fromLocation, // Hotel location (will be set when hotel selected)
-          toCityId: departureAirport?.cityId,
-          to: departureAirport?.city || '',
-          toLocationId: departureAirport?.id,
-          toLocation: departureAirport?.name || '',
-        });
-        movementIndex++;
-      }
-    }
+    // Generate movements and hotels
+    const { movements, hotels } = generateMovementsForRoute(
+      route,
+      routeCities,
+      arrivalDate,
+      departureDate,
+      arrivalFlightData,
+      departureFlightData
+    );
 
     // Update form data
     setFormData(prev => ({
       ...prev,
-      hotelSchedules: newHotels,
-      movementDetails: newMovements,
+      hotelSchedules: hotels,
+      movementDetails: movements,
     }));
 
     toast.success('Route pre-filled successfully');
@@ -555,24 +606,15 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         groupCode: formData.groupCode,
         paxCount: formData.paxCount,
         reservationDate: formData.reservationDate,
-        hotelSchedules: formData.hotelSchedules.map((hs, idx) => {
-          // IMPORTANT: location must be city name (CityMaster), NOT hotel name
-          // Always use cityName for location, never use hs.location (which might contain hotel name)
-          const cityName = hs.cityName || '';
-          
-          // Validate: if location equals hotelName, it's wrong - use cityName instead
-          const locationValue = (hs.location === hs.hotelName) ? cityName : (cityName || hs.location || '');
-          
-          return {
-            number: idx + 1,
-            location: locationValue, // City name (CityMaster) - MUST be city name
-            hotelName: hs.hotelName || '', // Hotel name (LocationMaster enum HOTEL)
-            checkIn: hs.checkIn,
-            checkOut: hs.checkOut,
-            days: calculateDays(hs.checkIn, hs.checkOut),
-            brn: hs.brn || null,
-          };
-        }),
+        hotelSchedules: formData.hotelSchedules.map((hs, idx) => ({
+          number: idx + 1,
+          location: hs.cityName || hs.location || '', // City name (CityMaster)
+          hotelName: hs.hotelName || '', // Hotel name (LocationMaster)
+          checkIn: hs.checkIn,
+          checkOut: hs.checkOut,
+          days: calculateDays(hs.checkIn, hs.checkOut),
+          brn: hs.brn || null,
+        })),
         movementDetails: formData.movementDetails.map(m => ({
           sr: m.sr,
           route: null, // Backend will generate route numbers dynamically
@@ -627,21 +669,18 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       
       // Reset form
       setFormData({
-        reservationNumber: '',
         reservationDate: new Date().toISOString().split('T')[0],
         guestName: '',
         guestMobile: '',
         groupCode: '',
         paxCount: 1,
-        umrahVisaProvider: null,
         hotelSchedules: [],
         movementDetails: [],
         flightDetails: [],
         transportOptions: [],
       });
       setSelectedRouteId(null);
-      setSelectedArrivalAirportId(null);
-      setSelectedDepartureAirportId(null);
+      setSelectedRouteType('all');
     } catch (error: any) {
       console.error('Error creating quick voucher:', error);
       toast.error(error?.response?.data?.error || 'Failed to create quick voucher');
@@ -685,6 +724,13 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       updated[index].locationId = '';
       updated[index].location = value || ''; // Set location to city name (CityMaster)
       updated[index].hotelName = '';
+      // Ensure cityId is set if we have the city
+      if (value) {
+        const city = cities.find(c => c.name === value);
+        if (city) {
+          updated[index].cityId = city.id;
+        }
+      }
     }
     
     // When location changes, update hotel name and movements
@@ -714,37 +760,32 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     const location = locations.find(l => l.id === hotelLocationId);
     if (!location) return;
 
-    const updatedMovements = [...formData.movementDetails];
-    
-    // Update movements that reference this hotel
-    updatedMovements.forEach((movement, idx) => {
-      // Check if movement is to/from this hotel's city
-      const isToCity = movement.to?.toLowerCase().trim() === hotel.cityName?.toLowerCase().trim();
-      const isFromCity = movement.from?.toLowerCase().trim() === hotel.cityName?.toLowerCase().trim();
+    const updatedMovements = formData.movementDetails.map((movement) => {
+      // Update movements that reference this hotel's city and have empty location
+      const isToCity = movement.to?.toLowerCase().trim() === hotel.cityName?.toLowerCase().trim() && 
+                       movement.toCityId === hotel.cityId && 
+                       !movement.toLocationId;
+      const isFromCity = movement.from?.toLowerCase().trim() === hotel.cityName?.toLowerCase().trim() && 
+                         movement.fromCityId === hotel.cityId && 
+                         !movement.fromLocationId;
       
-      if (isToCity && movement.toCityId === hotel.cityId) {
-        // This movement goes to this city - update toLocation if it's a hotel
-        const toLocation = locations.find(l => l.id === movement.toLocationId);
-        if (!toLocation || (toLocation.locationType === 'HOTEL' && toLocation.city?.toLowerCase().trim() === hotel.cityName?.toLowerCase().trim())) {
-          updatedMovements[idx] = {
-            ...movement,
-            toLocationId: hotelLocationId,
-            toLocation: location.name,
-          };
-        }
+      if (isToCity) {
+        return {
+          ...movement,
+          toLocationId: hotelLocationId,
+          toLocation: location.name,
+        };
       }
       
-      if (isFromCity && movement.fromCityId === hotel.cityId) {
-        // This movement starts from this city - update fromLocation if it's a hotel
-        const fromLocation = locations.find(l => l.id === movement.fromLocationId);
-        if (!fromLocation || (fromLocation.locationType === 'HOTEL' && fromLocation.city?.toLowerCase().trim() === hotel.cityName?.toLowerCase().trim())) {
-          updatedMovements[idx] = {
-            ...movement,
-            fromLocationId: hotelLocationId,
-            fromLocation: location.name,
-          };
-        }
+      if (isFromCity) {
+        return {
+          ...movement,
+          fromLocationId: hotelLocationId,
+          fromLocation: location.name,
+        };
       }
+      
+      return movement;
     });
     
     setFormData(prev => ({ ...prev, movementDetails: updatedMovements }));
@@ -759,7 +800,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         ...formData.movementDetails,
         {
           sr: newIndex + 1,
-          route: generateRouteNumber(newIndex),
+          route: '',
           date: '',
           time: '',
           from: '',
@@ -778,7 +819,6 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     const updated = formData.movementDetails.filter((_, i) => i !== index);
     updated.forEach((m, idx) => {
       m.sr = idx + 1;
-      m.route = generateRouteNumber(idx);
     });
     setFormData({ ...formData, movementDetails: updated });
   };
@@ -789,7 +829,8 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     
     // When from city changes, update location options
     if (field === 'from') {
-      const cityLocations = getLocationsForCity(value);
+      const cityKey = value.toLowerCase().trim();
+      const cityLocations = locationsByCity.get(cityKey) || [];
       if (cityLocations.length > 0) {
         updated[index].fromLocationId = cityLocations[0].id;
         updated[index].fromLocation = cityLocations[0].name;
@@ -801,7 +842,8 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     
     // When to city changes, update location options
     if (field === 'to') {
-      const cityLocations = getLocationsForCity(value);
+      const cityKey = value.toLowerCase().trim();
+      const cityLocations = locationsByCity.get(cityKey) || [];
       if (cityLocations.length > 0) {
         updated[index].toLocationId = cityLocations[0].id;
         updated[index].toLocation = cityLocations[0].name;
@@ -811,19 +853,15 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       }
     }
     
-    // When from location changes, update display
-    if (field === 'fromLocationId') {
+    // When location changes, update display
+    if (field === 'fromLocationId' || field === 'toLocationId') {
       const location = locations.find(l => l.id === value);
       if (location) {
-        updated[index].fromLocation = location.name;
-      }
-    }
-    
-    // When to location changes, update display
-    if (field === 'toLocationId') {
-      const location = locations.find(l => l.id === value);
-      if (location) {
-        updated[index].toLocation = location.name;
+        if (field === 'fromLocationId') {
+          updated[index].fromLocation = location.name;
+        } else {
+          updated[index].toLocation = location.name;
+        }
       }
     }
     
@@ -845,13 +883,11 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     
     const updated = { ...arrivalFlight, [field]: value };
     
-    // When from/to location changes, update display and airport selection
+    // When from/to location changes, update display
     if (field === 'fromLocationId') {
       const location = airports.find(a => a.id === value);
       if (location) {
-        // Use code (airport code) instead of name, truncate to 10 chars max
         updated.from = (location.code || location.name || '').substring(0, 10);
-        setSelectedArrivalAirportId(value);
       }
     }
     
@@ -894,9 +930,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
     if (field === 'toLocationId') {
       const location = airports.find(a => a.id === value);
       if (location) {
-        // Use code (airport code) instead of name, truncate to 10 chars max
         updated.to = (location.code || location.name || '').substring(0, 10);
-        setSelectedDepartureAirportId(value);
       }
     }
     
@@ -920,15 +954,14 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         updated[existingIndex].quantity = newQty;
       }
       setFormData({ ...formData, transportOptions: updated });
-    } else if (delta > 0 && transportRouteId) {
-      // Add new transport - allow from any route
+    } else if (delta > 0 && selectedRouteId) {
       setFormData({
         ...formData,
         transportOptions: [
           ...formData.transportOptions,
           {
             transportId,
-            routeId: transportRouteId,
+            routeId: selectedRouteId,
             quantity: 1,
           },
         ],
@@ -956,16 +989,6 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="reservationNumber">Reservation Number</Label>
-              <Input
-                id="reservationNumber"
-                value={formData.reservationNumber}
-                onChange={(e) => setFormData({ ...formData, reservationNumber: e.target.value })}
-                placeholder="Auto-generated if empty"
-              />
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="reservationDate">Reservation Date *</Label>
               <Input
                 id="reservationDate"
@@ -986,6 +1009,17 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="paxCount">Passenger Count *</Label>
+              <Input
+                id="paxCount"
+                type="number"
+                value={formData.paxCount}
+                onChange={(e) => setFormData({ ...formData, paxCount: parseInt(e.target.value) || 1 })}
+                min="1"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="guestMobile">Guest Mobile</Label>
               <Input
                 id="guestMobile"
@@ -1002,17 +1036,6 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
                 value={formData.groupCode}
                 onChange={(e) => setFormData({ ...formData, groupCode: e.target.value })}
                 placeholder="Enter group code"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="paxCount">Passenger Count *</Label>
-              <Input
-                id="paxCount"
-                type="number"
-                value={formData.paxCount}
-                onChange={(e) => setFormData({ ...formData, paxCount: parseInt(e.target.value) || 1 })}
-                min="1"
               />
             </div>
           </div>
@@ -1153,22 +1176,42 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         <CardContent>
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label className="text-xs">Route (Full Trip)</Label>
+              <Label className="text-xs">Route Type</Label>
+              <Select
+                value={selectedRouteType}
+                onValueChange={(value) => {
+                  setSelectedRouteType(value as RouteType | 'all');
+                  setSelectedRouteId(null); // Reset route selection when type changes
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select route type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">All Route Types</SelectItem>
+                  <SelectItem value="fulltrip" className="text-xs">Full Trip</SelectItem>
+                  <SelectItem value="airporttocity" className="text-xs">Airport to City</SelectItem>
+                  <SelectItem value="citytocity" className="text-xs">City to City</SelectItem>
+                  <SelectItem value="citytoairport" className="text-xs">City to Airport</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Route</Label>
               <Select
                 value={selectedRouteId || ''}
                 onValueChange={handleRouteSelect}
-                disabled={loadingRoutes}
               >
                 <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select a route to auto-fill hotels and movements" />
+                  <SelectValue placeholder="Select a route to auto-fill movements" />
                 </SelectTrigger>
                 <SelectContent>
-                  {routes.filter((r: any) => r.routeType === 'fulltrip').length === 0 ? (
+                  {filteredRoutes.length === 0 ? (
                     <SelectItem value="__no_routes__" disabled className="text-xs">
-                      No routes available
+                      No routes available for selected type
                     </SelectItem>
                   ) : (
-                    routes.filter((r: any) => r.routeType === 'fulltrip').map((route: any) => (
+                    filteredRoutes.map((route: any) => (
                       <SelectItem key={route.id} value={route.id} className="text-xs">
                         {formatRouteDisplay(route)}
                       </SelectItem>
@@ -1196,7 +1239,8 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
       </Card>
 
 
-      {/* Hotel Schedules */}
+      {/* Hotel Schedules - Only show for fulltrip */}
+      {selectedRouteType === 'fulltrip' && (
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -1320,6 +1364,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Movement Details */}
       <Card>
@@ -1356,8 +1401,10 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
                 </TableHeader>
                 <TableBody>
                   {formData.movementDetails.map((movement, idx) => {
-                    const fromCityLocations = movement.from ? getLocationsForCity(movement.from) : [];
-                    const toCityLocations = movement.to ? getLocationsForCity(movement.to) : [];
+                    const fromCityKey = movement.from ? movement.from.toLowerCase().trim() : '';
+                    const toCityKey = movement.to ? movement.to.toLowerCase().trim() : '';
+                    const fromCityLocations = fromCityKey ? (locationsByCity.get(fromCityKey) || []) : [];
+                    const toCityLocations = toCityKey ? (locationsByCity.get(toCityKey) || []) : [];
                     
                     return (
                       <TableRow key={idx}>
@@ -1521,59 +1568,7 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Filter by Route Type</Label>
-                <Select
-                  value={routeTypeFilter}
-                  onValueChange={(value) => {
-                    setRouteTypeFilter(value as RouteType | 'all');
-                    setTransportRouteId(selectedRouteId); // Reset to selected route
-                    setTransports([]);
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="All Route Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">All Route Types</SelectItem>
-                    <SelectItem value="fulltrip" className="text-xs">Full Trip</SelectItem>
-                    <SelectItem value="airporttocity" className="text-xs">Airport to City</SelectItem>
-                    <SelectItem value="citytocity" className="text-xs">City to City</SelectItem>
-                    <SelectItem value="citytoairport" className="text-xs">City to Airport</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Select Route</Label>
-                <Select
-                  value={transportRouteId || selectedRouteId || ''}
-                  onValueChange={(value) => {
-                    setTransportRouteId(value || null);
-                  }}
-                  disabled={loadingRoutes}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select a route" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredRoutes.length === 0 ? (
-                      <SelectItem value="__no_routes__" disabled className="text-xs">
-                        No routes available
-                      </SelectItem>
-                    ) : (
-                      filteredRoutes.map((route: any) => (
-                        <SelectItem key={route.id} value={route.id} className="text-xs">
-                          {formatRouteDisplay(route)}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {(transportRouteId || selectedRouteId) && (
+            {selectedRouteId && (
               <>
                 {loadingTransports ? (
                   <div className="flex items-center justify-center py-8">
@@ -1649,22 +1644,18 @@ export function QuickVoucherForm({ onSuccess }: QuickVoucherFormProps) {
           variant="outline"
           onClick={() => {
             setFormData({
-              reservationNumber: '',
               reservationDate: new Date().toISOString().split('T')[0],
               guestName: '',
               guestMobile: '',
               groupCode: '',
               paxCount: 1,
-              umrahVisaProvider: null,
               hotelSchedules: [],
               movementDetails: [],
               flightDetails: [],
               transportOptions: [],
             });
             setSelectedRouteId(null);
-            setTransportRouteId(null);
-            setSelectedArrivalAirportId(null);
-            setSelectedDepartureAirportId(null);
+            setSelectedRouteType('all');
           }}
         >
           Reset

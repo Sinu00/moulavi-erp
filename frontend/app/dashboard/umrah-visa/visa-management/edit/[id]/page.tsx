@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
@@ -11,7 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, Plane, Users, Building, MapPin, Mail, ArrowLeft, Clock, DollarSign, Route, Truck, ArrowRight, X, Plus } from 'lucide-react';
+import { MovementsTable } from '@/components/umrah-booking/components/MovementsTable';
+import { Calendar, Plane, Users, Building, MapPin, Mail, ArrowLeft, Clock, DollarSign, Route, Truck, X, Plus, Save } from 'lucide-react';
+import { Movement, LocationMaster } from '@/lib/umrah/types';
 
 export default function EditUmrahVisaBookingPage() {
   const router = useRouter();
@@ -50,8 +52,8 @@ export default function EditUmrahVisaBookingPage() {
   // Transportation
   const [transportBookings, setTransportBookings] = useState<any[]>([]);
 
-  // Movement Details
-  const [movementDetails, setMovementDetails] = useState<any[]>([]);
+  // Movement Details - using Movement type from booking flow
+  const [movements, setMovements] = useState<Movement[]>([]);
 
   // Passengers
   const [passengers, setPassengers] = useState<any[]>([]);
@@ -59,7 +61,7 @@ export default function EditUmrahVisaBookingPage() {
   // Master Data
   const [airports, setAirports] = useState<any[]>([]);
   const [cities, setCities] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
+  const [locationMasters, setLocationMasters] = useState<LocationMaster[]>([]);
   const [hotels, setHotels] = useState<any[]>([]);
   const [transportRoutes, setTransportRoutes] = useState<any[]>([]);
   const [transportMasters, setTransportMasters] = useState<any[]>([]);
@@ -106,8 +108,9 @@ export default function EditUmrahVisaBookingPage() {
 
       // Accommodation
       setAccommodationType(b.accommodationType || 'hotel');
+      // Store hotel bookings temporarily - will map locationId after master data loads
       setHotelBookings(b.hotelBookings || []);
-      
+
       if (b.sponsorIqamaDetails) {
         setIqamaNumber(b.sponsorIqamaDetails.iqamaNumber || '');
         setIqamaName(b.sponsorIqamaDetails.iqamaSponserName || '');
@@ -115,20 +118,52 @@ export default function EditUmrahVisaBookingPage() {
           setIqamaDob(new Date(b.sponsorIqamaDetails.sponserDob).toISOString().split('T')[0]);
         }
         setIqamaMobile(b.sponsorIqamaDetails.sponserMobileNumber || '');
-        setIqamaNationalShortAddress(b.sponsorIqamaDetails.iqamaNationalShortAddress || '');
+        setIqamaNationalShortAddress(b.sponsorIqamaDetails.sponserNationalShortAddress || '');
       }
 
       // Transportation
       setTransportBookings(b.transportBookings || []);
 
-      // Movement Details
-      setMovementDetails(b.movementDetails || []);
+      // Convert movement details to Movement format
+      const convertedMovements: Movement[] = (b.movementDetails || []).map((md: any) => {
+        const travelDateTime = new Date(md.travelDateTime);
+        const isZiyarath = md.toLocation?.locationType === 'ZIYARAT';
+        return {
+          id: md.id,
+          type: isZiyarath ? 'ziyarath' : 'transport',
+          date: travelDateTime.toISOString().split('T')[0],
+          time: travelDateTime.toTimeString().slice(0, 5),
+          fromLocationId: md.fromLocationId,
+          toLocationId: md.toLocationId,
+          viabadrOverride: false, // Will need to check if this is stored
+        };
+      });
+      setMovements(convertedMovements);
 
       // Passengers
       setPassengers(b.passengers || []);
 
       // Load master data
       await loadMasterData();
+      
+      // After master data loads, map hotel bookings with locationId
+      // We need to reload locationMasters state since it's async
+      const locationsRes = await locationMasterAPI.getActive();
+      const allLocations = locationsRes.data?.locationMasters || locationsRes.data || [];
+      
+      if (b.hotelBookings && b.hotelBookings.length > 0) {
+        const updatedHotelBookings = b.hotelBookings.map((hb: any) => {
+          // Find location with OTHERS type that has the same cityId
+          const location = allLocations.find((l: any) => 
+            l.locationType === 'OTHERS' && (l.cityId === hb.cityId || l.cityMaster?.id === hb.cityId)
+          );
+          return {
+            ...hb,
+            locationId: location?.id || '',
+          };
+        });
+        setHotelBookings(updatedHotelBookings);
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.response?.data?.error || 'Failed to load booking');
@@ -147,7 +182,8 @@ export default function EditUmrahVisaBookingPage() {
 
       setAirports(airportsRes.data?.locationMasters || airportsRes.data?.airports || []);
       setCities(citiesRes.data?.cityMasters || citiesRes.data || []);
-      setLocations(locationsRes.data?.locationMasters || locationsRes.data || []);
+      const locations = locationsRes.data?.locationMasters || locationsRes.data || [];
+      setLocationMasters(locations);
 
       // Load hotels (filter by locationType = HOTEL)
       const hotelLocations = locations.filter((loc: any) => loc.locationType === 'HOTEL');
@@ -160,21 +196,19 @@ export default function EditUmrahVisaBookingPage() {
       ]);
       setTransportRoutes(routesRes.data?.transportRouteMasters || routesRes.data || []);
       setTransportMasters(mastersRes.data?.transportMasters || mastersRes.data || []);
+      
+      // Extract unique vehicle types
+      const uniqueVehicleTypes = Array.from(
+        new Map(
+          (mastersRes.data?.transportMasters || mastersRes.data || []).map((tm: any) => [
+            tm.vehicleType?.id,
+            tm.vehicleType,
+          ])
+        ).values()
+      );
+      setVehicleTypes(uniqueVehicleTypes);
     } catch (err) {
       console.error('Error loading master data:', err);
-    }
-  };
-
-  const formatDateTime = (dateTime?: string | Date) => {
-    if (!dateTime) return { date: '', time: '' };
-    try {
-      const dt = new Date(dateTime);
-      return {
-        date: dt.toISOString().split('T')[0],
-        time: dt.toTimeString().slice(0, 5),
-      };
-    } catch {
-      return { date: '', time: '' };
     }
   };
 
@@ -197,17 +231,70 @@ export default function EditUmrahVisaBookingPage() {
         departureFlightNumber,
       });
 
-      // 3. Accommodation
+      // 3. Movement Details - convert back to API format and save
+      const movementDetailsToSave = movements.map((m) => {
+        const travelDateTime = new Date(`${m.date}T${m.time || '12:00'}`);
+        return {
+          id: m.id?.startsWith('new-') ? undefined : m.id,
+          date: m.date,
+          time: m.time || '12:00',
+          fromLocationId: m.fromLocationId,
+          toLocationId: m.toLocationId,
+          viabadrOverride: m.viabadrOverride || false,
+        };
+      });
+      
+      // Use bulk update endpoint (we'll need to create this or use individual creates/updates)
+      // For now, we'll save movements via a bulk update
+      if (movementDetailsToSave.length > 0) {
+        try {
+          await umrahVisaAPI.updateMovementDetails(bookingId, movementDetailsToSave);
+        } catch (err: any) {
+          console.error('Error updating movements:', err);
+          toast.error('Failed to update movements. Please check backend endpoint.');
+        }
+      }
+
+      // 4. Transport Bookings
+      await umrahVisaAPI.updateTransportBookings(bookingId, transportBookings.map(t => ({
+        id: t.id,
+        travelDateTime: t.travelDateTime,
+        transportMasterId: t.transportMasterId,
+      })));
+
+      // 5. Accommodation
       if (accommodationType === 'hotel') {
-        // Update hotel bookings (dates only via existing API)
-        await umrahVisaAPI.updateAccommodation(bookingId, {
-          accommodationType: 'hotel',
-          hotelBookings: hotelBookings.map(h => ({
-            id: h.id,
-            checkInDate: h.checkInDate,
-            checkOutDate: h.checkOutDate,
-          })),
-        });
+        // Update hotel bookings
+        for (const h of hotelBookings) {
+          // Get cityId from location
+          const location = locationMasters.find((l: any) => l.id === h.locationId);
+          const cityId = location?.cityId || location?.cityMaster?.id;
+          
+          if (!cityId || !h.hotelId) {
+            toast.error(`Missing city or hotel for hotel booking`);
+            continue;
+          }
+
+          if (h.id && !h.id.startsWith('new-')) {
+            // Update existing - use updateAccommodation for dates only
+            await umrahVisaAPI.updateAccommodation(bookingId, {
+              accommodationType: 'hotel',
+              hotelBookings: [{
+                id: h.id,
+                checkInDate: h.checkInDate,
+                checkOutDate: h.checkOutDate,
+              }],
+            });
+          } else {
+            // Create new
+            await umrahVisaAPI.createHotelBooking(bookingId, {
+              cityId: cityId,
+              hotelId: h.hotelId,
+              checkInDate: h.checkInDate,
+              checkOutDate: h.checkOutDate,
+            });
+          }
+        }
       } else if (accommodationType === 'iqama') {
         await umrahVisaAPI.updateAccommodation(bookingId, {
           accommodationType: 'iqama',
@@ -219,9 +306,9 @@ export default function EditUmrahVisaBookingPage() {
         });
       }
 
-      // 4. Passengers
+      // 6. Passengers
       await umrahVisaAPI.updatePassengers(bookingId, passengers.map(p => ({
-        id: p.id,
+        id: p.id?.startsWith('new-') ? undefined : p.id,
         fullName: p.fullName,
         passportNumber: p.passportNumber,
         nationality: p.nationality,
@@ -237,31 +324,107 @@ export default function EditUmrahVisaBookingPage() {
     }
   };
 
-  // Hotel booking handlers
-  const addHotelBooking = async () => {
-    try {
-      const lastBooking = hotelBookings[hotelBookings.length - 1];
-      const res = await umrahVisaAPI.createHotelBooking(bookingId, {
-        locationId: lastBooking?.locationId || locations.find((l: any) => l.locationType === 'OTHERS')?.id || '',
-        hotelId: lastBooking?.hotelId || hotels[0]?.id || '',
-        checkInDate: lastBooking?.checkOutDate || arrivalDate || new Date().toISOString().split('T')[0],
-        checkOutDate: departureDate || new Date().toISOString().split('T')[0],
+  // Movement handlers
+  const updateMovement = useCallback((index: number, field: keyof Movement, value: any) => {
+    setMovements(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  }, []);
+
+  const removeMovement = useCallback((index: number) => {
+    const movement = movements[index];
+    if (movement.id && !movement.id.startsWith('new-')) {
+      // Delete from backend
+      umrahVisaAPI.deleteMovementDetail(movement.id).catch((err: any) => {
+        toast.error(err?.response?.data?.error || 'Failed to delete movement');
       });
-      setHotelBookings(prev => [...prev, res.data.hotelBooking]);
-      toast.success('Hotel booking added');
+    }
+    setMovements(prev => prev.filter((_, i) => i !== index));
+    toast.success('Movement removed');
+  }, [movements]);
+
+  const addMovement = useCallback(() => {
+    const newMovement: Movement = {
+      id: `new-${Date.now()}`,
+      type: 'transport',
+      fromLocationId: '',
+      toLocationId: '',
+      date: '',
+      time: '12:00',
+    };
+    setMovements(prev => [...prev, newMovement]);
+  }, []);
+
+  const addMovementAfter = useCallback((index: number) => {
+    const newMovement: Movement = {
+      id: `new-${Date.now()}`,
+      type: 'transport',
+      fromLocationId: movements[index]?.toLocationId || '',
+      toLocationId: '',
+      date: movements[index]?.date || '',
+      time: movements[index]?.time || '12:00',
+    };
+    setMovements(prev => {
+      const updated = [...prev];
+      updated.splice(index + 1, 0, newMovement);
+      return updated;
+    });
+  }, [movements]);
+
+  // Transport booking handlers
+  const addTransportBooking = async () => {
+    try {
+      const lastBooking = transportBookings[transportBookings.length - 1];
+      const res = await umrahVisaAPI.createTransportBooking(bookingId, {
+        transportMasterId: lastBooking?.transportMasterId || transportMasters[0]?.id || '',
+        travelDateTime: lastBooking?.travelDateTime || new Date().toISOString(),
+      });
+      setTransportBookings(prev => [...prev, res.data.transportBooking]);
+      toast.success('Transport booking added');
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Failed to add hotel booking');
+      toast.error(err?.response?.data?.error || 'Failed to add transport booking');
     }
   };
 
-  const removeHotelBooking = async (id: string, index: number) => {
+  const removeTransportBooking = async (id: string, index: number) => {
     try {
-      await umrahVisaAPI.deleteHotelBooking(id);
-      setHotelBookings(prev => prev.filter((_, i) => i !== index));
-      toast.success('Hotel booking removed');
+      await umrahVisaAPI.deleteTransportBooking(id);
+      setTransportBookings(prev => prev.filter((_, i) => i !== index));
+      toast.success('Transport booking removed');
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Failed to remove hotel booking');
+      toast.error(err?.response?.data?.error || 'Failed to remove transport booking');
     }
+  };
+
+  const updateTransportBooking = (index: number, field: string, value: any) => {
+    setTransportBookings(prev => prev.map((t, i) => i === index ? { ...t, [field]: value } : t));
+  };
+
+  // Hotel booking handlers
+  const addHotelBooking = () => {
+    const lastBooking = hotelBookings[hotelBookings.length - 1];
+    setHotelBookings(prev => [...prev, {
+      id: `new-${Date.now()}`,
+      locationId: lastBooking?.locationId || locations.filter((l: any) => l.locationType === 'OTHERS')[0]?.id || '',
+      hotelId: lastBooking?.hotelId || hotels[0]?.id || '',
+      checkInDate: lastBooking?.checkOutDate || arrivalDate || new Date().toISOString().split('T')[0],
+      checkOutDate: departureDate || new Date().toISOString().split('T')[0],
+    }]);
+  };
+
+  const removeHotelBooking = async (id: string, index: number) => {
+    if (id && !id.startsWith('new-')) {
+      try {
+        await umrahVisaAPI.deleteHotelBooking(id);
+        toast.success('Hotel booking removed');
+      } catch (err: any) {
+        toast.error(err?.response?.data?.error || 'Failed to remove hotel booking');
+        return;
+      }
+    }
+    setHotelBookings(prev => prev.filter((_, i) => i !== index));
   };
 
   const updateHotelBooking = (index: number, field: string, value: any) => {
@@ -282,7 +445,6 @@ export default function EditUmrahVisaBookingPage() {
   const removePassenger = (index: number) => {
     const passenger = passengers[index];
     if (passenger.id && !passenger.id.startsWith('new-')) {
-      // Existing passenger - would need delete API
       toast.error('Cannot remove existing passengers. Please contact support.');
       return;
     }
@@ -295,33 +457,46 @@ export default function EditUmrahVisaBookingPage() {
 
   // Get location name helper
   const getLocationName = (locationId: string) => {
-    const location = locations.find((l: any) => l.id === locationId);
+    const location = locationMasters.find((l: any) => l.id === locationId);
     return location?.name || 'N/A';
-  };
-
-  // Get city name helper
-  const getCityName = (cityId: string) => {
-    const city = cities.find((c: any) => c.id === cityId);
-    return city?.name || 'N/A';
-  };
-
-  // Get airport name helper
-  const getAirportName = (airportId: string) => {
-    const airport = airports.find((a: any) => a.id === airportId);
-    return airport?.name || airport?.airportName || 'N/A';
   };
 
   // Get hotels for a location
   const getHotelsForLocation = (locationId: string) => {
     if (!locationId) return hotels;
-    // Hotels are LocationMasters with locationType = HOTEL
-    // Filter by city if location has cityId
-    const location = locations.find((l: any) => l.id === locationId);
+    const location = locationMasters.find((l: any) => l.id === locationId);
     if (location?.cityId) {
       return hotels.filter((h: any) => h.cityId === location.cityId);
     }
     return hotels;
   };
+
+  // Format transport route
+  const formatTransportRoute = (route: any) => {
+    if (!route) return 'N/A';
+    const cities = [
+      route.city1?.name,
+      route.city2?.name,
+      route.city3?.name,
+      route.city4?.name,
+    ].filter(Boolean);
+    return cities.length > 0 ? cities.join(' → ') : 'N/A';
+  };
+
+  const formatDateTime = (dateTime?: string | Date) => {
+    if (!dateTime) return { date: '', time: '' };
+    try {
+      const dt = new Date(dateTime);
+      return {
+        date: dt.toISOString().split('T')[0],
+        time: dt.toTimeString().slice(0, 5),
+      };
+    } catch {
+      return { date: '', time: '' };
+    }
+  };
+
+  const locations = locationMasters.filter((l: any) => l.locationType === 'OTHERS' || l.locationType === 'HOTEL');
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -355,7 +530,8 @@ export default function EditUmrahVisaBookingPage() {
                   <ArrowLeft className="h-4 w-4 mr-1" /> Back
                 </Button>
                 <Button onClick={handleSave} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save'}
+                  <Save className="h-4 w-4 mr-1" />
+                  {saving ? 'Saving...' : 'Save All Changes'}
                 </Button>
               </div>
             </div>
@@ -369,7 +545,7 @@ export default function EditUmrahVisaBookingPage() {
             <div className="py-12 text-center text-gray-500">No booking details available</div>
           ) : (
             <div className="space-y-4 lg:space-y-6">
-              {/* Summary Card - Key Info (Read-only Party Details) */}
+              {/* Summary Card */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-xl flex items-center gap-2"><Building className="h-5 w-5 text-blue-600" /> Booking Summary</CardTitle>
@@ -402,33 +578,6 @@ export default function EditUmrahVisaBookingPage() {
                       <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Passengers</p>
                       <p className="text-lg font-bold text-gray-900">{booking.passengerCount}</p>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Party Information (Read-only) */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2"><Mail className="h-5 w-5 text-indigo-600" /> Party Contact Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Email</p>
-                      <p className="text-sm text-gray-900 break-all">{booking.party?.email || 'N/A'}</p>
-                    </div>
-                    {booking.party?.contactNumber && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Contact</p>
-                        <p className="text-sm text-gray-900">{booking.party.contactNumber}</p>
-                      </div>
-                    )}
-                    {booking.party?.whatsappNumber && (
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">WhatsApp</p>
-                        <p className="text-sm text-gray-900">{booking.party.whatsappNumber}</p>
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -532,177 +681,139 @@ export default function EditUmrahVisaBookingPage() {
                 </CardContent>
               </Card>
 
+              {/* Movement Details - Using MovementsTable */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Route className="h-5 w-5 text-blue-600" /> 
+                      Movement Details ({movements.length})
+                    </CardTitle>
+                    <Button type="button" variant="outline" size="sm" onClick={addMovement}>
+                      <Plus className="h-4 w-4 mr-1" /> Add Movement
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <MovementsTable
+                    movements={movements}
+                    locationMasters={locationMasters}
+                    onUpdateMovement={updateMovement}
+                    onRemoveMovement={removeMovement}
+                    onAddMovement={addMovementAfter}
+                    emptyMessage="No movements. Click 'Add Movement' to add one."
+                  />
+                </CardContent>
+              </Card>
+
               {/* Transportation Vehicles */}
-              {transportBookings.length > 0 && (
-                <Card>
-                  <CardHeader>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Truck className="h-5 w-5 text-green-600" /> 
                       Transportation Vehicles ({transportBookings.length})
                     </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {transportBookings.map((t: any, idx: number) => {
-                        const route = t.transportMaster?.route;
-                        const vehicleType = t.transportMaster?.vehicleType;
-                        const travelDateTime = formatDateTime(t.travelDateTime);
-                        
-                        return (
-                          <div key={t.id || idx} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                              <div>
-                                <label className="text-xs text-gray-600 mb-1 block">Route</label>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {route ? [
-                                    route.city1?.name,
-                                    route.city2?.name,
-                                    route.city3?.name,
-                                    route.city4?.name,
-                                  ].filter(Boolean).join(' → ') : 'N/A'}
-                                </p>
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-600 mb-1 block">Travel Date</label>
-                                <Input 
-                                  type="date" 
-                                  value={travelDateTime.date} 
-                                  onChange={(e) => {
-                                    const newDate = e.target.value;
-                                    const newDateTime = new Date(`${newDate}T${travelDateTime.time}`);
-                                    setTransportBookings(prev => prev.map((tb, i) => 
-                                      i === idx ? { ...tb, travelDateTime: newDateTime.toISOString() } : tb
-                                    ));
-                                  }}
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-600 mb-1 block">Travel Time</label>
-                                <Input 
-                                  type="time" 
-                                  value={travelDateTime.time} 
-                                  onChange={(e) => {
-                                    const newTime = e.target.value;
-                                    const newDateTime = new Date(`${travelDateTime.date}T${newTime}`);
-                                    setTransportBookings(prev => prev.map((tb, i) => 
-                                      i === idx ? { ...tb, travelDateTime: newDateTime.toISOString() } : tb
-                                    ));
-                                  }}
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-600 mb-1 block">Vehicle Type</label>
-                                <p className="text-sm text-gray-900">{vehicleType?.vehicleName || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-600 mb-1 block">Price</label>
-                                <p className="text-sm font-semibold text-gray-900">
-                                  {t.transportMaster?.price ? `₹${Number(t.transportMaster.price).toLocaleString('en-IN')}` : 'N/A'}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <Button type="button" variant="outline" size="sm" onClick={addTransportBooking}>
+                      <Plus className="h-4 w-4 mr-1" /> Add Vehicle
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {transportBookings.length === 0 ? (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg">
+                      <Truck className="h-10 w-10 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600">No transport bookings found</p>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Movement Details */}
-              {movementDetails.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Route className="h-5 w-5 text-blue-600" /> 
-                      Movement Details ({movementDetails.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {movementDetails.map((movement: any, index: number) => {
-                        const travelDateTime = formatDateTime(movement.travelDateTime);
-                        const isZiyarath = movement.toLocation?.locationType === 'ZIYARAT';
-                        
-                        return (
-                          <div 
-                            key={movement.id} 
-                            className={`border rounded-lg p-4 ${isZiyarath ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-gray-50'}`}
-                          >
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                                  isZiyarath ? 'bg-purple-200' : 'bg-blue-100'
-                                }`}>
-                                  <span className={`text-xs font-bold ${isZiyarath ? 'text-purple-700' : 'text-blue-600'}`}>
-                                    {isZiyarath ? 'Z' : '#'}{index + 1}
-                                  </span>
-                                </div>
-                                <div>
-                                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                                    {isZiyarath ? 'Ziyarath' : 'Route'} {index + 1}
-                                  </p>
-                                  <p className="text-sm font-medium text-gray-900">
-                                    {getCityName(movement.fromCityId)} → {isZiyarath ? getLocationName(movement.toLocationId) : getCityName(movement.toCityId)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right space-y-2">
-                                <div>
-                                  <label className="text-xs text-gray-600 mb-1 block">Date</label>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                        <thead>
+                          <tr className="bg-gray-50">
+                            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Route</th>
+                            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Travel Date</th>
+                            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Travel Time</th>
+                            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Vehicle Type</th>
+                            <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Price</th>
+                            <th className="border border-gray-200 p-3 text-center text-sm font-medium text-gray-700">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {transportBookings.map((t: any, idx: number) => {
+                            const route = t.transportMaster?.route;
+                            const vehicleType = t.transportMaster?.vehicleType;
+                            const travelDateTime = formatDateTime(t.travelDateTime);
+                            const availableMasters = transportMasters.filter((tm: any) => 
+                              tm.route?.id === route?.id
+                            );
+                            
+                            return (
+                              <tr key={t.id || idx} className="hover:bg-gray-50">
+                                <td className="border border-gray-200 p-3">
+                                  <Select 
+                                    value={t.transportMasterId || ''} 
+                                    onValueChange={(val) => updateTransportBooking(idx, 'transportMasterId', val)}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Select transport" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {transportMasters.map((tm: any) => (
+                                        <SelectItem key={tm.id} value={tm.id}>
+                                          {formatTransportRoute(tm.route)} - {tm.vehicleType?.vehicleName} (₹{Number(tm.price).toLocaleString('en-IN')})
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                                <td className="border border-gray-200 p-3">
                                   <Input 
                                     type="date" 
-                                    value={travelDateTime.date}
+                                    value={travelDateTime.date} 
                                     onChange={(e) => {
                                       const newDate = e.target.value;
                                       const newDateTime = new Date(`${newDate}T${travelDateTime.time}`);
-                                      setMovementDetails(prev => prev.map((md, i) => 
-                                        i === index ? { ...md, travelDateTime: newDateTime.toISOString() } : md
-                                      ));
+                                      updateTransportBooking(idx, 'travelDateTime', newDateTime.toISOString());
                                     }}
-                                    className="w-40"
                                   />
-                                </div>
-                                <div>
-                                  <label className="text-xs text-gray-600 mb-1 block">Time</label>
+                                </td>
+                                <td className="border border-gray-200 p-3">
                                   <Input 
                                     type="time" 
-                                    value={travelDateTime.time}
+                                    value={travelDateTime.time} 
                                     onChange={(e) => {
                                       const newTime = e.target.value;
                                       const newDateTime = new Date(`${travelDateTime.date}T${newTime}`);
-                                      setMovementDetails(prev => prev.map((md, i) => 
-                                        i === index ? { ...md, travelDateTime: newDateTime.toISOString() } : md
-                                      ));
+                                      updateTransportBooking(idx, 'travelDateTime', newDateTime.toISOString());
                                     }}
-                                    className="w-40"
                                   />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-200">
-                              <div>
-                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">From</p>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {getLocationName(movement.fromLocationId)}
-                                </p>
-                                <p className="text-xs text-gray-600">{getCityName(movement.fromCityId)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">To</p>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {getLocationName(movement.toLocationId)}
-                                </p>
-                                <p className="text-xs text-gray-600">{getCityName(movement.toCityId)}</p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                                </td>
+                                <td className="border border-gray-200 p-3 text-sm text-gray-600">
+                                  {vehicleType?.vehicleName || 'N/A'}
+                                </td>
+                                <td className="border border-gray-200 p-3 text-sm font-semibold text-gray-900">
+                                  {t.transportMaster?.price ? `₹${Number(t.transportMaster.price).toLocaleString('en-IN')}` : 'N/A'}
+                                </td>
+                                <td className="border border-gray-200 p-3 text-center">
+                                  <Button 
+                                    type="button" 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => removeTransportBooking(t.id, idx)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Accommodation */}
               <Card>
@@ -743,26 +854,24 @@ export default function EditUmrahVisaBookingPage() {
                         </div>
                       ) : (
                         <div className="overflow-x-auto">
-                          <table className="w-full">
+                          <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
                             <thead>
-                              <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
-                                <th className="py-3 px-4">Location</th>
-                                <th className="py-3 px-4">Hotel Name</th>
-                                <th className="py-3 px-4">Check-In</th>
-                                <th className="py-3 px-4">Check-Out</th>
-                                <th className="py-3 px-4">Actions</th>
+                              <tr className="bg-gray-50">
+                                <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Location</th>
+                                <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Hotel Name</th>
+                                <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Check-In</th>
+                                <th className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700">Check-Out</th>
+                                <th className="border border-gray-200 p-3 text-center text-sm font-medium text-gray-700">Action</th>
                               </tr>
                             </thead>
                             <tbody>
                               {hotelBookings.map((h: any, idx: number) => {
-                                const locationName = h.location?.name || h.location?.cityMaster?.name || 'N/A';
-                                const hotelName = h.hotel?.name || 'N/A';
                                 const checkIn = h.checkInDate ? new Date(h.checkInDate).toISOString().split('T')[0] : '';
                                 const checkOut = h.checkOutDate ? new Date(h.checkOutDate).toISOString().split('T')[0] : '';
                                 
                                 return (
-                                  <tr key={h.id || idx} className="border-b border-gray-100 hover:bg-gray-50">
-                                    <td className="py-3 px-4">
+                                  <tr key={h.id || idx} className="hover:bg-gray-50">
+                                    <td className="border border-gray-200 p-3">
                                       <Select 
                                         value={h.locationId || ''} 
                                         onValueChange={(val) => updateHotelBooking(idx, 'locationId', val)}
@@ -777,7 +886,7 @@ export default function EditUmrahVisaBookingPage() {
                                         </SelectContent>
                                       </Select>
                                     </td>
-                                    <td className="py-3 px-4">
+                                    <td className="border border-gray-200 p-3">
                                       <Select 
                                         value={h.hotelId || ''} 
                                         onValueChange={(val) => updateHotelBooking(idx, 'hotelId', val)}
@@ -792,31 +901,30 @@ export default function EditUmrahVisaBookingPage() {
                                         </SelectContent>
                                       </Select>
                                     </td>
-                                    <td className="py-3 px-4">
+                                    <td className="border border-gray-200 p-3">
                                       <Input 
                                         type="date" 
                                         value={checkIn} 
                                         onChange={(e) => updateHotelBooking(idx, 'checkInDate', e.target.value)}
                                       />
                                     </td>
-                                    <td className="py-3 px-4">
+                                    <td className="border border-gray-200 p-3">
                                       <Input 
                                         type="date" 
                                         value={checkOut} 
                                         onChange={(e) => updateHotelBooking(idx, 'checkOutDate', e.target.value)}
                                       />
                                     </td>
-                                    <td className="py-3 px-4">
-                                      {h.id && (
-                                        <Button 
-                                          type="button" 
-                                          variant="outline" 
-                                          size="sm"
-                                          onClick={() => removeHotelBooking(h.id, idx)}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      )}
+                                    <td className="border border-gray-200 p-3 text-center">
+                                      <Button 
+                                        type="button" 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => removeHotelBooking(h.id, idx)}
+                                        className="text-red-600 hover:text-red-700"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
                                     </td>
                                   </tr>
                                 );
@@ -879,19 +987,20 @@ export default function EditUmrahVisaBookingPage() {
               {/* Passengers */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="h-5 w-5 text-rose-600" /> 
-                    Passengers ({passengers.length})
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Users className="h-5 w-5 text-rose-600" /> 
+                      Passengers ({passengers.length})
+                    </CardTitle>
                     <Button 
                       type="button" 
                       variant="outline" 
                       size="sm" 
                       onClick={addPassenger}
-                      className="ml-auto"
                     >
                       <Plus className="h-4 w-4 mr-1" /> Add Passenger
                     </Button>
-                  </CardTitle>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -920,6 +1029,7 @@ export default function EditUmrahVisaBookingPage() {
                               variant="ghost" 
                               size="sm"
                               onClick={() => removePassenger(idx)}
+                              className="text-red-600 hover:text-red-700"
                             >
                               <X className="h-4 w-4" />
                             </Button>

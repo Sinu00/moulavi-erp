@@ -52,6 +52,7 @@ export interface CurrencyMaster {
 
 export interface Party {
   id: string;
+  partyCode?: string;
   partyName: string;
   email: string;
   contactNumber?: string;
@@ -80,6 +81,7 @@ export interface Party {
 
 export interface CreatePartyRequest {
   party_name: string;
+  party_code?: string;
   email: string;
   contact_number?: string;
   whatsapp_number?: string;
@@ -89,7 +91,7 @@ export interface CreatePartyRequest {
   aadhaar_number?: string;
   supplier_service_types?: string[];
   contacts?: CreatePartyContactRequest[];
-  customer_type: 'direct' | 'b2b' | '';
+  customer_type?: 'direct' | 'b2b' | '';
   account_currency_id: string;
   is_supplier?: boolean;
   is_customer?: boolean;

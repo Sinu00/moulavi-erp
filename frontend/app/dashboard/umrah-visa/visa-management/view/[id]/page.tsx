@@ -595,10 +595,10 @@ export default function ViewUmrahVisaBookingPage() {
                             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mobile Number</p>
                             <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
                           </div>
-                          <div className="space-y-1 sm:col-span-2">
-                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">National Short Address</p>
+                            <div className="space-y-1 sm:col-span-2">
+                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">National Short Address</p>
                             <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserNationalShortAddress || 'N/A'}</p>
-                          </div>
+                            </div>
                         </div>
                       ) : (
                         <div className="text-center py-8 bg-gray-50 rounded-lg">

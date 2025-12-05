@@ -246,7 +246,8 @@ export default function PartyTable({
               className="rounded border-gray-300"
             />
           </div>
-          <div className="col-span-3">Party Name</div>
+          <div className="col-span-1">ID</div>
+          <div className="col-span-2">Party Name</div>
           <div className="col-span-2">Contact</div>
           <div className="col-span-2">Type</div>
           <div className="col-span-2">Currency</div>
@@ -267,7 +268,12 @@ export default function PartyTable({
                 className="rounded border-gray-300"
               />
             </div>
-            <div className="col-span-3">
+            <div className="col-span-1">
+              <div className="text-sm font-medium text-gray-900">
+                {party.partyCode || '—'}
+              </div>
+            </div>
+            <div className="col-span-2">
               <div className="font-medium text-gray-900">{party.partyName}</div>
               <div className="text-sm text-gray-500">{party.email}</div>
             </div>
