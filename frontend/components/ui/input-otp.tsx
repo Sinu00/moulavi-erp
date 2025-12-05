@@ -13,6 +13,7 @@ interface InputOTPContextValue {
   setValue: (value: string) => void
   maxLength: number
   disabled?: boolean
+  inputRef: React.RefObject<HTMLInputElement>
 }
 
 const InputOTPContext = React.createContext<InputOTPContextValue | null>(null)
@@ -30,22 +31,49 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
     const [internalValue, setInternalValue] = React.useState(value)
     const [activeIndex, setActiveIndex] = React.useState<number | null>(null)
     const inputRef = React.useRef<HTMLInputElement>(null)
+    
+    // Merge refs: support both callback refs and RefObject
+    React.useEffect(() => {
+      if (typeof ref === 'function') {
+        ref(inputRef.current)
+      } else if (ref) {
+        (ref as React.MutableRefObject<HTMLInputElement | null>).current = inputRef.current
+      }
+    }, [ref])
 
     React.useEffect(() => {
       setInternalValue(value)
     }, [value])
 
     const handleChange = (newValue: string) => {
-      // Apply pattern if provided
+      // Limit to maxLength first
+      let limitedValue = newValue.slice(0, maxLength)
+      
+      // Apply pattern if provided - filter out invalid characters
       if (pattern) {
         const regex = typeof pattern === 'string' ? new RegExp(pattern) : pattern
-        if (!regex.test(newValue)) {
-          return
+        const patternStr = regex.toString()
+        
+        // Try to extract character class from pattern (e.g., [A-Za-z0-9] from /^[A-Za-z0-9]*$/)
+        // This handles common patterns like /^[A-Za-z0-9]*$/
+        const charClassMatch = patternStr.match(/\[([^\]]+)\]/)
+        if (charClassMatch) {
+          // Use the character class to filter characters one by one
+          const charClassRegex = new RegExp(`^[${charClassMatch[1]}]$`)
+          limitedValue = limitedValue
+            .split('')
+            .filter(char => charClassRegex.test(char))
+            .join('')
+        } else {
+          // For other patterns, check if the entire value matches
+          // If it doesn't match, keep the previous value (don't update)
+          if (limitedValue && !regex.test(limitedValue)) {
+            // Don't update if pattern doesn't match
+            return
+          }
         }
       }
       
-      // Limit to maxLength
-      const limitedValue = newValue.slice(0, maxLength)
       setInternalValue(limitedValue)
       onChange?.(limitedValue)
     }
@@ -64,6 +92,7 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
       setValue: handleChange,
       maxLength,
       disabled,
+      inputRef: inputRef,
     }), [slots, internalValue, maxLength, disabled])
 
     return (
@@ -75,7 +104,7 @@ const InputOTP = React.forwardRef<HTMLInputElement, InputOTPProps>(
           )}
         >
           <input
-            ref={ref || inputRef}
+            ref={inputRef}
             type="text"
             inputMode="text"
             value={internalValue}
@@ -113,15 +142,17 @@ const InputOTPSlot = React.forwardRef<
     throw new Error("InputOTPSlot must be used within InputOTP")
   }
 
-  const { slots, setValue, maxLength, disabled } = context
+  const { slots, setValue, maxLength, disabled, inputRef } = context
   const slot = slots[index] || { char: '', hasFakeCaret: false, isActive: false }
 
   const handleClick = () => {
     if (disabled) return
-    const input = document.querySelector('input[type="text"]') as HTMLInputElement
+    const input = inputRef.current
     if (input) {
       input.focus()
-      input.setSelectionRange(index, index + 1)
+      // Set cursor position to the clicked slot
+      const cursorPos = Math.min(index, input.value.length)
+      input.setSelectionRange(cursorPos, cursorPos)
     }
   }
 
