@@ -17,7 +17,7 @@ interface InputOTPContextValue {
 
 const InputOTPContext = React.createContext<InputOTPContextValue | null>(null)
 
-interface InputOTPProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'maxLength'> {
+interface InputOTPProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'maxLength' | 'pattern'> {
   value?: string
   onChange?: (value: string) => void
   maxLength?: number
