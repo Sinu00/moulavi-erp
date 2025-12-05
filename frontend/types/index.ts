@@ -252,7 +252,7 @@ export interface UmrahVisaBooking {
     iqamaSponserName?: string;
     sponserDob?: string;
     sponserMobileNumber?: string;
-    iqamaNationalShortAddress?: string;
+    sponserNationalShortAddress?: string;
   };
   hotelBookings?: Array<{
     id: string;

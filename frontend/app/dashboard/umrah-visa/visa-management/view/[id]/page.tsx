@@ -305,7 +305,6 @@ export default function ViewUmrahVisaBookingPage() {
                         <thead>
                           <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
                             <th className="py-3 px-4">Route</th>
-                            <th className="py-3 px-4">Travel Date & Time</th>
                             <th className="py-3 px-4">Vehicle Type</th>
                             <th className="py-3 px-4">Capacity</th>
                             <th className="py-3 px-4">Price</th>
@@ -315,7 +314,6 @@ export default function ViewUmrahVisaBookingPage() {
                           {booking.transportBookings.map((t: any) => {
                             const route = t.transportMaster?.route;
                             const vehicleType = t.transportMaster?.vehicleType;
-                            const travelDateTime = t.travelDateTime ? formatDateTime(t.travelDateTime) : { date: 'N/A', time: 'N/A' };
                             const price = t.transportMaster?.price ? Number(t.transportMaster.price) : null;
                             
                             return (
@@ -324,18 +322,6 @@ export default function ViewUmrahVisaBookingPage() {
                                   <div className="flex items-center gap-2">
                                     <Route className="h-4 w-4 text-green-600" />
                                     {formatTransportRoute(route)}
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4 text-sm text-gray-600">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-1">
-                                      <Calendar className="h-3 w-3 text-gray-400" />
-                                      <span>{travelDateTime.date}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="h-3 w-3 text-gray-400" />
-                                      <span>{travelDateTime.time}</span>
-                                    </div>
                                   </div>
                                 </td>
                                 <td className="py-3 px-4 text-sm text-gray-600">
@@ -543,7 +529,6 @@ export default function ViewUmrahVisaBookingPage() {
                         <table className="w-full">
                           <thead>
                             <tr className="text-left text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200">
-                              <th className="py-3 px-4">Location</th>
                               <th className="py-3 px-4">Hotel Name</th>
                               <th className="py-3 px-4">Check-In</th>
                               <th className="py-3 px-4">Check-Out</th>
@@ -551,12 +536,6 @@ export default function ViewUmrahVisaBookingPage() {
                           </thead>
                           <tbody>
                             {hotelBookings.map((h: any) => {
-                              // Try multiple ways to get location name
-                              const locationName = h.location?.name 
-                                || h.location?.cityMaster?.name 
-                                || h.location?.city
-                                || 'N/A';
-                              
                               // Try multiple ways to get hotel name
                               const hotelName = h.hotel?.name 
                                 || h.hotel?.hotelName
@@ -568,12 +547,6 @@ export default function ViewUmrahVisaBookingPage() {
                               
                               return (
                                 <tr key={h.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                                  <td className="py-3 px-4 text-sm font-medium text-gray-900">
-                                    <div className="flex items-center gap-2">
-                                      <MapPin className="h-4 w-4 text-purple-600" />
-                                      <span>{locationName}</span>
-                                    </div>
-                                  </td>
                                   <td className="py-3 px-4 text-sm text-gray-600">
                                     <div className="flex items-center gap-2">
                                       <Building className="h-4 w-4 text-gray-400" />
@@ -622,12 +595,10 @@ export default function ViewUmrahVisaBookingPage() {
                             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Mobile Number</p>
                             <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
                           </div>
-                          {booking.sponsorIqamaDetails.iqamaNationalShortAddress && (
-                            <div className="space-y-1 sm:col-span-2">
-                              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">National Short Address</p>
-                              <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.iqamaNationalShortAddress}</p>
-                            </div>
-                          )}
+                          <div className="space-y-1 sm:col-span-2">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">National Short Address</p>
+                            <p className="text-sm font-medium text-gray-900">{booking.sponsorIqamaDetails.sponserNationalShortAddress || 'N/A'}</p>
+                          </div>
                         </div>
                       ) : (
                         <div className="text-center py-8 bg-gray-50 rounded-lg">

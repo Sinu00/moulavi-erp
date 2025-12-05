@@ -527,10 +527,10 @@ export default function ViewUmrahVisaBookingPage() {
                             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Mobile Number</p>
                             <p className="text-base font-bold text-gray-900">{booking.sponsorIqamaDetails.sponserMobileNumber || 'N/A'}</p>
                           </div>
-                          {booking.sponsorIqamaDetails.iqamaNationalShortAddress && (
+                          {booking.sponsorIqamaDetails.sponserNationalShortAddress && (
                             <div className="sm:col-span-2 bg-red-50 rounded-lg p-4 border border-red-100">
                               <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">National Short Address</p>
-                              <p className="text-base font-semibold text-gray-900">{booking.sponsorIqamaDetails.iqamaNationalShortAddress}</p>
+                              <p className="text-base font-semibold text-gray-900">{booking.sponsorIqamaDetails.sponserNationalShortAddress}</p>
                             </div>
                           )}
                         </div>
