@@ -268,7 +268,7 @@ export default function EditUmrahVisaBookingPage() {
         for (const h of hotelBookings) {
           // Get cityId from location
           const location = locationMasters.find((l: any) => l.id === h.locationId);
-          const cityId = location?.cityId || location?.cityMaster?.id;
+          const cityId = location?.cityMaster?.id;
           
           if (!cityId || !h.hotelId) {
             toast.error(`Missing city or hotel for hotel booking`);
@@ -465,8 +465,8 @@ export default function EditUmrahVisaBookingPage() {
   const getHotelsForLocation = (locationId: string) => {
     if (!locationId) return hotels;
     const location = locationMasters.find((l: any) => l.id === locationId);
-    if (location?.cityId) {
-      return hotels.filter((h: any) => h.cityId === location.cityId);
+    if (location?.cityMaster?.id) {
+      return hotels.filter((h: any) => h.cityId === location.cityMaster?.id);
     }
     return hotels;
   };
