@@ -670,6 +670,78 @@ router.get('/masters/airports', authenticate, async (req, res) => {
   }
 });
 
+// Masters: GET Umrah Visa master dates
+router.get('/masters/dates', authenticate, async (req, res) => {
+  try {
+    const master = await prisma.umrahVisaMaster.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    
+    if (!master) {
+      return res.json({ umrahVisaMaster: null });
+    }
+    
+    res.json({ 
+      umrahVisaMaster: {
+        id: master.id,
+        lastArrivalDate: master.lastArrivalDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+        lastDepartureDate: master.lastDepartureDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+        isActive: master.isActive,
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching Umrah visa master dates:', error);
+    res.status(500).json({ error: 'Failed to fetch Umrah visa master dates' });
+  }
+});
+
+// Masters: POST/PUT Umrah Visa master dates (admin only)
+router.post('/masters/dates', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { lastArrivalDate, lastDepartureDate } = req.body;
+    
+    if (!lastArrivalDate || !lastDepartureDate) {
+      return res.status(400).json({ error: 'Both lastArrivalDate and lastDepartureDate are required' });
+    }
+    
+    // Validate dates
+    const arrivalDate = new Date(lastArrivalDate);
+    const departureDate = new Date(lastDepartureDate);
+    
+    if (isNaN(arrivalDate.getTime()) || isNaN(departureDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+    
+    // Deactivate all existing masters
+    await prisma.umrahVisaMaster.updateMany({
+      where: { isActive: true },
+      data: { isActive: false },
+    });
+    
+    // Create new active master
+    const master = await prisma.umrahVisaMaster.create({
+      data: {
+        lastArrivalDate: arrivalDate,
+        lastDepartureDate: departureDate,
+        isActive: true,
+      },
+    });
+    
+    res.json({ 
+      umrahVisaMaster: {
+        id: master.id,
+        lastArrivalDate: master.lastArrivalDate.toISOString().split('T')[0],
+        lastDepartureDate: master.lastDepartureDate.toISOString().split('T')[0],
+        isActive: master.isActive,
+      }
+    });
+  } catch (error) {
+    console.error('Error creating/updating Umrah visa master dates:', error);
+    res.status(500).json({ error: 'Failed to create/update Umrah visa master dates' });
+  }
+});
+
 // GET /api/umrah-visa/hotels/:cityId - Get hotels by city
 router.get('/hotels/:cityId', authenticate, async (req, res) => {
   try {

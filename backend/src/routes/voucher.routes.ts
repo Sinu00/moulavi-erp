@@ -127,13 +127,25 @@ router.get(
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const movementsData = await prisma.voucherMovement.findMany({
-      where: {
-        date: {
-          gte: today,
-          lt: tomorrow,
-        },
+    const { from, to } = req.query;
+
+    const where: any = {
+      date: {
+        gte: today,
+        lt: tomorrow,
       },
+    };
+
+    if (from) {
+      where.from = from as string;
+    }
+
+    if (to) {
+      where.to = to as string;
+    }
+
+    const movementsData = await prisma.voucherMovement.findMany({
+      where,
       include: {
         voucher: true,
       },
@@ -202,13 +214,25 @@ router.get(
     const dayAfterTomorrow = new Date(tomorrow);
     dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
 
-    const movementsData = await prisma.voucherMovement.findMany({
-      where: {
-        date: {
-          gte: tomorrow,
-          lt: dayAfterTomorrow,
-        },
+    const { from, to } = req.query;
+
+    const where: any = {
+      date: {
+        gte: tomorrow,
+        lt: dayAfterTomorrow,
       },
+    };
+
+    if (from) {
+      where.from = from as string;
+    }
+
+    if (to) {
+      where.to = to as string;
+    }
+
+    const movementsData = await prisma.voucherMovement.findMany({
+      where,
       include: {
         voucher: true,
       },
@@ -262,6 +286,148 @@ router.get(
     });
 
     res.json({ movements });
+  })
+);
+
+// Get filter options (unique from/to values)
+router.get(
+  '/movements/filter-options',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const fromOptions = await prisma.voucherMovement.findMany({
+      select: {
+        from: true,
+      },
+      distinct: ['from'],
+      where: {
+        from: {
+          not: '',
+        },
+      },
+      orderBy: {
+        from: 'asc',
+      },
+    });
+
+    const toOptions = await prisma.voucherMovement.findMany({
+      select: {
+        to: true,
+      },
+      distinct: ['to'],
+      where: {
+        to: {
+          not: '',
+        },
+      },
+      orderBy: {
+        to: 'asc',
+      },
+    });
+
+    res.json({
+      fromOptions: fromOptions.map((item) => item.from).filter(Boolean),
+      toOptions: toOptions.map((item) => item.to).filter(Boolean),
+    });
+  })
+);
+
+// Get today's movement statistics
+router.get(
+  '/movements/stats/today',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const movementsData = await prisma.voucherMovement.findMany({
+      where: {
+        date: {
+          gte: today,
+          lt: tomorrow,
+        },
+        from: {
+          not: '',
+        },
+        to: {
+          not: '',
+        },
+      },
+      select: {
+        from: true,
+        to: true,
+      },
+    });
+
+    // Group by from/to combination and count
+    const statsMap = new Map<string, number>();
+    movementsData.forEach((movement) => {
+      const key = `${movement.from}|||${movement.to}`;
+      statsMap.set(key, (statsMap.get(key) || 0) + 1);
+    });
+
+    const stats = Array.from(statsMap.entries()).map(([key, count]) => {
+      const [from, to] = key.split('|||');
+      return { from, to, count };
+    });
+
+    res.json({
+      stats,
+      totalEntries: movementsData.length,
+    });
+  })
+);
+
+// Get tomorrow's movement statistics
+router.get(
+  '/movements/stats/tomorrow',
+  authenticate,
+  authorize('admin', 'staff'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const dayAfterTomorrow = new Date(tomorrow);
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+    const movementsData = await prisma.voucherMovement.findMany({
+      where: {
+        date: {
+          gte: tomorrow,
+          lt: dayAfterTomorrow,
+        },
+        from: {
+          not: '',
+        },
+        to: {
+          not: '',
+        },
+      },
+      select: {
+        from: true,
+        to: true,
+      },
+    });
+
+    // Group by from/to combination and count
+    const statsMap = new Map<string, number>();
+    movementsData.forEach((movement) => {
+      const key = `${movement.from}|||${movement.to}`;
+      statsMap.set(key, (statsMap.get(key) || 0) + 1);
+    });
+
+    const stats = Array.from(statsMap.entries()).map(([key, count]) => {
+      const [from, to] = key.split('|||');
+      return { from, to, count };
+    });
+
+    res.json({
+      stats,
+      totalEntries: movementsData.length,
+    });
   })
 );
 

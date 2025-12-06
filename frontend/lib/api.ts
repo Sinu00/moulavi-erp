@@ -407,8 +407,21 @@ export const umrahVisaMasterAPI = {
 export const voucherAPI = {
   getAllVouchers: (params?: any) => api.get('/vouchers', { params }),
   getVoucherStats: () => api.get('/vouchers/stats'),
-  getTodayMovements: () => api.get('/vouchers/movements/today'),
-  getTomorrowMovements: () => api.get('/vouchers/movements/tomorrow'),
+  getTodayMovements: (from?: string, to?: string) => {
+    const params: any = {};
+    if (from) params.from = from;
+    if (to) params.to = to;
+    return api.get('/vouchers/movements/today', { params });
+  },
+  getTomorrowMovements: (from?: string, to?: string) => {
+    const params: any = {};
+    if (from) params.from = from;
+    if (to) params.to = to;
+    return api.get('/vouchers/movements/tomorrow', { params });
+  },
+  getMovementFilterOptions: () => api.get('/vouchers/movements/filter-options'),
+  getTodayMovementStats: () => api.get('/vouchers/movements/stats/today'),
+  getTomorrowMovementStats: () => api.get('/vouchers/movements/stats/tomorrow'),
   createQuickVoucher: (data: any) => api.post('/vouchers/quick', data),
   getVoucherById: (id: string) => api.get(`/vouchers/${id}`),
   updateVoucher: (id: string, data: any) => api.put(`/vouchers/${id}`, data),

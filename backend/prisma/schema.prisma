@@ -734,3 +734,15 @@ model PricingMaster {
   @@index([isActive])
   @@map("pricing_masters")
 }
+
+model UmrahVisaMaster {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lastArrivalDate   DateTime @map("last_arrival_date") @db.Date
+  lastDepartureDate DateTime @map("last_departure_date") @db.Date
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+
+  @@index([isActive])
+  @@map("umrah_visa_masters")
+}

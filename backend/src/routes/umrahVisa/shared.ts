@@ -91,6 +91,36 @@ export const validateDateRange = (arrivalDate: Date, departureDate: Date) => {
   return diffDays <= 80;
 };
 
+// Helper function to validate Umrah visa dates against master dates
+export const validateUmrahVisaDates = (
+  arrivalDate: Date, 
+  departureDate: Date, 
+  masterDates: { lastArrivalDate: Date; lastDepartureDate: Date } | null
+): { valid: boolean; error?: string } => {
+  if (!masterDates) {
+    // If no master dates are set, allow all dates (backward compatibility)
+    return { valid: true };
+  }
+  
+  // Check if arrival date is within master limit
+  if (arrivalDate > masterDates.lastArrivalDate) {
+    return { 
+      valid: false, 
+      error: `Final Date of Umra Visa Arrival is ${masterDates.lastArrivalDate.toISOString().split('T')[0]}`
+    };
+  }
+  
+  // Check if departure date is within master limit
+  if (departureDate > masterDates.lastDepartureDate) {
+    return { 
+      valid: false, 
+      error: `Final Date of Umra Visa Departure is ${masterDates.lastDepartureDate.toISOString().split('T')[0]}`
+    };
+  }
+  
+  return { valid: true };
+};
+
 // Helper function to find city by name with spelling variations
 export const findCityByName = async (cityName: string) => {
   const cityVariations = [cityName];

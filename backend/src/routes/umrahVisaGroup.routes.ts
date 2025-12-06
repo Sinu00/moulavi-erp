@@ -5,6 +5,7 @@ import multer from 'multer';
 import {
   prisma,
   validateDateRange,
+  validateUmrahVisaDates,
   step2Schema,
   groupStep1Schema,
   groupStep3Schema,
@@ -69,6 +70,27 @@ router.post('/group/step2', authenticate, async (req, res) => {
     const departureDateObj = new Date(validatedData.departureDate);
     if (!validateDateRange(arrivalDateObj, departureDateObj)) {
       return res.status(400).json({ error: 'Travel duration cannot exceed 80 days' });
+    }
+
+    // Validate against Umrah visa master dates
+    const master = await prisma.umrahVisaMaster.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    
+    if (master) {
+      const dateValidation = validateUmrahVisaDates(
+        arrivalDateObj,
+        departureDateObj,
+        {
+          lastArrivalDate: master.lastArrivalDate,
+          lastDepartureDate: master.lastDepartureDate,
+        }
+      );
+      
+      if (!dateValidation.valid) {
+        return res.status(400).json({ error: dateValidation.error });
+      }
     }
 
     // Only validate - no database writes

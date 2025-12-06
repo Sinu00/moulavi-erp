@@ -25,7 +25,14 @@ import {
   Calendar,
   Users,
   TrendingUp,
+  X,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
 import { getUser, hasRole } from '@/lib/auth';
@@ -133,6 +140,21 @@ export default function VoucherServicePage() {
   const [savingMovementId, setSavingMovementId] = useState<string | null>(null);
   const [downloadingVoucherId, setDownloadingVoucherId] = useState<string | null>(null);
 
+  // Filter options and active filters
+  const [availableFromOptions, setAvailableFromOptions] = useState<string[]>([]);
+  const [availableToOptions, setAvailableToOptions] = useState<string[]>([]);
+  const [selectedFrom, setSelectedFrom] = useState<string | null>(null);
+  const [selectedTo, setSelectedTo] = useState<string | null>(null);
+  const [showTodayFilters, setShowTodayFilters] = useState(false);
+  const [showTomorrowFilters, setShowTomorrowFilters] = useState(false);
+  const [todayRouteSearch, setTodayRouteSearch] = useState('');
+  const [tomorrowRouteSearch, setTomorrowRouteSearch] = useState('');
+
+  // Movement Stats
+  const [todayStats, setTodayStats] = useState<Array<{from: string, to: string, count: number}>>([]);
+  const [tomorrowStats, setTomorrowStats] = useState<Array<{from: string, to: string, count: number}>>([]);
+  const [loadingMovementStats, setLoadingMovementStats] = useState(false);
+
 
   const loadStats = async () => {
     try {
@@ -176,10 +198,23 @@ export default function VoucherServicePage() {
     }
   };
 
+  const loadFilterOptions = async () => {
+    try {
+      const response = await voucherAPI.getMovementFilterOptions();
+      setAvailableFromOptions(response.data.fromOptions || []);
+      setAvailableToOptions(response.data.toOptions || []);
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+      toast.error('Failed to load filter options');
+    }
+  };
+
   const loadTodayMovements = async () => {
     try {
       setLoadingMovements(true);
-      const response = await voucherAPI.getTodayMovements();
+      const from = selectedFrom && selectedFrom !== 'all' ? selectedFrom : undefined;
+      const to = selectedTo && selectedTo !== 'all' ? selectedTo : undefined;
+      const response = await voucherAPI.getTodayMovements(from, to);
       setTodayMovements(response.data.movements);
     } catch (error) {
       console.error('Error loading today movements:', error);
@@ -192,13 +227,41 @@ export default function VoucherServicePage() {
   const loadTomorrowMovements = async () => {
     try {
       setLoadingMovements(true);
-      const response = await voucherAPI.getTomorrowMovements();
+      const from = selectedFrom && selectedFrom !== 'all' ? selectedFrom : undefined;
+      const to = selectedTo && selectedTo !== 'all' ? selectedTo : undefined;
+      const response = await voucherAPI.getTomorrowMovements(from, to);
       setTomorrowMovements(response.data.movements);
     } catch (error) {
       console.error('Error loading tomorrow movements:', error);
       toast.error('Failed to load tomorrow movements');
     } finally {
       setLoadingMovements(false);
+    }
+  };
+
+  const loadTodayStats = async () => {
+    try {
+      setLoadingMovementStats(true);
+      const response = await voucherAPI.getTodayMovementStats();
+      setTodayStats(response.data.stats || []);
+    } catch (error) {
+      console.error('Error loading today stats:', error);
+      toast.error('Failed to load today statistics');
+    } finally {
+      setLoadingMovementStats(false);
+    }
+  };
+
+  const loadTomorrowStats = async () => {
+    try {
+      setLoadingMovementStats(true);
+      const response = await voucherAPI.getTomorrowMovementStats();
+      setTomorrowStats(response.data.stats || []);
+    } catch (error) {
+      console.error('Error loading tomorrow stats:', error);
+      toast.error('Failed to load tomorrow statistics');
+    } finally {
+      setLoadingMovementStats(false);
     }
   };
 
@@ -360,7 +423,14 @@ export default function VoucherServicePage() {
 
   // Load stats on mount
   useEffect(() => {
+    if (!user || !hasRole(['admin', 'staff'])) {
+      router.push('/');
+      return;
+    }
     loadStats();
+    loadFilterOptions();
+    loadTodayStats();
+    loadTomorrowStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -376,11 +446,23 @@ export default function VoucherServicePage() {
   useEffect(() => {
     if (activeTab === 'today') {
       loadTodayMovements();
+      loadTodayStats();
+    } else if (activeTab === 'tomorrow') {
+      loadTomorrowMovements();
+      loadTomorrowStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Reload movements when filters change
+  useEffect(() => {
+    if (activeTab === 'today') {
+      loadTodayMovements();
     } else if (activeTab === 'tomorrow') {
       loadTomorrowMovements();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [selectedFrom, selectedTo]);
 
   if (!user || !hasRole(['admin', 'staff'])) {
     return null;
@@ -481,11 +563,47 @@ export default function VoucherServicePage() {
                   <Calendar className="h-5 w-5 text-green-600" />
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 {loadingStats ? (
                   <Skeleton className="h-8 w-20" />
                 ) : (
-                  <div className="text-3xl font-bold text-gray-900">{stats.todayMovements}</div>
+                  <>
+                    <div className="text-3xl font-bold text-gray-900">{stats.todayMovements}</div>
+                    {loadingMovementStats ? (
+                      <div className="space-y-1 mt-3">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    ) : todayStats.length > 0 ? (
+                      <div className="mt-3 space-y-1.5">
+                        <div className="text-xs font-medium text-gray-500 mb-2">Routes:</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {todayStats.map((stat, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setActiveTab('today');
+                                setSelectedFrom(stat.from);
+                                setSelectedTo(stat.to);
+                                setShowTodayFilters(true);
+                              }}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-green-100 rounded border border-gray-200 hover:border-green-300 transition-colors cursor-pointer flex items-center gap-1"
+                              title={`Click to filter: ${stat.from} → ${stat.to}`}
+                            >
+                              <span className="font-medium text-gray-700">{stat.from}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className="font-medium text-gray-700">{stat.to}</span>
+                              <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                                {stat.count}
+                              </Badge>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-2">No routes available</p>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -497,11 +615,47 @@ export default function VoucherServicePage() {
                   <TrendingUp className="h-5 w-5 text-yellow-600" />
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 {loadingStats ? (
                   <Skeleton className="h-8 w-20" />
                 ) : (
-                  <div className="text-3xl font-bold text-gray-900">{stats.tomorrowMovements}</div>
+                  <>
+                    <div className="text-3xl font-bold text-gray-900">{stats.tomorrowMovements}</div>
+                    {loadingMovementStats ? (
+                      <div className="space-y-1 mt-3">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    ) : tomorrowStats.length > 0 ? (
+                      <div className="mt-3 space-y-1.5">
+                        <div className="text-xs font-medium text-gray-500 mb-2">Routes:</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {tomorrowStats.map((stat, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setActiveTab('tomorrow');
+                                setSelectedFrom(stat.from);
+                                setSelectedTo(stat.to);
+                                setShowTomorrowFilters(true);
+                              }}
+                              className="text-xs px-2 py-1 bg-gray-100 hover:bg-yellow-100 rounded border border-gray-200 hover:border-yellow-300 transition-colors cursor-pointer flex items-center gap-1"
+                              title={`Click to filter: ${stat.from} → ${stat.to}`}
+                            >
+                              <span className="font-medium text-gray-700">{stat.from}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className="font-medium text-gray-700">{stat.to}</span>
+                              <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                                {stat.count}
+                              </Badge>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 mt-2">No routes available</p>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -691,40 +845,172 @@ export default function VoucherServicePage() {
 
                 {activeTab === 'today' && (
                   <div className="space-y-4">
+                    {/* Search and Filter Section */}
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-4 items-center">
+                        {/* Search Bar */}
+                        <div className="flex-1 min-w-[250px]">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                            <Input
+                              placeholder="Search by route number..."
+                              value={todayRouteSearch}
+                              onChange={(e) => setTodayRouteSearch(e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                        {/* Filter Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowTodayFilters(!showTodayFilters)}
+                          className="w-full sm:w-auto"
+                        >
+                          <Filter className="h-4 w-4 mr-2" />
+                          Filters
+                          {showTodayFilters ? (
+                            <ChevronUp className="h-4 w-4 ml-2" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 ml-2" />
+                          )}
+                          {(selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all') ? (
+                            <Badge variant="secondary" className="ml-2">
+                              {(selectedFrom && selectedFrom !== 'all' ? 1 : 0) + (selectedTo && selectedTo !== 'all' ? 1 : 0)}
+                            </Badge>
+                          ) : null}
+                        </Button>
+                      </div>
+
+                      {showTodayFilters && (
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="flex flex-wrap gap-4 items-end">
+                              <div className="flex-1 min-w-[200px]">
+                                <Label htmlFor="from-filter">From</Label>
+                                <Select
+                                  value={selectedFrom || 'all'}
+                                  onValueChange={(value) => setSelectedFrom(value === 'all' ? null : value)}
+                                >
+                                  <SelectTrigger id="from-filter">
+                                    <SelectValue placeholder="All locations" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All locations</SelectItem>
+                                    {availableFromOptions.map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {option}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex-1 min-w-[200px]">
+                                <Label htmlFor="to-filter">To</Label>
+                                <Select
+                                  value={selectedTo || 'all'}
+                                  onValueChange={(value) => setSelectedTo(value === 'all' ? null : value)}
+                                >
+                                  <SelectTrigger id="to-filter">
+                                    <SelectValue placeholder="All locations" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All locations</SelectItem>
+                                    {availableToOptions.map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {option}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedFrom(null);
+                                  setSelectedTo(null);
+                                }}
+                                disabled={(!selectedFrom || selectedFrom === 'all') && (!selectedTo || selectedTo === 'all')}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Clear Filters
+                              </Button>
+                            </div>
+                            {((selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all')) && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {selectedFrom && selectedFrom !== 'all' && (
+                                  <Badge variant="secondary" className="flex items-center gap-1">
+                                    From: {selectedFrom}
+                                    <X
+                                      className="h-3 w-3 cursor-pointer"
+                                      onClick={() => setSelectedFrom(null)}
+                                    />
+                                  </Badge>
+                                )}
+                                {selectedTo && selectedTo !== 'all' && (
+                                  <Badge variant="secondary" className="flex items-center gap-1">
+                                    To: {selectedTo}
+                                    <X
+                                      className="h-3 w-3 cursor-pointer"
+                                      onClick={() => setSelectedTo(null)}
+                                    />
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+
                     {loadingMovements ? (
                       <div className="space-y-4">
                         {[...Array(5)].map((_, i) => (
                           <Skeleton key={i} className="h-16 w-full" />
                         ))}
                       </div>
-                    ) : todayMovements.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No movements for today</h3>
-                        <p className="text-gray-500">No movements scheduled for today.</p>
-                      </div>
-                    ) : (
-                      <div className="rounded-md border overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Route Number</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Time</TableHead>
-                              <TableHead>Agent Name</TableHead>
-                              <TableHead>Guest Name</TableHead>
-                              <TableHead>Mobile</TableHead>
-                              <TableHead>Pax</TableHead>
-                              <TableHead>From</TableHead>
-                              <TableHead>To</TableHead>
-                              <TableHead>Driver Details 1</TableHead>
-                              <TableHead>Driver Details 2</TableHead>
-                              <TableHead>Vehicle Number</TableHead>
-                              <TableHead>Action</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {todayMovements.map((movement, idx) => {
+                    ) : (() => {
+                      // Filter movements by route number
+                      const filteredMovements = todayMovements.filter((movement) => {
+                        if (!todayRouteSearch.trim()) return true;
+                        return movement.routeNumber.toLowerCase().includes(todayRouteSearch.toLowerCase());
+                      });
+
+                      return filteredMovements.length === 0 ? (
+                        <div className="text-center py-12">
+                          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            {todayRouteSearch || (selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all') 
+                              ? 'No movements found with selected filters' 
+                              : 'No movements for today'}
+                          </h3>
+                          <p className="text-gray-500">
+                            {todayRouteSearch || (selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all')
+                              ? 'Try adjusting your search or filters to see movements.'
+                              : 'No movements scheduled for today.'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="rounded-md border overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Route Number</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Agent Name</TableHead>
+                                <TableHead>Guest Name</TableHead>
+                                <TableHead>Mobile</TableHead>
+                                <TableHead>Pax</TableHead>
+                                <TableHead>From</TableHead>
+                                <TableHead>To</TableHead>
+                                <TableHead>Driver Details 1</TableHead>
+                                <TableHead>Driver Details 2</TableHead>
+                                <TableHead>Vehicle Number</TableHead>
+                                <TableHead>Action</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredMovements.map((movement, idx) => {
                               const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
                               const editedMovement = editingMovements.get(movementId) || movement;
                               
@@ -796,46 +1082,179 @@ export default function VoucherServicePage() {
                           </TableBody>
                         </Table>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
 
                 {activeTab === 'tomorrow' && (
                   <div className="space-y-4">
+                    {/* Search and Filter Section */}
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-4 items-center">
+                        {/* Search Bar */}
+                        <div className="flex-1 min-w-[250px]">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                            <Input
+                              placeholder="Search by route number..."
+                              value={tomorrowRouteSearch}
+                              onChange={(e) => setTomorrowRouteSearch(e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                        </div>
+                        {/* Filter Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowTomorrowFilters(!showTomorrowFilters)}
+                          className="w-full sm:w-auto"
+                        >
+                          <Filter className="h-4 w-4 mr-2" />
+                          Filters
+                          {showTomorrowFilters ? (
+                            <ChevronUp className="h-4 w-4 ml-2" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 ml-2" />
+                          )}
+                          {(selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all') ? (
+                            <Badge variant="secondary" className="ml-2">
+                              {(selectedFrom && selectedFrom !== 'all' ? 1 : 0) + (selectedTo && selectedTo !== 'all' ? 1 : 0)}
+                            </Badge>
+                          ) : null}
+                        </Button>
+                      </div>
+
+                      {showTomorrowFilters && (
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="flex flex-wrap gap-4 items-end">
+                              <div className="flex-1 min-w-[200px]">
+                                <Label htmlFor="from-filter-tomorrow">From</Label>
+                                <Select
+                                  value={selectedFrom || 'all'}
+                                  onValueChange={(value) => setSelectedFrom(value === 'all' ? null : value)}
+                                >
+                                  <SelectTrigger id="from-filter-tomorrow">
+                                    <SelectValue placeholder="All locations" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All locations</SelectItem>
+                                    {availableFromOptions.map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {option}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex-1 min-w-[200px]">
+                                <Label htmlFor="to-filter-tomorrow">To</Label>
+                                <Select
+                                  value={selectedTo || 'all'}
+                                  onValueChange={(value) => setSelectedTo(value === 'all' ? null : value)}
+                                >
+                                  <SelectTrigger id="to-filter-tomorrow">
+                                    <SelectValue placeholder="All locations" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All locations</SelectItem>
+                                    {availableToOptions.map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {option}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedFrom(null);
+                                  setSelectedTo(null);
+                                }}
+                                disabled={(!selectedFrom || selectedFrom === 'all') && (!selectedTo || selectedTo === 'all')}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Clear Filters
+                              </Button>
+                            </div>
+                            {((selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all')) && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {selectedFrom && selectedFrom !== 'all' && (
+                                  <Badge variant="secondary" className="flex items-center gap-1">
+                                    From: {selectedFrom}
+                                    <X
+                                      className="h-3 w-3 cursor-pointer"
+                                      onClick={() => setSelectedFrom(null)}
+                                    />
+                                  </Badge>
+                                )}
+                                {selectedTo && selectedTo !== 'all' && (
+                                  <Badge variant="secondary" className="flex items-center gap-1">
+                                    To: {selectedTo}
+                                    <X
+                                      className="h-3 w-3 cursor-pointer"
+                                      onClick={() => setSelectedTo(null)}
+                                    />
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+
                     {loadingMovements ? (
                       <div className="space-y-4">
                         {[...Array(5)].map((_, i) => (
                           <Skeleton key={i} className="h-16 w-full" />
                         ))}
                       </div>
-                    ) : tomorrowMovements.length === 0 ? (
-                      <div className="text-center py-12">
-                        <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No movements for tomorrow</h3>
-                        <p className="text-gray-500">No movements scheduled for tomorrow.</p>
-                      </div>
-                    ) : (
-                      <div className="rounded-md border overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Route Number</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Time</TableHead>
-                              <TableHead>Agent Name</TableHead>
-                              <TableHead>Guest Name</TableHead>
-                              <TableHead>Mobile</TableHead>
-                              <TableHead>Pax</TableHead>
-                              <TableHead>From</TableHead>
-                              <TableHead>To</TableHead>
-                              <TableHead>Driver Details 1</TableHead>
-                              <TableHead>Driver Details 2</TableHead>
-                              <TableHead>Vehicle Number</TableHead>
-                              <TableHead>Action</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {tomorrowMovements.map((movement, idx) => {
+                    ) : (() => {
+                      // Filter movements by route number
+                      const filteredMovements = tomorrowMovements.filter((movement) => {
+                        if (!tomorrowRouteSearch.trim()) return true;
+                        return movement.routeNumber.toLowerCase().includes(tomorrowRouteSearch.toLowerCase());
+                      });
+
+                      return filteredMovements.length === 0 ? (
+                        <div className="text-center py-12">
+                          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            {tomorrowRouteSearch || (selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all') 
+                              ? 'No movements found with selected filters' 
+                              : 'No movements for tomorrow'}
+                          </h3>
+                          <p className="text-gray-500">
+                            {tomorrowRouteSearch || (selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all')
+                              ? 'Try adjusting your search or filters to see movements.'
+                              : 'No movements scheduled for tomorrow.'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="rounded-md border overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Route Number</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Agent Name</TableHead>
+                                <TableHead>Guest Name</TableHead>
+                                <TableHead>Mobile</TableHead>
+                                <TableHead>Pax</TableHead>
+                                <TableHead>From</TableHead>
+                                <TableHead>To</TableHead>
+                                <TableHead>Driver Details 1</TableHead>
+                                <TableHead>Driver Details 2</TableHead>
+                                <TableHead>Vehicle Number</TableHead>
+                                <TableHead>Action</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {filteredMovements.map((movement, idx) => {
                               const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
                               const editedMovement = editingMovements.get(movementId) || movement;
                               
@@ -907,7 +1326,8 @@ export default function VoucherServicePage() {
                           </TableBody>
                         </Table>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>
