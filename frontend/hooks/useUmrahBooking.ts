@@ -440,13 +440,31 @@ export const useMasterData = () => {
     }
   }, []);
 
+  const loadUmrahVisaMaster = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/umrah-visa/masters/dates`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+      });
+      const data = await response.json();
+      
+      const umrahVisaMaster = data.umrahVisaMaster || null;
+      setMasterData(prev => ({ ...prev, umrahVisaMaster }));
+    } catch (error) {
+      console.error('Error loading Umrah visa master dates:', error);
+      setMasterData(prev => ({ ...prev, umrahVisaMaster: undefined }));
+    }
+  }, []);
+
   const loadInitialData = useCallback(async () => {
     await Promise.all([
       loadAirports(),
       loadLocations(),
       loadAllLocationMasters(),
+      loadUmrahVisaMaster(),
     ]);
-  }, [loadAirports, loadLocations, loadAllLocationMasters]);
+  }, [loadAirports, loadLocations, loadAllLocationMasters, loadUmrahVisaMaster]);
 
   return {
     masterData,
@@ -457,5 +475,6 @@ export const useMasterData = () => {
     loadHotels,
     getHotelsForLocation,
     loadAllLocationMasters,
+    loadUmrahVisaMaster,
   };
 };

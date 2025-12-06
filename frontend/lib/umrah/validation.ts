@@ -1,7 +1,7 @@
 // Umrah Visa Booking Validation Utilities
 
 import { BOOKING_LIMITS, FLIGHT_NUMBER_REGEX } from './constants';
-import { Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Step6Data, Passenger } from './types';
+import { Step1Data, Step2Data, Step3Data, Step4Data, Step5Data, Step6Data, Passenger, UmrahVisaMaster } from './types';
 
 export const formatFlightNumber = (value: string): string => {
   // Remove all invalid characters and convert to uppercase
@@ -114,7 +114,7 @@ export const validateStep1 = (data: Step1Data): string | null => {
   return null;
 };
 
-export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step1Data): string | null => {
+export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step1Data, umrahVisaMaster?: UmrahVisaMaster): string | null => {
   if (!data.arrivalDate || !data.arrivalTime || !data.arrivalAirportId || !data.arrivalFlightNumber) {
     return 'Please fill in all required arrival details';
   }
@@ -139,6 +139,22 @@ export const validateStep2 = (data: Step2Data, airports: any[], step1Data?: Step
   const durationResult = calculateDuration(data.arrivalDate, data.departureDate);
   if (durationResult.error) {
     return durationResult.error;
+  }
+
+  // Validate against Umrah visa master dates
+  if (umrahVisaMaster) {
+    const arrivalDate = new Date(data.arrivalDate);
+    const departureDate = new Date(data.departureDate);
+    const lastArrivalDate = new Date(umrahVisaMaster.lastArrivalDate);
+    const lastDepartureDate = new Date(umrahVisaMaster.lastDepartureDate);
+
+    if (arrivalDate > lastArrivalDate) {
+      return `Final Date of Umra Visa Arrival is ${umrahVisaMaster.lastArrivalDate}`;
+    }
+
+    if (departureDate > lastDepartureDate) {
+      return `Final Date of Umra Visa Departure is ${umrahVisaMaster.lastDepartureDate}`;
+    }
   }
 
   // Hotel bookings validation for group bookings (hotels moved to Step 2)

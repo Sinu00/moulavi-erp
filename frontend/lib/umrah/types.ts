@@ -207,6 +207,13 @@ export interface LocationMaster {
   };
 }
 
+export interface UmrahVisaMaster {
+  id: string;
+  lastArrivalDate: string; // YYYY-MM-DD
+  lastDepartureDate: string; // YYYY-MM-DD
+  isActive: boolean;
+}
+
 export interface MasterData {
   airports: Airport[];
   locations: Location[];
@@ -214,4 +221,5 @@ export interface MasterData {
   transportOptions: TransportOption[];
   hotelsByLocation: { [locationId: string]: Hotel[] };
   locationMasters: LocationMaster[];
+  umrahVisaMaster?: UmrahVisaMaster;
 }

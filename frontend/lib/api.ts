@@ -398,6 +398,9 @@ export const umrahVisaMasterAPI = {
   getDestinations: (params?: any) => api.get('/umrah-visa/masters/destinations', { params }),
   getHotels: (params?: any) => api.get('/umrah-visa/masters/hotels', { params }),
   getAirports: (params?: any) => api.get('/umrah-visa/masters/airports', { params }),
+  getDates: () => api.get('/umrah-visa/masters/dates'),
+  updateDates: (data: { lastArrivalDate: string; lastDepartureDate: string }) => 
+    api.post('/umrah-visa/masters/dates', data),
 };
 
 // Voucher API

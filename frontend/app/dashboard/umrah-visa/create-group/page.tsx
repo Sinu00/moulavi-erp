@@ -140,7 +140,7 @@ export default function AdminCreateGroupUmrahVisaPage() {
       case 1:
         return validateStep1(bookingState.step1Data);
       case 2:
-        return validateStep2(bookingState.step2Data, masterData.airports, bookingState.step1Data);
+        return validateStep2(bookingState.step2Data, masterData.airports, bookingState.step1Data, masterData.umrahVisaMaster);
       case 3:
         return validateStep3(bookingState.step3Data, bookingState.step2Data.arrivalDate, bookingState.step2Data.departureDate, bookingState.step2Data, masterData.locationMasters);
       case 4:

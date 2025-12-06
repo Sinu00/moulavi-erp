@@ -31,7 +31,8 @@ import {
   Truck,
   Car,
   Route,
-  Ticket
+  Ticket,
+  Calendar
 } from 'lucide-react';
 import { getUser, removeUser } from '@/lib/auth';
 import { authAPI } from '@/lib/api';
@@ -92,6 +93,7 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
     { name: 'Pricing Master', icon: Tag, path: '/dashboard/masters/pricing' },
     { name: 'Expense Master', icon: Receipt, path: '/dashboard/masters/expense' },
     { name: 'Income Master', icon: TrendingUp, path: '/dashboard/masters/income' },
+    { name: 'Umrah Visa Master', icon: Calendar, path: '/dashboard/masters/umrah-visa' },
   ];
 
   // Umrah Visa items organized into two sections
@@ -336,7 +338,8 @@ export default function Sidebar({ collapsed = false, onCollapsedChange }: Sideba
                             item.path === '/dashboard/masters/city' ||
                             item.path === '/dashboard/masters/user-role' ||
                             item.path === '/dashboard/masters/airport-route' ||
-                            item.path === '/dashboard/masters/pricing') {
+                            item.path === '/dashboard/masters/pricing' ||
+                            item.path === '/dashboard/masters/umrah-visa') {
                           router.push(item.path);
                         } else {
                           toast.info(`${item.name} coming soon`);
