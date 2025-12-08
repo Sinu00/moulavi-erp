@@ -1,5 +1,9 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client, S3_CONFIG, isS3Configured, extractS3KeyFromUrl } from '../config/s3';
 
 dotenv.config();
 
@@ -239,6 +243,83 @@ const EMAIL_TEMPLATES = {
           <div class="footer-text">© 2025 Moulavi ERP System. All rights reserved.</div>
           <div class="footer-text">This is an automated email. Please do not reply to this message.</div>
         </div>
+        </div>
+      </body>
+    </html>
+  `,
+
+  iqamaConfirmation: (name: string) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Iqama Confirmation - Moulavi ERP</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; }
+        .email-container { max-width: 650px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #E3000F 0%, #C7000A 100%); color: white; padding: 40px 30px; text-align: center; position: relative; }
+        .header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>'); opacity: 0.1; }
+        .logo { font-size: 28px; font-weight: 700; margin-bottom: 10px; position: relative; z-index: 1; }
+        .tagline { font-size: 14px; opacity: 0.9; position: relative; z-index: 1; }
+        .content { padding: 40px 30px; background-color: #ffffff; }
+        .greeting { font-size: 18px; margin-bottom: 20px; color: #2c3e50; }
+        .message { font-size: 16px; margin-bottom: 30px; color: #555; }
+        .info-box { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border: 2px solid #E3000F; padding: 25px; margin: 25px 0; border-radius: 12px; }
+        .instruction-box { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0; border-left: 5px solid #E3000F; }
+        .step-item { margin: 12px 0; padding-left: 25px; position: relative; }
+        .step-item::before { content: '✓'; position: absolute; left: 0; color: #E3000F; font-weight: bold; font-size: 18px; }
+        .footer { background: #2c3e50; color: #bdc3c7; padding: 30px; text-align: center; }
+        .footer-logo { font-size: 20px; font-weight: 700; color: #E3000F; margin-bottom: 10px; }
+        .footer-text { font-size: 14px; margin: 5px 0; }
+        .divider { height: 2px; background: linear-gradient(90deg, transparent, #E3000F, transparent); margin: 30px 0; }
+        @media (max-width: 600px) {
+          .email-container { margin: 0; box-shadow: none; }
+          .header, .content, .footer { padding: 20px; }
+          .logo { font-size: 24px; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="email-container">
+        <div class="header">
+          <div class="logo">MOULAVI ERP</div>
+          <div class="tagline">Professional Business Solutions</div>
+        </div>
+        
+        <div class="content">
+          <div class="greeting">Dear ${name},</div>
+          
+          <div class="message">
+            🌙 Greetings from Umra Company, Saudi Arabia 🇸🇦
+          </div>
+          
+          <div class="info-box">
+            <p style="margin-bottom: 15px;">👨‍👩‍👧 Your family has applied for an Umrah visa through our Indian agent.</p>
+            <p style="margin-bottom: 15px;">✅ Kindly log in to your Absher account and approve the request at the earliest convenience.</p>
+            <p style="margin-bottom: 15px;">🔎 For your reference, please check under "Qabul Services" in your Absher account to view and approve the request.</p>
+            <p>📞 If you need any assistance, please feel free to contact us anytime.</p>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="instruction-box">
+            <h3 style="color: #E3000F; margin-bottom: 15px;">✅ How to Check Qabul Services in Absher</h3>
+            <div class="step-item">Log in to <a href="https://www.absher.sa" style="color: #E3000F; text-decoration: none;">Absher.sa</a> → Individual account</div>
+            <div class="step-item">Go to My Services (خدماتي) → Inquiries (الاستعلامات)</div>
+            <div class="step-item">Select General Services (الخدمات العامة)</div>
+            <div class="step-item">Click Qabul Services (قبول الخدمات)</div>
+            <div class="step-item">View or Accept (قبول) / Reject (رفض) any pending requests</div>
+          </div>
+        </div>
+        
+        <div class="footer">
+          <div class="footer-logo">MOULAVI ERP</div>
+          <div class="footer-text">Professional Business Solutions</div>
+          <div class="footer-text">© 2025 Moulavi ERP System. All rights reserved.</div>
+          <div class="footer-text">This is an automated email. Please do not reply to this message.</div>
+        </div>
       </div>
     </body>
     </html>
@@ -286,8 +367,8 @@ const sendEmail = async (mailOptions: nodemailer.SendMailOptions): Promise<void>
 
   try {
     // Verify SMTP connection (helps catch configuration issues early)
-    console.log(`${logPrefix} Verifying SMTP connection...`);
-    const verifyStartTime = Date.now();
+      console.log(`${logPrefix} Verifying SMTP connection...`);
+      const verifyStartTime = Date.now();
     try {
       await transporter.verify();
       const verifyDuration = Date.now() - verifyStartTime;
@@ -372,7 +453,7 @@ export const sendCredentialsEmail = async (
     // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
     if (EMAIL_ENABLED) {
-      console.log('[EMAIL] ✅ sendCredentialsEmail email sent successfully');
+    console.log('[EMAIL] ✅ sendCredentialsEmail email sent successfully');
     }
     
     // Send WhatsApp message if phone number is provided (always attempt, regardless of email status)
@@ -397,7 +478,7 @@ export const sendCredentialsEmail = async (
     // Only throw error if email was enabled and failed
     // If email is disabled, we still want to proceed with WhatsApp
     if (EMAIL_ENABLED) {
-      throw error;
+    throw error;
     }
   }
 };
@@ -434,7 +515,7 @@ export const sendServiceConfirmationEmail = async (
     // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
     if (EMAIL_ENABLED) {
-      console.log('[EMAIL] ✅ sendServiceConfirmationEmail email sent successfully');
+    console.log('[EMAIL] ✅ sendServiceConfirmationEmail email sent successfully');
     }
     
     // Send WhatsApp message if phone number is provided (always attempt, regardless of email status)
@@ -459,7 +540,7 @@ export const sendServiceConfirmationEmail = async (
     // Only throw error if email was enabled and failed
     // If email is disabled, we still want to proceed with WhatsApp
     if (EMAIL_ENABLED) {
-      throw error;
+    throw error;
     }
   }
 };
@@ -542,7 +623,7 @@ export const sendBillEmail = async (
     // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
     if (EMAIL_ENABLED) {
-      console.log('[EMAIL] ✅ sendBillEmail completed successfully');
+    console.log('[EMAIL] ✅ sendBillEmail completed successfully');
     } else {
       console.log('[EMAIL] ✅ sendBillEmail skipped (email disabled)');
     }
@@ -550,7 +631,7 @@ export const sendBillEmail = async (
     console.error('[EMAIL] ❌ sendBillEmail failed:', error?.message || 'Unknown error');
     // Only throw error if email was enabled and failed
     if (EMAIL_ENABLED) {
-      throw error;
+    throw error;
     }
   }
 };
@@ -569,7 +650,9 @@ export const sendMovementUpdateEmail = async (
     driverDetails1: string;
     driverDetails2: string;
     vehicleNumber: string;
-  }
+  },
+  partyWhatsApp?: string,
+  guestMobile?: string
 ): Promise<void> => {
   const emailSubject = `Movement Update - Voucher ${voucherNumber}`;
   const emailHtml = `
@@ -613,6 +696,8 @@ export const sendMovementUpdateEmail = async (
     to: to || 'null',
     partyName: partyName || 'null',
     voucherNumber: voucherNumber || 'null',
+    partyWhatsApp: partyWhatsApp ? `${partyWhatsApp.substring(0, 3)}***${partyWhatsApp.substring(partyWhatsApp.length - 2)}` : 'not provided',
+    guestMobile: guestMobile ? `${guestMobile.substring(0, 3)}***${guestMobile.substring(guestMobile.length - 2)}` : 'not provided',
     movementDetails: {
       date: movementDetails.date || 'null',
       time: movementDetails.time || 'null',
@@ -630,17 +715,198 @@ export const sendMovementUpdateEmail = async (
     // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
     if (EMAIL_ENABLED) {
-      console.log('[EMAIL] ✅ sendMovementUpdateEmail completed successfully');
-    } else {
-      console.log('[EMAIL] ✅ sendMovementUpdateEmail skipped (email disabled)');
+      console.log('[EMAIL] ✅ sendMovementUpdateEmail email sent successfully');
     }
+    
+    // Send WhatsApp messages (always attempt, regardless of email status)
+    const { sendMovementUpdateWhatsApp } = await import('./whatsappService');
+    const phoneNumbers: Array<{ number: string; recipient: string }> = [];
+    
+    if (partyWhatsApp) {
+      phoneNumbers.push({ number: partyWhatsApp, recipient: 'Party' });
+    }
+    if (guestMobile) {
+      phoneNumbers.push({ number: guestMobile, recipient: 'Guest' });
+    }
+    
+    if (phoneNumbers.length > 0) {
+      console.log(`[EMAIL] Attempting to send WhatsApp movement update to ${phoneNumbers.length} recipient(s)...`);
+      
+      // Send to all phone numbers
+      const whatsappPromises = phoneNumbers.map(async ({ number, recipient }) => {
+        try {
+          await sendMovementUpdateWhatsApp(number, partyName, voucherNumber, movementDetails);
+          console.log(`[EMAIL] ✅ WhatsApp movement update sent successfully to ${recipient}`);
+        } catch (error: any) {
+          console.error(`[EMAIL] ❌ Failed to send WhatsApp movement update to ${recipient}:`, error?.message || 'Unknown error');
+          console.error(`[EMAIL] Error details:`, error);
+          // Don't throw error to avoid breaking flow
+        }
+      });
+      
+      await Promise.allSettled(whatsappPromises);
+    } else {
+      console.log('[EMAIL] No phone numbers provided, skipping WhatsApp');
+    }
+    
+    console.log('[EMAIL] ✅ sendMovementUpdateEmail completed successfully');
   } catch (error: any) {
     console.error('[EMAIL] ❌ sendMovementUpdateEmail failed:', error?.message || 'Unknown error');
     // Only throw error if email was enabled and failed
+    // If email is disabled, we still want to proceed with WhatsApp
     if (EMAIL_ENABLED) {
-      throw error;
+    throw error;
     }
   }
+};
+
+// Helper function to get file buffer from S3 or local filesystem
+const getFileBuffer = async (filePath: string): Promise<{ buffer: Buffer; filename: string; contentType: string } | null> => {
+  try {
+    // Check if it's an S3 URL
+    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+      if (!isS3Configured() || !s3Client) {
+        console.log('[EMAIL] S3 not configured, cannot download file from URL');
+        return null;
+      }
+
+      // Extract S3 key from URL
+      const s3Key = extractS3KeyFromUrl(filePath);
+      if (!s3Key) {
+        console.log('[EMAIL] Could not extract S3 key from URL:', filePath);
+        return null;
+      }
+
+      // Download file from S3
+      const command = new GetObjectCommand({
+        Bucket: S3_CONFIG.BUCKET_NAME,
+        Key: s3Key,
+      });
+
+      const response = await s3Client.send(command);
+      const chunks: Uint8Array[] = [];
+      
+      if (response.Body) {
+        for await (const chunk of response.Body as any) {
+          chunks.push(chunk);
+        }
+      }
+
+      const buffer = Buffer.concat(chunks);
+      const filename = path.basename(s3Key);
+      const contentType = response.ContentType || 'image/jpeg';
+
+      return { buffer, filename, contentType };
+    } else {
+      // Local file path
+      if (!fs.existsSync(filePath)) {
+        console.log('[EMAIL] Local file not found:', filePath);
+        return null;
+      }
+
+      const buffer = fs.readFileSync(filePath);
+      const filename = path.basename(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const contentTypeMap: { [key: string]: string } = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+      };
+      const contentType = contentTypeMap[ext] || 'image/jpeg';
+
+      return { buffer, filename, contentType };
+    }
+  } catch (error: any) {
+    console.error('[EMAIL] Error reading file:', error?.message || 'Unknown error');
+    return null;
+  }
+};
+
+// Send iqama confirmation email with image attachment
+export const sendIqamaConfirmationEmail = async (
+  to: string | undefined,
+  name: string,
+  confirmationImagePath?: string,
+  phoneNumber?: string
+): Promise<void> => {
+  console.log('[EMAIL] ========== sendIqamaConfirmationEmail called ==========');
+  console.log('[EMAIL] Parameters:', {
+    to: to || 'null',
+    name: name || 'null',
+    confirmationImagePath: confirmationImagePath ? 'provided' : 'not provided',
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'not provided',
+  });
+
+  // Prepare attachments
+  const attachments: Array<{ filename: string; content: Buffer; contentType?: string }> = [];
+  
+  if (confirmationImagePath) {
+    console.log('[EMAIL] Attempting to attach confirmation image...');
+    const fileData = await getFileBuffer(confirmationImagePath);
+    if (fileData) {
+      attachments.push({
+        filename: fileData.filename,
+        content: fileData.buffer,
+        contentType: fileData.contentType,
+      });
+      console.log('[EMAIL] ✅ Confirmation image attached:', fileData.filename);
+    } else {
+      console.log('[EMAIL] ⚠️ Could not attach confirmation image, continuing without attachment');
+    }
+  }
+
+  // Send email only if valid email address is provided
+  if (to && to !== 'no-email@placeholder.com' && to.includes('@')) {
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: EMAIL_CONFIG.from,
+      to,
+      subject: 'Umrah Visa Confirmation - Action Required',
+      html: EMAIL_TEMPLATES.iqamaConfirmation(name),
+      attachments: attachments.length > 0 ? attachments as any : undefined,
+    };
+
+    console.log('[EMAIL] Email template generated');
+    const htmlLength = typeof mailOptions.html === 'string' ? mailOptions.html.length : 0;
+    console.log('[EMAIL] HTML length:', htmlLength);
+    console.log('[EMAIL] Attachments:', attachments.length);
+
+    try {
+      // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
+      await sendEmail(mailOptions);
+      if (EMAIL_ENABLED) {
+        console.log('[EMAIL] ✅ sendIqamaConfirmationEmail email sent successfully');
+      }
+    } catch (error: any) {
+      console.error('[EMAIL] ❌ sendIqamaConfirmationEmail failed:', error?.message || 'Unknown error');
+      // Only throw error if email was enabled and failed
+      // If email is disabled, we still want to proceed with WhatsApp
+      if (EMAIL_ENABLED) {
+        throw error;
+      }
+    }
+  } else {
+    console.log('[EMAIL] No valid email address provided, skipping email');
+  }
+  
+  // Send WhatsApp message if phone number is provided (always attempt, regardless of email status)
+  if (phoneNumber) {
+    console.log('[EMAIL] Attempting to send WhatsApp iqama confirmation...');
+    try {
+      const { sendIqamaConfirmationWhatsApp } = await import('./whatsappService');
+      await sendIqamaConfirmationWhatsApp(phoneNumber, name);
+      console.log('[EMAIL] ✅ WhatsApp iqama confirmation sent successfully');
+    } catch (error: any) {
+      console.error('[EMAIL] ❌ Failed to send WhatsApp iqama confirmation:', error?.message || 'Unknown error');
+      console.error('[EMAIL] Error details:', error);
+      // Don't throw error to avoid breaking flow
+    }
+  } else {
+    console.log('[EMAIL] No phone number provided, skipping WhatsApp');
+  }
+  
+  console.log('[EMAIL] ✅ sendIqamaConfirmationEmail completed successfully');
 };
 
 export { transporter };

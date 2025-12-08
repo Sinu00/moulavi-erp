@@ -857,6 +857,62 @@ router.put(
       },
     });
 
+    // Send movement update notification (email + WhatsApp)
+    if (updatedMovement.driverDetails1 || updatedMovement.driverDetails2 || updatedMovement.vehicleNumber) {
+      try {
+        // Get party (umrah visa provider) if voucher has umrahVisaProviderId
+        let partyWhatsApp: string | undefined;
+        let partyEmail = '';
+        let partyName = voucher.guestName || 'Guest';
+        
+        if (voucher.umrahVisaProviderId) {
+          const party = await prisma.party.findUnique({
+            where: { id: voucher.umrahVisaProviderId },
+            select: {
+              partyName: true,
+              whatsappNumber: true,
+              email: true,
+            },
+          });
+          
+          if (party) {
+            partyName = party.partyName;
+            partyEmail = party.email || '';
+            partyWhatsApp = party.whatsappNumber || undefined;
+          }
+        }
+        
+        const guestMobile = voucher.guestMobile || undefined;
+
+        // Format date for display
+        const formattedDate = updatedMovement.date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+
+        await sendMovementUpdateEmail(
+          partyEmail,
+          partyName,
+          voucher.voucherNumber,
+          {
+            date: formattedDate,
+            time: updatedMovement.time || '',
+            fromLocation: updatedMovement.fromLocation || updatedMovement.from || '',
+            toLocation: updatedMovement.toLocation || updatedMovement.to || '',
+            driverDetails1: updatedMovement.driverDetails1 || '',
+            driverDetails2: updatedMovement.driverDetails2 || '',
+            vehicleNumber: updatedMovement.vehicleNumber || '',
+          },
+          partyWhatsApp,
+          guestMobile
+        );
+      } catch (error: any) {
+        console.error('Failed to send movement update notification:', error);
+        // Don't fail the request if notification fails
+      }
+    }
+
     // Return updated voucher with updated movement
     const updatedMovements = voucher.movements.map(m => m.id === movement.id ? updatedMovement : m);
     res.json({ voucher: { ...voucher, movements: updatedMovements } });

@@ -57,6 +57,32 @@ Your ${serviceType} service request has been successfully submitted!
 
 Thank you for choosing Moulavi ERP!
   `.trim(),
+
+  iqamaConfirmation: (name: string) => `
+🌙 Greetings from Umra Company, Saudi Arabia 🇸🇦
+
+👨‍👩‍👧 Your family has applied for an Umrah visa through our Indian agent.
+
+✅ Kindly log in to your Absher account and approve the request at the earliest convenience.
+
+🔎 For your reference, please check under "Qabul Services" in your Absher account to view and approve the request.
+
+📞 If you need any assistance, please feel free to contact us anytime.
+
+---
+
+✅ *How to Check Qabul Services in Absher*
+
+1. Log in to [Absher.sa](https://www.absher.sa) → Individual account
+
+2. Go to My Services (خدماتي) → *Inquiries (الاستعلامات)
+
+3. Select General Services (الخدمات العامة)
+
+4. Click Qabul Services (قبول الخدمات)
+
+5. View or Accept (قبول) / Reject (رفض) any pending requests
+  `.trim(),
 } as const;
 
 // Utility function to format phone number
@@ -323,6 +349,29 @@ Thank you for choosing our services!`;
     console.log('[WHATSAPP] ✅ sendMovementUpdateWhatsApp completed successfully');
   } catch (error: any) {
     console.error('[WHATSAPP] ❌ sendMovementUpdateWhatsApp failed:', error?.message || 'Unknown error');
+    throw error;
+  }
+};
+
+// Send iqama confirmation WhatsApp message
+export const sendIqamaConfirmationWhatsApp = async (
+  phoneNumber: string,
+  name: string
+): Promise<void> => {
+  console.log('[WHATSAPP] ========== sendIqamaConfirmationWhatsApp called ==========');
+  console.log('[WHATSAPP] Parameters:', {
+    phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+    name: name || 'null',
+  });
+
+  const message = WHATSAPP_TEMPLATES.iqamaConfirmation(name);
+  console.log('[WHATSAPP] Message template generated, length:', message.length);
+
+  try {
+    await sendWhatsAppMessage(phoneNumber, message);
+    console.log('[WHATSAPP] ✅ sendIqamaConfirmationWhatsApp completed successfully');
+  } catch (error: any) {
+    console.error('[WHATSAPP] ❌ sendIqamaConfirmationWhatsApp failed:', error?.message || 'Unknown error');
     throw error;
   }
 };

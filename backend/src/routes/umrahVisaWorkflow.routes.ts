@@ -250,6 +250,12 @@ router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) =>
       where: { id: bookingId },
       include: {
         sponsorIqamaDetails: true,
+        umrahVisaProvider: {
+          select: {
+            email: true,
+            whatsappNumber: true,
+          },
+        },
       },
     });
 
@@ -308,8 +314,43 @@ router.post('/:bookingId/upload-confirmation', authenticate, async (req, res) =>
       where: { id: bookingId },
       include: {
         sponsorIqamaDetails: true,
+        umrahVisaProvider: {
+          select: {
+            email: true,
+            whatsappNumber: true,
+          },
+        },
       },
     });
+
+    // Send notification (email + WhatsApp) to iqama holder
+    if (finalBooking?.sponsorIqamaDetails) {
+      try {
+        const { sendIqamaConfirmationEmail } = await import('../services/emailService');
+        const iqamaHolderName = finalBooking.sponsorIqamaDetails.iqamaSponserName || 'Valued Customer';
+        const iqamaHolderPhone = finalBooking.sponsorIqamaDetails.sponserMobileNumber || undefined;
+        const confirmationImagePath = finalBooking.sponsorIqamaDetails.confirmationImagePath || undefined;
+        
+        // Use umrahVisaProvider email if available, otherwise skip email
+        const recipientEmail = finalBooking.umrahVisaProvider?.email || undefined;
+        
+        if (recipientEmail || iqamaHolderPhone) {
+          await sendIqamaConfirmationEmail(
+            recipientEmail,
+            iqamaHolderName,
+            confirmationImagePath,
+            iqamaHolderPhone
+          );
+          console.log('✅ Iqama confirmation notification sent successfully');
+        } else {
+          console.log('⚠️ No email or phone number available for iqama confirmation notification');
+        }
+      } catch (error: any) {
+        console.error('❌ Failed to send iqama confirmation notification:', error?.message || 'Unknown error');
+        console.error('Error details:', error);
+        // Don't fail the request if notification fails
+      }
+    }
 
     res.json({
       message: 'Confirmation uploaded successfully',
