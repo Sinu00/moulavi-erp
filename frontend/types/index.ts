@@ -238,6 +238,8 @@ export interface UmrahVisaBooking {
   travelDetails?: {
     arrivalDateTime?: string;
     departureDateTime?: string;
+    arrivalFlightNumber?: string;
+    departureFlightNumber?: string;
     arrivalAirport?: {
       id: string;
       name: string;

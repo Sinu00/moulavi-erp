@@ -542,7 +542,12 @@ export default function TripInfoPage() {
                                       {booking.travelDetails?.arrivalDateTime ? formatDateTime(booking.travelDetails.arrivalDateTime) : 'N/A'}
                                       {booking.travelDetails?.arrivalDateTime && (
                                         <button
-                                          onClick={() => copyToClipboard(formatDateTime(booking.travelDetails!.arrivalDateTime), 'Arrival Date/Time')}
+                                          onClick={() => {
+                                            const dateTime = booking.travelDetails?.arrivalDateTime;
+                                            if (dateTime) {
+                                              copyToClipboard(formatDateTime(dateTime), 'Arrival Date/Time');
+                                            }
+                                          }}
                                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
                                           title="Copy arrival date/time"
                                         >
@@ -554,7 +559,12 @@ export default function TripInfoPage() {
                                       Flight: {booking.travelDetails?.arrivalFlightNumber || 'N/A'}
                                       {booking.travelDetails?.arrivalFlightNumber && (
                                         <button
-                                          onClick={() => copyToClipboard(booking.travelDetails!.arrivalFlightNumber, 'Arrival Flight')}
+                                          onClick={() => {
+                                            const flightNumber = booking.travelDetails?.arrivalFlightNumber;
+                                            if (flightNumber) {
+                                              copyToClipboard(flightNumber, 'Arrival Flight');
+                                            }
+                                          }}
                                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
                                           title="Copy flight number"
                                         >
@@ -585,7 +595,12 @@ export default function TripInfoPage() {
                                       {booking.travelDetails?.departureDateTime ? formatDateTime(booking.travelDetails.departureDateTime) : 'N/A'}
                                       {booking.travelDetails?.departureDateTime && (
                                         <button
-                                          onClick={() => copyToClipboard(formatDateTime(booking.travelDetails!.departureDateTime), 'Departure Date/Time')}
+                                          onClick={() => {
+                                            const dateTime = booking.travelDetails?.departureDateTime;
+                                            if (dateTime) {
+                                              copyToClipboard(formatDateTime(dateTime), 'Departure Date/Time');
+                                            }
+                                          }}
                                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
                                           title="Copy departure date/time"
                                         >
@@ -597,7 +612,12 @@ export default function TripInfoPage() {
                                       Flight: {booking.travelDetails?.departureFlightNumber || 'N/A'}
                                       {booking.travelDetails?.departureFlightNumber && (
                                         <button
-                                          onClick={() => copyToClipboard(booking.travelDetails!.departureFlightNumber, 'Departure Flight')}
+                                          onClick={() => {
+                                            const flightNumber = booking.travelDetails?.departureFlightNumber;
+                                            if (flightNumber) {
+                                              copyToClipboard(flightNumber, 'Departure Flight');
+                                            }
+                                          }}
                                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
                                           title="Copy flight number"
                                         >
@@ -645,13 +665,15 @@ export default function TripInfoPage() {
                               ) : (
                                 <div className="space-y-2 text-xs">
                                   {booking.hotelBookings && booking.hotelBookings.length > 0 ? (
-                                    booking.hotelBookings.map((hotelBooking: any, index: number) => (
+                                    booking.hotelBookings.map((hotelBooking: any, index: number) => {
+                                      const totalHotels = booking.hotelBookings?.length || 0;
+                                      return (
                                       <div 
                                         key={hotelBooking.id || index} 
                                         className={`${index > 0 ? 'border-t pt-2 mt-2' : ''}`}
                                       >
                                         <div className="font-medium text-gray-900 mb-1">
-                                          Hotel {booking.hotelBookings.length > 1 ? `${index + 1}` : ''}
+                                          Hotel {totalHotels > 1 ? `${index + 1}` : ''}
                                         </div>
                                         <div className="space-y-0.5">
                                           <div className="flex items-center gap-1">
@@ -740,7 +762,8 @@ export default function TripInfoPage() {
                                           </div>
                                         </div>
                                       </div>
-                                    ))
+                                      );
+                                    })
                                   ) : (
                                     <div className="text-gray-400 italic">No hotel bookings</div>
                                   )}
@@ -788,7 +811,12 @@ export default function TripInfoPage() {
                                     {booking.submittedAt ? formatDate(booking.submittedAt) : 'N/A'}
                                     {booking.submittedAt && (
                                       <button
-                                        onClick={() => copyToClipboard(formatDate(booking.submittedAt), 'Booking Date')}
+                                        onClick={() => {
+                                          const submittedAt = booking.submittedAt;
+                                          if (submittedAt) {
+                                            copyToClipboard(formatDate(submittedAt), 'Booking Date');
+                                          }
+                                        }}
                                         className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
                                         title="Copy booking date"
                                       >

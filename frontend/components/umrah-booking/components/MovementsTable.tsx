@@ -276,7 +276,7 @@ export const MovementsTable: React.FC<MovementsTableProps> = ({
                     className={movement.viabadrOverride ? "bg-red-600 hover:bg-red-700 text-white" : ""}
                     title={movement.viabadrOverride ? "Change 'To' city back to Madinah" : "Change 'To' city to Viabadr (only affects 'To' location)"}
                   >
-                    Viabadr
+                    ✔ 
                   </Button>
                 )}
               </td>
