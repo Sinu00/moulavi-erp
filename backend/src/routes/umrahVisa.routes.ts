@@ -75,6 +75,7 @@ router.get('/bookings', authenticate, async (req, res) => {
             select: {
               id: true,
               partyName: true,
+              partyCode: true,
               email: true,
               contactNumber: true,
             },

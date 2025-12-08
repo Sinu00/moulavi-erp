@@ -9,6 +9,9 @@ const EMAIL_CONFIG = {
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
 } as const;
 
+// Email enabled flag (defaults to true for backward compatibility)
+const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== 'false';
+
 // SMTP transporter configuration
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -244,8 +247,18 @@ const EMAIL_TEMPLATES = {
 
 // Utility function to send email with error handling
 const sendEmail = async (mailOptions: nodemailer.SendMailOptions): Promise<void> => {
-  const startTime = Date.now();
   const logPrefix = '[EMAIL]';
+  
+  // Check if email is enabled
+  if (!EMAIL_ENABLED) {
+    console.log(`${logPrefix} ⚠️ Email sending is disabled (EMAIL_ENABLED=false). Skipping email.`);
+    console.log(`${logPrefix} To: ${mailOptions.to || 'null'}`);
+    console.log(`${logPrefix} Subject: ${mailOptions.subject || 'null'}`);
+    console.log(`${logPrefix} ========== END: Email Skipped (Disabled) ==========`);
+    return;
+  }
+
+  const startTime = Date.now();
   
   console.log(`${logPrefix} ========== START: Sending Email ==========`);
   console.log(`${logPrefix} Timestamp: ${new Date().toISOString()}`);
@@ -356,10 +369,13 @@ export const sendCredentialsEmail = async (
   console.log('[EMAIL] HTML length:', htmlLength);
   
   try {
+    // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
-    console.log('[EMAIL] ✅ sendCredentialsEmail email sent successfully');
+    if (EMAIL_ENABLED) {
+      console.log('[EMAIL] ✅ sendCredentialsEmail email sent successfully');
+    }
     
-    // Send WhatsApp message if phone number is provided
+    // Send WhatsApp message if phone number is provided (always attempt, regardless of email status)
     if (phoneNumber) {
       console.log('[EMAIL] Attempting to send WhatsApp credentials...');
       try {
@@ -369,7 +385,7 @@ export const sendCredentialsEmail = async (
       } catch (error: any) {
         console.error('[EMAIL] ❌ Failed to send WhatsApp credentials:', error?.message || 'Unknown error');
         console.error('[EMAIL] Error details:', error);
-        // Don't throw error to avoid breaking email flow
+        // Don't throw error to avoid breaking flow
       }
     } else {
       console.log('[EMAIL] No phone number provided, skipping WhatsApp');
@@ -378,7 +394,11 @@ export const sendCredentialsEmail = async (
     console.log('[EMAIL] ✅ sendCredentialsEmail completed successfully');
   } catch (error: any) {
     console.error('[EMAIL] ❌ sendCredentialsEmail failed:', error?.message || 'Unknown error');
-    throw error;
+    // Only throw error if email was enabled and failed
+    // If email is disabled, we still want to proceed with WhatsApp
+    if (EMAIL_ENABLED) {
+      throw error;
+    }
   }
 };
 
@@ -411,10 +431,13 @@ export const sendServiceConfirmationEmail = async (
   console.log('[EMAIL] HTML length:', htmlLength);
   
   try {
+    // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
-    console.log('[EMAIL] ✅ sendServiceConfirmationEmail email sent successfully');
+    if (EMAIL_ENABLED) {
+      console.log('[EMAIL] ✅ sendServiceConfirmationEmail email sent successfully');
+    }
     
-    // Send WhatsApp message if phone number is provided
+    // Send WhatsApp message if phone number is provided (always attempt, regardless of email status)
     if (phoneNumber) {
       console.log('[EMAIL] Attempting to send WhatsApp service confirmation...');
       try {
@@ -424,7 +447,7 @@ export const sendServiceConfirmationEmail = async (
       } catch (error: any) {
         console.error('[EMAIL] ❌ Failed to send WhatsApp service confirmation:', error?.message || 'Unknown error');
         console.error('[EMAIL] Error details:', error);
-        // Don't throw error to avoid breaking email flow
+        // Don't throw error to avoid breaking flow
       }
     } else {
       console.log('[EMAIL] No phone number provided, skipping WhatsApp');
@@ -433,7 +456,11 @@ export const sendServiceConfirmationEmail = async (
     console.log('[EMAIL] ✅ sendServiceConfirmationEmail completed successfully');
   } catch (error: any) {
     console.error('[EMAIL] ❌ sendServiceConfirmationEmail failed:', error?.message || 'Unknown error');
-    throw error;
+    // Only throw error if email was enabled and failed
+    // If email is disabled, we still want to proceed with WhatsApp
+    if (EMAIL_ENABLED) {
+      throw error;
+    }
   }
 };
 
@@ -512,11 +539,19 @@ export const sendBillEmail = async (
   console.log('[EMAIL] Attachment filename:', mailOptions.attachments?.[0]?.filename || 'N/A');
   
   try {
+    // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
-    console.log('[EMAIL] ✅ sendBillEmail completed successfully');
+    if (EMAIL_ENABLED) {
+      console.log('[EMAIL] ✅ sendBillEmail completed successfully');
+    } else {
+      console.log('[EMAIL] ✅ sendBillEmail skipped (email disabled)');
+    }
   } catch (error: any) {
     console.error('[EMAIL] ❌ sendBillEmail failed:', error?.message || 'Unknown error');
-    throw error;
+    // Only throw error if email was enabled and failed
+    if (EMAIL_ENABLED) {
+      throw error;
+    }
   }
 };
 
@@ -592,11 +627,19 @@ export const sendMovementUpdateEmail = async (
   console.log('[EMAIL] HTML length:', emailHtml.length);
 
   try {
+    // Attempt to send email (will be skipped if EMAIL_ENABLED=false)
     await sendEmail(mailOptions);
-    console.log('[EMAIL] ✅ sendMovementUpdateEmail completed successfully');
+    if (EMAIL_ENABLED) {
+      console.log('[EMAIL] ✅ sendMovementUpdateEmail completed successfully');
+    } else {
+      console.log('[EMAIL] ✅ sendMovementUpdateEmail skipped (email disabled)');
+    }
   } catch (error: any) {
     console.error('[EMAIL] ❌ sendMovementUpdateEmail failed:', error?.message || 'Unknown error');
-    throw error;
+    // Only throw error if email was enabled and failed
+    if (EMAIL_ENABLED) {
+      throw error;
+    }
   }
 };
 

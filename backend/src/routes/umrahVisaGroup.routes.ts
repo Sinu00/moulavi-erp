@@ -733,7 +733,7 @@ router.post('/group/create-booking', authenticate, uploadGroup.single('panCardZi
 });
 
 // POST /api/umrah-visa/group/add-to-existing-booking - Add new group to existing booking
-router.post('/group/add-to-existing-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
+router.post('/group/add-to-existing-booking', authenticate, uploadGroup.single('panCardZipFile'), async (req, res) => {
   try {
     const user = (req as any).user;
     const isAdminOrStaff = user.role === 'admin' || user.role === 'staff';

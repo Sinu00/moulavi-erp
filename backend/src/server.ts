@@ -141,13 +141,18 @@ app.listen(PORT, () => {
   }
 
   // Check Email configuration
+  const emailEnabled = process.env.EMAIL_ENABLED !== 'false';
   const emailConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD);
-  if (emailConfigured) {
+  
+  if (!emailEnabled) {
+    console.log(`📧 Email Service: DISABLED (EMAIL_ENABLED=false)`);
+    console.log(`   Email sending is disabled. WhatsApp messaging will continue to work.`);
+  } else if (emailConfigured) {
     console.log(`📧 Email Service: Configured (${process.env.SMTP_HOST}:${process.env.SMTP_PORT || '587'})`);
   } else {
     console.log(`⚠️  Email Service: NOT CONFIGURED`);
     console.log(`   Required: SMTP_HOST, SMTP_USER, SMTP_PASSWORD`);
-    console.log(`   Optional: SMTP_PORT, SMTP_SECURE, FRONTEND_URL`);
+    console.log(`   Optional: SMTP_PORT, SMTP_SECURE, FRONTEND_URL, EMAIL_ENABLED`);
   }
 
   // Check WhatsApp configuration

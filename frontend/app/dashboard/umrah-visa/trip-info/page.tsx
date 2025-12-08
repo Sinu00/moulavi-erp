@@ -20,6 +20,7 @@ import {
   Users,
   Menu,
   RefreshCw,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Sidebar from '@/components/Sidebar';
@@ -101,6 +102,29 @@ export default function TripInfoPage() {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }) + ' ' + date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  const copyToClipboard = async (text: string, label?: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label || 'Value'} copied to clipboard`);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      toast.error('Failed to copy to clipboard');
+    }
   };
 
   // Action Handlers
@@ -286,11 +310,17 @@ export default function TripInfoPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[130px]">Visa Type</TableHead>
-                      <TableHead className="w-[200px]">Group Details</TableHead>
+                      <TableHead className="w-[200px]">{activeTab === 'hotel' ? 'Party Code/Name' : 'Group Details'}</TableHead>
                       <TableHead className="w-[180px]">Arrival Details</TableHead>
-                      <TableHead className="w-[180px]">Return Details</TableHead>
+                      <TableHead className="w-[180px]">Departure Details</TableHead>
                       <TableHead className="w-[220px]">{activeTab === 'iqama' ? 'Iqama Details' : 'Hotel Details'}</TableHead>
+                      {activeTab === 'hotel' && (
+                        <TableHead className="w-[150px]">Visa Provider</TableHead>
+                      )}
                       <TableHead className="w-[150px]">Updated By</TableHead>
+                      {activeTab === 'hotel' && (
+                        <TableHead className="w-[120px]">Booking Date</TableHead>
+                      )}
                       {activeTab === 'iqama' && (
                         <TableHead className="w-[180px]">Upload Image</TableHead>
                       )}
@@ -300,7 +330,7 @@ export default function TripInfoPage() {
                   <TableBody>
                     {filteredData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={activeTab === 'iqama' ? 8 : 7} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={activeTab === 'iqama' ? 8 : 9} className="text-center py-8 text-gray-500">
                           {searchQuery 
                             ? 'No trips found matching your search' 
                             : 'No trip information available'}
@@ -310,7 +340,7 @@ export default function TripInfoPage() {
                       filteredData.map((booking) => {
                         const iqamaDetails = booking.sponsorIqamaDetails;
                         return (
-                          <TableRow key={booking.id}>
+                          <TableRow key={booking.id} className="group">
                             {/* Visa Type */}
                             <TableCell>
                               <div className="flex flex-col gap-1">
@@ -324,90 +354,267 @@ export default function TripInfoPage() {
                                 )}
                               </div>
                             </TableCell>
-                            {/* Group Details */}
+                            {/* Group Details / Party Code Name */}
                             <TableCell>
-                              <div className="space-y-1">
-                                <div className="font-semibold text-gray-900">{booking.party?.partyName || 'N/A'}</div>
-                                {booking.groupNumber ? (
-                                  <>
-                                    {(() => {
-                                      // Parse multipleGroupDetails if available
-                                      let groups: Array<{ groupNumber?: string; groupName?: string }> = [];
-                                      if (booking.hasMultipleGroup && booking.multipleGroupDetails) {
-                                        try {
-                                          if (Array.isArray(booking.multipleGroupDetails)) {
-                                            groups = booking.multipleGroupDetails as Array<{ groupNumber?: string; groupName?: string }>;
+                              {activeTab === 'hotel' ? (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-gray-900 flex items-center gap-1">
+                                    {booking.party?.partyCode ? `${booking.party.partyCode} - ${booking.party.partyName || 'N/A'}` : booking.party?.partyName || 'N/A'}
+                                    <button
+                                      onClick={() => copyToClipboard(
+                                        booking.party?.partyCode ? `${booking.party.partyCode} - ${booking.party.partyName || 'N/A'}` : booking.party?.partyName || 'N/A',
+                                        'Party Code/Name'
+                                      )}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                      title="Copy party code/name"
+                                    >
+                                      <Copy className="h-3 w-3 text-gray-500" />
+                                    </button>
+                                  </div>
+                                  {booking.groupNumber ? (
+                                    <>
+                                      {(() => {
+                                        // Parse multipleGroupDetails if available
+                                        let groups: Array<{ groupNumber?: string; groupName?: string }> = [];
+                                        if (booking.hasMultipleGroup && booking.multipleGroupDetails) {
+                                          try {
+                                            if (Array.isArray(booking.multipleGroupDetails)) {
+                                              groups = booking.multipleGroupDetails as Array<{ groupNumber?: string; groupName?: string }>;
+                                            }
+                                          } catch (e) {
+                                            console.error('Error parsing multipleGroupDetails:', e);
                                           }
-                                        } catch (e) {
-                                          console.error('Error parsing multipleGroupDetails:', e);
                                         }
-                                      }
-                                      
-                                      // If we have parsed groups, display them individually
-                                      if (groups.length > 0) {
-                                        const groupNumbers = groups.map(g => g.groupNumber).filter(Boolean);
-                                        const groupNames = groups.map(g => g.groupName).filter(Boolean);
-                                        const lastIndex = groups.length - 1;
                                         
-                                        return (
-                                          <>
-                                            <div className="text-sm font-medium">
-                                              {groupNumbers.map((num, idx) => (
-                                                <span key={idx} className={idx === lastIndex ? 'text-orange-600' : 'text-indigo-600'}>
-                                                  {num}{idx < groupNumbers.length - 1 ? ', ' : ''}
-                                                </span>
-                                              ))}
+                                        // If we have parsed groups, display them individually
+                                        if (groups.length > 0) {
+                                          const lastIndex = groups.length - 1;
+                                          
+                                          return (
+                                            <div className="text-xs font-medium flex flex-wrap items-center gap-1">
+                                              {groups.map((group, idx) => {
+                                                const isLast = idx === lastIndex && booking.hasMultipleGroup;
+                                                const displayText = `${group.groupNumber || ''}${group.groupName ? ` - ${group.groupName}` : ''}`;
+                                                
+                                                return (
+                                                  <span 
+                                                    key={idx} 
+                                                    className={`flex items-center gap-1 ${isLast ? 'text-orange-600 font-semibold' : 'text-indigo-600'}`}
+                                                  >
+                                                    {displayText}
+                                                    <button
+                                                      onClick={() => copyToClipboard(displayText, 'Group Details')}
+                                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                      title="Copy group details"
+                                                    >
+                                                      <Copy className="h-3 w-3" />
+                                                    </button>
+                                                    {idx < groups.length - 1 && <span className={isLast ? 'text-orange-600' : 'text-indigo-600'}>,</span>}
+                                                  </span>
+                                                );
+                                              })}
                                             </div>
-                                            <div className="text-xs">
-                                              {groupNames.map((name, idx) => (
-                                                <span key={idx} className={idx === lastIndex ? 'text-orange-600' : 'text-gray-500'}>
-                                                  {name}{idx < groupNames.length - 1 ? ', ' : ''}
-                                                </span>
-                                              ))}
+                                          );
+                                        } else {
+                                          // Fallback to original display
+                                          return (
+                                            <div className="text-xs text-gray-500 flex items-center gap-1">
+                                              {booking.groupNumber} {booking.groupName ? `(${booking.groupName})` : ''}
+                                              <button
+                                                onClick={() => copyToClipboard(
+                                                  `${booking.groupNumber}${booking.groupName ? ` (${booking.groupName})` : ''}`,
+                                                  'Group Number'
+                                                )}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                title="Copy group number"
+                                              >
+                                                <Copy className="h-3 w-3 text-gray-500" />
+                                              </button>
                                             </div>
-                                          </>
-                                        );
-                                      } else {
-                                        // Fallback to original display
-                                        return (
-                                          <>
-                                            <div className="text-sm font-medium text-indigo-600">{booking.groupNumber}</div>
-                                            <div className="text-xs text-gray-500">{booking.groupName}</div>
-                                          </>
-                                        );
-                                      }
-                                    })()}
-                                  </>
-                                ) : (
-                                  <div className="text-sm text-gray-400 italic">No group assigned</div>
-                                )}
-                              </div>
+                                          );
+                                        }
+                                      })()}
+                                    </>
+                                  ) : (
+                                    <div className="text-sm text-gray-400 italic">No group assigned</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-gray-900 flex items-center gap-1">
+                                    {booking.party?.partyName || 'N/A'}
+                                    <button
+                                      onClick={() => copyToClipboard(booking.party?.partyName || '', 'Party Name')}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                      title="Copy party name"
+                                    >
+                                      <Copy className="h-3 w-3 text-gray-500" />
+                                    </button>
+                                  </div>
+                                  {booking.groupNumber ? (
+                                    <>
+                                      {(() => {
+                                        // Parse multipleGroupDetails if available
+                                        let groups: Array<{ groupNumber?: string; groupName?: string }> = [];
+                                        if (booking.hasMultipleGroup && booking.multipleGroupDetails) {
+                                          try {
+                                            if (Array.isArray(booking.multipleGroupDetails)) {
+                                              groups = booking.multipleGroupDetails as Array<{ groupNumber?: string; groupName?: string }>;
+                                            }
+                                          } catch (e) {
+                                            console.error('Error parsing multipleGroupDetails:', e);
+                                          }
+                                        }
+                                        
+                                        // If we have parsed groups, display them individually
+                                        if (groups.length > 0) {
+                                          const lastIndex = groups.length - 1;
+                                          
+                                          return (
+                                            <div className="text-sm font-medium flex flex-wrap items-center gap-1">
+                                              {groups.map((group, idx) => {
+                                                const isLast = idx === lastIndex && booking.hasMultipleGroup;
+                                                const displayText = `${group.groupNumber || ''}${group.groupName ? ` - ${group.groupName}` : ''}`;
+                                                
+                                                return (
+                                                  <span 
+                                                    key={idx} 
+                                                    className={`flex items-center gap-1 ${isLast ? 'text-orange-600 font-semibold' : 'text-indigo-600'}`}
+                                                  >
+                                                    {displayText}
+                                                    <button
+                                                      onClick={() => copyToClipboard(displayText, 'Group Details')}
+                                                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                      title="Copy group details"
+                                                    >
+                                                      <Copy className="h-3 w-3" />
+                                                    </button>
+                                                    {idx < groups.length - 1 && <span className={isLast ? 'text-orange-600' : 'text-indigo-600'}>,</span>}
+                                                  </span>
+                                                );
+                                              })}
+                                            </div>
+                                          );
+                                        } else {
+                                          // Fallback to original display
+                                          return (
+                                            <>
+                                              <div className="text-sm font-medium text-indigo-600 flex items-center gap-1">
+                                                {booking.groupNumber}
+                                                <button
+                                                  onClick={() => copyToClipboard(booking.groupNumber || '', 'Group Number')}
+                                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                  title="Copy group number"
+                                                >
+                                                  <Copy className="h-3 w-3 text-gray-500" />
+                                                </button>
+                                              </div>
+                                              <div className="text-xs text-gray-500 flex items-center gap-1">
+                                                {booking.groupName}
+                                                {booking.groupName && (
+                                                  <button
+                                                    onClick={() => copyToClipboard(booking.groupName || '', 'Group Name')}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                    title="Copy group name"
+                                                  >
+                                                    <Copy className="h-3 w-3 text-gray-500" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </>
+                                          );
+                                        }
+                                      })()}
+                                    </>
+                                  ) : (
+                                    <div className="text-sm text-gray-400 italic">No group assigned</div>
+                                  )}
+                                </div>
+                              )}
                             </TableCell>
 
                             {/* Arrival Details */}
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}
-                                </div>
-                                {activeTab === 'iqama' && (
-                                  <div className="text-xs text-gray-600">
-                                    {iqamaDetails?.sponserMobileNumber || 'N/A'}
-                                  </div>
+                                {activeTab === 'hotel' ? (
+                                  <>
+                                    <div className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                      {booking.travelDetails?.arrivalDateTime ? formatDateTime(booking.travelDetails.arrivalDateTime) : 'N/A'}
+                                      {booking.travelDetails?.arrivalDateTime && (
+                                        <button
+                                          onClick={() => copyToClipboard(formatDateTime(booking.travelDetails!.arrivalDateTime), 'Arrival Date/Time')}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                          title="Copy arrival date/time"
+                                        >
+                                          <Copy className="h-3 w-3 text-gray-500" />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-gray-600 flex items-center gap-1">
+                                      Flight: {booking.travelDetails?.arrivalFlightNumber || 'N/A'}
+                                      {booking.travelDetails?.arrivalFlightNumber && (
+                                        <button
+                                          onClick={() => copyToClipboard(booking.travelDetails!.arrivalFlightNumber, 'Arrival Flight')}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                          title="Copy flight number"
+                                        >
+                                          <Copy className="h-3 w-3 text-gray-500" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {booking.travelDetails?.arrivalDateTime ? formatDate(booking.travelDetails.arrivalDateTime) : 'N/A'}
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      {iqamaDetails?.sponserMobileNumber || 'N/A'}
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             </TableCell>
 
-                            {/* Return Details */}
+                            {/* Departure Details */}
                             <TableCell>
                               <div className="space-y-1">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {booking.travelDetails?.departureDateTime ? formatDate(booking.travelDetails.departureDateTime) : 'N/A'}
-                                </div>
-                                {activeTab === 'iqama' && (
-                                  <div className="text-xs text-gray-600">
-                                    {iqamaDetails?.sponserMobileNumber || 'N/A'}
-                                  </div>
+                                {activeTab === 'hotel' ? (
+                                  <>
+                                    <div className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                      {booking.travelDetails?.departureDateTime ? formatDateTime(booking.travelDetails.departureDateTime) : 'N/A'}
+                                      {booking.travelDetails?.departureDateTime && (
+                                        <button
+                                          onClick={() => copyToClipboard(formatDateTime(booking.travelDetails!.departureDateTime), 'Departure Date/Time')}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                          title="Copy departure date/time"
+                                        >
+                                          <Copy className="h-3 w-3 text-gray-500" />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-gray-600 flex items-center gap-1">
+                                      Flight: {booking.travelDetails?.departureFlightNumber || 'N/A'}
+                                      {booking.travelDetails?.departureFlightNumber && (
+                                        <button
+                                          onClick={() => copyToClipboard(booking.travelDetails!.departureFlightNumber, 'Departure Flight')}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                          title="Copy flight number"
+                                        >
+                                          <Copy className="h-3 w-3 text-gray-500" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {booking.travelDetails?.departureDateTime ? formatDate(booking.travelDetails.departureDateTime) : 'N/A'}
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      {iqamaDetails?.sponserMobileNumber || 'N/A'}
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             </TableCell>
@@ -436,26 +643,130 @@ export default function TripInfoPage() {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="space-y-1 text-xs">
-                                  <div>
-                                    <span className="text-gray-500">Hotels:</span>{' '}
-                                    <span className="font-medium">
-                                      {booking.hotelBookings?.length || 0} hotel(s)
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-500">Passengers:</span>{' '}
-                                    <span className="font-medium">{booking.passengerCount || 'N/A'}</span>
-                                  </div>
-                                  {booking.umrahVisaProvider && (
-                                    <div>
-                                      <span className="text-gray-500">Provider:</span>{' '}
-                                      <span className="font-medium">{booking.umrahVisaProvider.partyName}</span>
-                                    </div>
+                                <div className="space-y-2 text-xs">
+                                  {booking.hotelBookings && booking.hotelBookings.length > 0 ? (
+                                    booking.hotelBookings.map((hotelBooking: any, index: number) => (
+                                      <div 
+                                        key={hotelBooking.id || index} 
+                                        className={`${index > 0 ? 'border-t pt-2 mt-2' : ''}`}
+                                      >
+                                        <div className="font-medium text-gray-900 mb-1">
+                                          Hotel {booking.hotelBookings.length > 1 ? `${index + 1}` : ''}
+                                        </div>
+                                        <div className="space-y-0.5">
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-gray-500">City:</span>{' '}
+                                            <span className="font-medium">{hotelBooking.city?.name || 'N/A'}</span>
+                                            {hotelBooking.city?.name && (
+                                              <button
+                                                onClick={() => copyToClipboard(hotelBooking.city.name, 'City')}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                title="Copy city"
+                                              >
+                                                <Copy className="h-3 w-3 text-gray-500" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-gray-500">Hotel:</span>{' '}
+                                            <span className="font-medium">{hotelBooking.hotel?.name || 'N/A'}</span>
+                                            {hotelBooking.hotel?.name && (
+                                              <button
+                                                onClick={() => copyToClipboard(hotelBooking.hotel.name, 'Hotel')}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                title="Copy hotel name"
+                                              >
+                                                <Copy className="h-3 w-3 text-gray-500" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-gray-500">Check-in:</span>{' '}
+                                            <span className="font-medium">
+                                              {hotelBooking.checkInDate ? formatDate(hotelBooking.checkInDate) : 'N/A'}
+                                            </span>
+                                            {hotelBooking.checkInDate && (
+                                              <button
+                                                onClick={() => copyToClipboard(formatDate(hotelBooking.checkInDate), 'Check-in Date')}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                title="Copy check-in date"
+                                              >
+                                                <Copy className="h-3 w-3 text-gray-500" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-gray-500">Check-out:</span>{' '}
+                                            <span className="font-medium">
+                                              {hotelBooking.checkOutDate ? formatDate(hotelBooking.checkOutDate) : 'N/A'}
+                                            </span>
+                                            {hotelBooking.checkOutDate && (
+                                              <button
+                                                onClick={() => copyToClipboard(formatDate(hotelBooking.checkOutDate), 'Check-out Date')}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                title="Copy check-out date"
+                                              >
+                                                <Copy className="h-3 w-3 text-gray-500" />
+                                              </button>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <span className="text-gray-500">BRN:</span>{' '}
+                                            <span className="font-medium">
+                                              {hotelBooking.brn 
+                                                ? (typeof hotelBooking.brn === 'string' 
+                                                    ? hotelBooking.brn 
+                                                    : typeof hotelBooking.brn === 'object' 
+                                                      ? JSON.stringify(hotelBooking.brn) 
+                                                      : String(hotelBooking.brn))
+                                                : 'N/A'}
+                                            </span>
+                                            {hotelBooking.brn && (
+                                              <button
+                                                onClick={() => copyToClipboard(
+                                                  typeof hotelBooking.brn === 'string' 
+                                                    ? hotelBooking.brn 
+                                                    : typeof hotelBooking.brn === 'object' 
+                                                      ? JSON.stringify(hotelBooking.brn) 
+                                                      : String(hotelBooking.brn),
+                                                  'BRN'
+                                                )}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                                title="Copy BRN"
+                                              >
+                                                <Copy className="h-3 w-3 text-gray-500" />
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="text-gray-400 italic">No hotel bookings</div>
                                   )}
                                 </div>
                               )}
                             </TableCell>
+
+                            {/* Visa Provider (only for hotel tab) */}
+                            {activeTab === 'hotel' && (
+                              <TableCell>
+                                <div className="text-xs">
+                                  <div className="font-medium text-gray-900 flex items-center gap-1">
+                                    {booking.umrahVisaProvider?.partyName || 'N/A'}
+                                    {booking.umrahVisaProvider?.partyName && (
+                                      <button
+                                        onClick={() => copyToClipboard(booking.umrahVisaProvider!.partyName, 'Visa Provider')}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                        title="Copy visa provider"
+                                      >
+                                        <Copy className="h-3 w-3 text-gray-500" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            )}
 
                             {/* Updated By */}
                             <TableCell>
@@ -468,6 +779,26 @@ export default function TripInfoPage() {
                                 </div>
                               </div>
                             </TableCell>
+
+                            {/* Booking Date (only for hotel tab) */}
+                            {activeTab === 'hotel' && (
+                              <TableCell>
+                                <div className="text-xs">
+                                  <div className="font-medium text-gray-900 flex items-center gap-1">
+                                    {booking.submittedAt ? formatDate(booking.submittedAt) : 'N/A'}
+                                    {booking.submittedAt && (
+                                      <button
+                                        onClick={() => copyToClipboard(formatDate(booking.submittedAt), 'Booking Date')}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-gray-100 rounded"
+                                        title="Copy booking date"
+                                      >
+                                        <Copy className="h-3 w-3 text-gray-500" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            )}
 
                             {/* Upload Image Column (only for iqama tab) */}
                             {activeTab === 'iqama' && (
