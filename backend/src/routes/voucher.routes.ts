@@ -130,10 +130,10 @@ router.get(
     const { from, to } = req.query;
 
     const where: any = {
-      date: {
-        gte: today,
-        lt: tomorrow,
-      },
+        date: {
+          gte: today,
+          lt: tomorrow,
+        },
     };
 
     if (from) {
@@ -217,10 +217,10 @@ router.get(
     const { from, to } = req.query;
 
     const where: any = {
-      date: {
-        gte: tomorrow,
-        lt: dayAfterTomorrow,
-      },
+        date: {
+          gte: tomorrow,
+          lt: dayAfterTomorrow,
+        },
     };
 
     if (from) {

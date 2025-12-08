@@ -11,7 +11,7 @@ import {
   step4Schema,
   step5Schema,
   FLIGHT_NUMBER_REGEX,
-  upload,
+  uploadIndividual,
 } from './umrahVisa/shared';
 import { combineDateTime, splitDateTime } from '../utils/datetime';
 import { isS3Configured } from '../config/s3';
@@ -184,7 +184,7 @@ router.post('/step4', authenticate, async (req, res) => {
 });
 
 // POST /api/umrah-visa/create-booking - Create complete booking (all steps in one transaction)
-router.post('/create-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
+router.post('/create-booking', authenticate, uploadIndividual.single('panCardZipFile'), async (req, res) => {
   try {
     const user = (req as any).user;
     

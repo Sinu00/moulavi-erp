@@ -9,7 +9,7 @@ import {
   step2Schema,
   groupStep1Schema,
   groupStep3Schema,
-  upload,
+  uploadGroup,
 } from './umrahVisa/shared';
 import { combineDateTime } from '../utils/datetime';
 import { syncBookingStatusInTx } from '../services/statusSyncService';
@@ -129,7 +129,7 @@ router.post('/group/step3', authenticate, async (req, res) => {
 });
 
 // POST /api/umrah-visa/group/create-booking - Create complete group booking (all steps in one transaction)
-router.post('/group/create-booking', authenticate, upload.single('panCardZipFile'), async (req, res) => {
+router.post('/group/create-booking', authenticate, uploadGroup.single('panCardZipFile'), async (req, res) => {
   try {
     const user = (req as any).user;
     

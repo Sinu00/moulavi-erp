@@ -13,21 +13,17 @@ export const prisma = new PrismaClient();
 // Flight number validation regex: 2 alphanumeric + dash + 1-4 alphanumeric (e.g., C1-132A, SC-123, 22-SCV)
 export const FLIGHT_NUMBER_REGEX = /^[A-Z0-9]{2}-[A-Z0-9]{1,4}$/;
 
-// Configure multer for file uploads (S3 or local)
-const storage = isS3Configured()
+// Configure multer storage for individual bookings (S3 or local)
+const individualStorage = isS3Configured()
   ? multerS3({
       s3: s3Client!,
       bucket: S3_CONFIG.BUCKET_NAME,
       key: (req: any, file: Express.Multer.File, cb: any) => {
-        // For booking creation, we don't have bookingId yet, so we'll use a temporary path
-        // The actual bookingId will be available in the route handler
+        // For individual booking creation, upload to bookings/individual/ folder
         const uniqueFileName = generateUniqueFileName(file.originalname, file.mimetype || 'application/zip');
-        
-        // Generate a temporary key - will be updated after booking is created
-        // For ZIP files, we'll use a pattern that can be updated later
         const timestamp = Date.now();
-        const sanitizedFileName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const key = `bookings/temp/${timestamp}_${sanitizedFileName}`;
+        const sanitizedFileName = uniqueFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const key = `bookings/individual/${timestamp}_${sanitizedFileName}`;
         cb(null, key);
       },
       metadata: (req: any, file: Express.Multer.File, cb: any) => {
@@ -41,7 +37,7 @@ const storage = isS3Configured()
     })
   : multer.diskStorage({
       destination: (req, file, cb) => {
-        const uploadDir = 'uploads/umrah-visa';
+        const uploadDir = 'uploads/umrah-visa/individual';
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -53,36 +49,85 @@ const storage = isS3Configured()
       }
     });
 
-export const upload = multer({ 
-  storage,
-  limits: { fileSize: Infinity }, // No file size limit - removed as per user requirement
-  fileFilter: (req, file, cb) => {
-    // Allow ZIP files for group bookings
-    if (file.fieldname === 'panCardZipFile') {
-      const allowedTypes = /zip|application\/zip|application\/x-zip-compressed/;
-      const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-      const mimetype = allowedTypes.test(file.mimetype);
-      
-      if (mimetype || extname || file.originalname.toLowerCase().endsWith('.zip')) {
-        return cb(null, true);
-      } else {
-        cb(new Error('Only ZIP files are allowed for PAN card upload'));
+// Configure multer storage for group bookings (S3 or local)
+const groupStorage = isS3Configured()
+  ? multerS3({
+      s3: s3Client!,
+      bucket: S3_CONFIG.BUCKET_NAME,
+      key: (req: any, file: Express.Multer.File, cb: any) => {
+        // For group booking creation, upload to bookings/group/ folder
+        const uniqueFileName = generateUniqueFileName(file.originalname, file.mimetype || 'application/zip');
+        const timestamp = Date.now();
+        const sanitizedFileName = uniqueFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const key = `bookings/group/${timestamp}_${sanitizedFileName}`;
+        cb(null, key);
+      },
+      metadata: (req: any, file: Express.Multer.File, cb: any) => {
+        cb(null, {
+          originalName: file.originalname,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: req.user?.id || 'unknown'
+        });
+      },
+      contentType: multerS3.AUTO_CONTENT_TYPE,
+    })
+  : multer.diskStorage({
+      destination: (req, file, cb) => {
+        const uploadDir = 'uploads/umrah-visa/group';
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
       }
-      return;
-    }
-    
-    // For other files, use existing validation
-    const allowedTypes = /jpeg|jpg|png|pdf/;
+    });
+
+// Common file filter for both individual and group
+const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  // Allow ZIP files for PAN card uploads
+  if (file.fieldname === 'panCardZipFile') {
+    const allowedTypes = /zip|application\/zip|application\/x-zip-compressed/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     
-    if (mimetype && extname) {
+    if (mimetype || extname || file.originalname.toLowerCase().endsWith('.zip')) {
       return cb(null, true);
     } else {
-      cb(new Error('Only images (JPEG, JPG, PNG) and PDF files are allowed'));
+      cb(new Error('Only ZIP files are allowed for PAN card upload'));
     }
+    return;
   }
+  
+  // For other files, use existing validation
+  const allowedTypes = /jpeg|jpg|png|pdf/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+  
+  if (mimetype && extname) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only images (JPEG, JPG, PNG) and PDF files are allowed'));
+  }
+};
+
+// Export separate upload middlewares for individual and group bookings
+export const uploadIndividual = multer({ 
+  storage: individualStorage,
+  limits: { fileSize: Infinity }, // No file size limit - removed as per user requirement
+  fileFilter,
 });
+
+export const uploadGroup = multer({ 
+  storage: groupStorage,
+  limits: { fileSize: Infinity }, // No file size limit - removed as per user requirement
+  fileFilter,
+});
+
+// Keep backward compatibility - default to individual
+export const upload = uploadIndividual;
 
 // Helper function to validate date range (80 days max)
 export const validateDateRange = (arrivalDate: Date, departureDate: Date) => {

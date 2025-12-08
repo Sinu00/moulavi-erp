@@ -568,7 +568,7 @@ export default function VoucherServicePage() {
                   <Skeleton className="h-8 w-20" />
                 ) : (
                   <>
-                    <div className="text-3xl font-bold text-gray-900">{stats.todayMovements}</div>
+                  <div className="text-3xl font-bold text-gray-900">{stats.todayMovements}</div>
                     {loadingMovementStats ? (
                       <div className="space-y-1 mt-3">
                         <Skeleton className="h-3 w-full" />
@@ -620,7 +620,7 @@ export default function VoucherServicePage() {
                   <Skeleton className="h-8 w-20" />
                 ) : (
                   <>
-                    <div className="text-3xl font-bold text-gray-900">{stats.tomorrowMovements}</div>
+                  <div className="text-3xl font-bold text-gray-900">{stats.tomorrowMovements}</div>
                     {loadingMovementStats ? (
                       <div className="space-y-1 mt-3">
                         <Skeleton className="h-3 w-full" />
@@ -976,8 +976,8 @@ export default function VoucherServicePage() {
                       });
 
                       return filteredMovements.length === 0 ? (
-                        <div className="text-center py-12">
-                          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <div className="text-center py-12">
+                        <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-medium text-gray-900 mb-2">
                             {todayRouteSearch || (selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all') 
                               ? 'No movements found with selected filters' 
@@ -988,28 +988,28 @@ export default function VoucherServicePage() {
                               ? 'Try adjusting your search or filters to see movements.'
                               : 'No movements scheduled for today.'}
                           </p>
-                        </div>
-                      ) : (
-                        <div className="rounded-md border overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Route Number</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Time</TableHead>
-                                <TableHead>Agent Name</TableHead>
-                                <TableHead>Guest Name</TableHead>
-                                <TableHead>Mobile</TableHead>
-                                <TableHead>Pax</TableHead>
-                                <TableHead>From</TableHead>
-                                <TableHead>To</TableHead>
-                                <TableHead>Driver Details 1</TableHead>
-                                <TableHead>Driver Details 2</TableHead>
-                                <TableHead>Vehicle Number</TableHead>
-                                <TableHead>Action</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                      </div>
+                    ) : (
+                      <div className="rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Route Number</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Time</TableHead>
+                              <TableHead>Agent Name</TableHead>
+                              <TableHead>Guest Name</TableHead>
+                              <TableHead>Mobile</TableHead>
+                              <TableHead>Pax</TableHead>
+                              <TableHead>From</TableHead>
+                              <TableHead>To</TableHead>
+                              <TableHead>Driver Details 1</TableHead>
+                              <TableHead>Driver Details 2</TableHead>
+                              <TableHead>Vehicle Number</TableHead>
+                              <TableHead>Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
                               {filteredMovements.map((movement, idx) => {
                               const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
                               const editedMovement = editingMovements.get(movementId) || movement;
@@ -1220,8 +1220,8 @@ export default function VoucherServicePage() {
                       });
 
                       return filteredMovements.length === 0 ? (
-                        <div className="text-center py-12">
-                          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <div className="text-center py-12">
+                        <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                           <h3 className="text-lg font-medium text-gray-900 mb-2">
                             {tomorrowRouteSearch || (selectedFrom && selectedFrom !== 'all') || (selectedTo && selectedTo !== 'all') 
                               ? 'No movements found with selected filters' 
@@ -1232,28 +1232,28 @@ export default function VoucherServicePage() {
                               ? 'Try adjusting your search or filters to see movements.'
                               : 'No movements scheduled for tomorrow.'}
                           </p>
-                        </div>
-                      ) : (
-                        <div className="rounded-md border overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Route Number</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Time</TableHead>
-                                <TableHead>Agent Name</TableHead>
-                                <TableHead>Guest Name</TableHead>
-                                <TableHead>Mobile</TableHead>
-                                <TableHead>Pax</TableHead>
-                                <TableHead>From</TableHead>
-                                <TableHead>To</TableHead>
-                                <TableHead>Driver Details 1</TableHead>
-                                <TableHead>Driver Details 2</TableHead>
-                                <TableHead>Vehicle Number</TableHead>
-                                <TableHead>Action</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                      </div>
+                    ) : (
+                      <div className="rounded-md border overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Route Number</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Time</TableHead>
+                              <TableHead>Agent Name</TableHead>
+                              <TableHead>Guest Name</TableHead>
+                              <TableHead>Mobile</TableHead>
+                              <TableHead>Pax</TableHead>
+                              <TableHead>From</TableHead>
+                              <TableHead>To</TableHead>
+                              <TableHead>Driver Details 1</TableHead>
+                              <TableHead>Driver Details 2</TableHead>
+                              <TableHead>Vehicle Number</TableHead>
+                              <TableHead>Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
                               {filteredMovements.map((movement, idx) => {
                               const movementId = movement.movementId || `${movement.voucherId}-${movement.movementIndex}`;
                               const editedMovement = editingMovements.get(movementId) || movement;

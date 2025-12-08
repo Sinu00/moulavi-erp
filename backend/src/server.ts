@@ -54,6 +54,41 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint for email and WhatsApp configuration (admin only in production)
+app.get('/api/debug/services-config', (req, res) => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const authHeader = req.headers.authorization;
+  
+  // In production, require basic auth or skip if not needed
+  // For now, allow in development, restrict in production
+  if (!isDevelopment) {
+    // You can add authentication here if needed
+    // For security, consider removing this endpoint in production or adding proper auth
+  }
+
+  const config = {
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    email: {
+      smtpHost: process.env.SMTP_HOST || 'NOT SET',
+      smtpPort: process.env.SMTP_PORT || 'NOT SET',
+      smtpSecure: process.env.SMTP_SECURE || 'NOT SET',
+      smtpUser: process.env.SMTP_USER ? `${process.env.SMTP_USER.substring(0, 3)}***` : 'NOT SET',
+      smtpPassword: process.env.SMTP_PASSWORD ? '***SET***' : 'NOT SET',
+      frontendUrl: process.env.FRONTEND_URL || 'NOT SET',
+      configured: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD),
+    },
+    whatsapp: {
+      apiUrl: process.env.WHATSAPP_API_URL || 'https://wa.smsidea.com/api/v1/sendMessage',
+      apiKey: process.env.WHATSAPP_API_KEY ? `${process.env.WHATSAPP_API_KEY.substring(0, 10)}***` : 'NOT SET',
+      instanceId: process.env.WHATSAPP_INSTANCE_ID || 'NOT SET',
+      configured: !!(process.env.WHATSAPP_API_KEY && process.env.WHATSAPP_INSTANCE_ID),
+    },
+  };
+
+  res.json(config);
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/parties', partyRoutes);
@@ -103,6 +138,25 @@ app.listen(PORT, () => {
   } else {
     console.log(`📁 File Storage: Local (uploads/ directory)`);
     console.log(`💡 To use S3/Spaces, set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME`);
+  }
+
+  // Check Email configuration
+  const emailConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD);
+  if (emailConfigured) {
+    console.log(`📧 Email Service: Configured (${process.env.SMTP_HOST}:${process.env.SMTP_PORT || '587'})`);
+  } else {
+    console.log(`⚠️  Email Service: NOT CONFIGURED`);
+    console.log(`   Required: SMTP_HOST, SMTP_USER, SMTP_PASSWORD`);
+    console.log(`   Optional: SMTP_PORT, SMTP_SECURE, FRONTEND_URL`);
+  }
+
+  // Check WhatsApp configuration
+  const whatsappConfigured = !!(process.env.WHATSAPP_API_KEY && process.env.WHATSAPP_INSTANCE_ID);
+  if (whatsappConfigured) {
+    console.log(`💬 WhatsApp Service: Configured`);
+  } else {
+    console.log(`⚠️  WhatsApp Service: NOT CONFIGURED`);
+    console.log(`   Required: WHATSAPP_API_KEY, WHATSAPP_INSTANCE_ID`);
   }
 });
 

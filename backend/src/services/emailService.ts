@@ -272,13 +272,17 @@ const sendEmail = async (mailOptions: nodemailer.SendMailOptions): Promise<void>
   console.log(`${logPrefix}   User: ${authUser ? `${authUser.substring(0, 3)}***` : 'not set'}`);
 
   try {
-    // Verify SMTP connection in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`${logPrefix} Verifying SMTP connection...`);
-      const verifyStartTime = Date.now();
+    // Verify SMTP connection (helps catch configuration issues early)
+    console.log(`${logPrefix} Verifying SMTP connection...`);
+    const verifyStartTime = Date.now();
+    try {
       await transporter.verify();
       const verifyDuration = Date.now() - verifyStartTime;
       console.log(`${logPrefix} ✓ SMTP connection verified successfully in ${verifyDuration}ms`);
+    } catch (verifyError: any) {
+      console.error(`${logPrefix} ⚠️ SMTP verification failed (will still attempt to send):`, verifyError?.message);
+      // Don't throw here - some SMTP servers don't support verify but still work
+      // We'll catch the actual send error if it fails
     }
     
     console.log(`${logPrefix} Sending email via SMTP...`);
