@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { BackgroundBeams } from '@/components/ui/background-beams';
 import { authAPI } from '@/lib/api';
 import { setUser } from '@/lib/auth';
 
@@ -56,61 +57,62 @@ export default function Home() {
         setIsLoading(false);
       }
     } catch (error: any) {
-      // Error handling is done by the API interceptor
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Failed to sign in. Please check your credentials.';
+      toast.error(errorMessage);
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-3xl font-bold text-center">ERP System</CardTitle>
-          <CardDescription className="text-center">
-            Sign in to access your account
+    <div className="min-h-screen flex items-center justify-center bg-white p-4 relative overflow-hidden">
+      <BackgroundBeams />
+      
+      <Card className="w-full max-w-md relative z-10 shadow-xl border border-gray-200 bg-white/80 backdrop-blur-sm">
+        <CardHeader className="space-y-2 pb-8">
+          <CardTitle className="text-2xl font-semibold text-center text-gray-900">ERP System</CardTitle>
+          <CardDescription className="text-center text-gray-600 text-sm">
+            Sign in to your account
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="your-email@example.com"
+                placeholder="Enter your email"
                 {...register('email')}
                 disabled={isLoading}
+                className="h-10"
               />
               {errors.email && (
-                <p className="text-sm text-red-600">{errors.email.message}</p>
+                <p className="text-sm text-red-600 mt-1">{errors.email.message}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">Password</Label>
               <Input
                 id="password"
                 type="password"
                 placeholder="Enter your password"
                 {...register('password')}
                 disabled={isLoading}
+                className="h-10"
               />
               {errors.password && (
-                <p className="text-sm text-red-600">{errors.password.message}</p>
+                <p className="text-sm text-red-600 mt-1">{errors.password.message}</p>
               )}
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              className="w-full h-10 mt-6" 
+              disabled={isLoading}
+            >
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
-
-            <div className="text-center text-sm text-gray-600 mt-4">
-              <p className="mb-2">For testing purposes:</p>
-              <div className="bg-gray-50 p-3 rounded-md">
-                <p className="font-semibold">Admin/Staff:</p>
-                <p className="font-mono text-xs">admin@moulavi.com / Admin@123</p>
-              </div>
-            </div>
           </form>
         </CardContent>
       </Card>
