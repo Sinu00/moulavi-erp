@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -95,6 +95,14 @@ export default function TripInfoPage() {
 
     setFilteredData(filtered);
   };
+
+  // Calculate total passengers for iqama bookings with status group_assigned
+  const totalIqamaPassengers = useMemo(() => {
+    if (activeTab !== 'iqama') return 0;
+    return filteredData.reduce((sum, booking) => {
+      return sum + (booking.passengerCount || 0);
+    }, 0);
+  }, [filteredData, activeTab]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -269,6 +277,25 @@ export default function TripInfoPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Stats Card for Iqama Tab */}
+              {activeTab === 'iqama' && (
+                <Card className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-purple-100 rounded-lg">
+                          <Users className="h-6 w-6 text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">Total Passengers</p>
+                          <p className="text-2xl font-bold text-gray-900">{totalIqamaPassengers}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Tabs for Accommodation Type */}
               <div className="flex space-x-2 border-b">
                 <button
