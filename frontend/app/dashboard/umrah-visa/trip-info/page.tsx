@@ -287,7 +287,7 @@ export default function TripInfoPage() {
                           <Users className="h-6 w-6 text-purple-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-600">Total Passengers</p>
+                          <p className="text-sm font-medium text-gray-600">Total Passengers (BEDS)</p>
                           <p className="text-2xl font-bold text-gray-900">{totalIqamaPassengers}</p>
                         </div>
                       </div>
