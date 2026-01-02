@@ -238,21 +238,266 @@ router.post(
   authenticate,
   authorize('admin'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const { phoneNumber, message } = req.body;
+    const { phoneNumber, message, testType } = req.body;
+    
+    console.log('[TEST-WHATSAPP] ========== Test WhatsApp Request ==========');
+    console.log('[TEST-WHATSAPP] Request Body:', {
+      phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+      messageLength: message?.length || 0,
+      testType: testType || 'custom',
+    });
+    
+    if (!phoneNumber) {
+      console.error('[TEST-WHATSAPP] ❌ Phone number is required');
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+    
+    try {
+      const whatsappService = await import('../services/whatsappService');
+      let result;
+      
+      switch (testType) {
+        case 'credentials':
+          console.log('[TEST-WHATSAPP] Testing credentials template...');
+          await whatsappService.sendCredentialsWhatsApp(
+            phoneNumber,
+            'Test User',
+            'test@example.com',
+            'TestPassword123'
+          );
+          result = 'Credentials WhatsApp message sent successfully';
+          break;
+          
+        case 'service-confirmation':
+          console.log('[TEST-WHATSAPP] Testing service confirmation template...');
+          await whatsappService.sendServiceConfirmationWhatsApp(
+            phoneNumber,
+            'Test User',
+            'Umrah Visa',
+            'TEST-BOOKING-001'
+          );
+          result = 'Service confirmation WhatsApp message sent successfully';
+          break;
+          
+        case 'movement-update':
+          console.log('[TEST-WHATSAPP] Testing movement update template...');
+          await whatsappService.sendMovementUpdateWhatsApp(
+            phoneNumber,
+            'Test Party',
+            'VOUCHER-001',
+            {
+              date: new Date().toLocaleDateString(),
+              time: new Date().toLocaleTimeString(),
+              fromLocation: 'Test Location A',
+              toLocation: 'Test Location B',
+              driverDetails1: 'Driver 1 - Test',
+              driverDetails2: 'Driver 2 - Test',
+              vehicleNumber: 'TEST-1234',
+            }
+          );
+          result = 'Movement update WhatsApp message sent successfully';
+          break;
+          
+        case 'iqama-confirmation':
+          console.log('[TEST-WHATSAPP] Testing iqama confirmation template...');
+          await whatsappService.sendIqamaConfirmationWhatsApp(
+            phoneNumber,
+            'Test User'
+          );
+          result = 'Iqama confirmation WhatsApp message sent successfully';
+          break;
+          
+        case 'custom':
+        default:
+          console.log('[TEST-WHATSAPP] Testing custom message...');
+          const testMessage = message || '🧪 Test message from Moulavi ERP system\n\nThis is a test to verify WhatsApp messaging is working correctly.\n\nTimestamp: ' + new Date().toISOString();
+          await whatsappService.sendCustomWhatsApp(phoneNumber, testMessage);
+          result = 'Custom WhatsApp message sent successfully';
+          break;
+      }
+      
+      console.log('[TEST-WHATSAPP] ✅ Test completed successfully');
+      console.log('[TEST-WHATSAPP] ===========================================');
+      
+      res.json({ 
+        success: true,
+        message: result,
+        testType: testType || 'custom',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[TEST-WHATSAPP] ❌ Test failed');
+      console.error('[TEST-WHATSAPP] Error:', error?.message || 'Unknown error');
+      console.error('[TEST-WHATSAPP] Stack:', error?.stack);
+      console.error('[TEST-WHATSAPP] ===========================================');
+      
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to send test WhatsApp message',
+        details: error?.message || 'Unknown error',
+        testType: testType || 'custom',
+      });
+    }
+  })
+);
+
+// Comprehensive WhatsApp test endpoint (tests all message types)
+router.post(
+  '/test-whatsapp-all',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { phoneNumber } = req.body;
+    
+    console.log('[TEST-WHATSAPP-ALL] ========== Comprehensive WhatsApp Test ==========');
+    console.log('[TEST-WHATSAPP-ALL] Phone Number:', phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null');
     
     if (!phoneNumber) {
       return res.status(400).json({ error: 'Phone number is required' });
     }
     
+    const results: any = {
+      timestamp: new Date().toISOString(),
+      phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+      tests: {},
+    };
+    
+    const whatsappService = await import('../services/whatsappService');
+    const testTypes = [
+      { name: 'custom', func: () => whatsappService.sendCustomWhatsApp(phoneNumber, '🧪 Custom message test') },
+      { name: 'credentials', func: () => whatsappService.sendCredentialsWhatsApp(phoneNumber, 'Test User', 'test@example.com', 'TestPass123') },
+      { name: 'service-confirmation', func: () => whatsappService.sendServiceConfirmationWhatsApp(phoneNumber, 'Test User', 'Umrah Visa', 'TEST-001') },
+      { name: 'movement-update', func: () => whatsappService.sendMovementUpdateWhatsApp(phoneNumber, 'Test Party', 'VOUCHER-001', {
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        fromLocation: 'Location A',
+        toLocation: 'Location B',
+        driverDetails1: 'Driver 1',
+        driverDetails2: 'Driver 2',
+        vehicleNumber: 'TEST-123',
+      }) },
+      { name: 'iqama-confirmation', func: () => whatsappService.sendIqamaConfirmationWhatsApp(phoneNumber, 'Test User') },
+    ];
+    
+    for (const test of testTypes) {
+      try {
+        console.log(`[TEST-WHATSAPP-ALL] Testing ${test.name}...`);
+        await test.func();
+        results.tests[test.name] = { success: true, message: 'Sent successfully' };
+        console.log(`[TEST-WHATSAPP-ALL] ✅ ${test.name} passed`);
+        
+        // Wait 2 seconds between tests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error: any) {
+        results.tests[test.name] = { 
+          success: false, 
+          error: error?.message || 'Unknown error' 
+        };
+        console.error(`[TEST-WHATSAPP-ALL] ❌ ${test.name} failed:`, error?.message);
+      }
+    }
+    
+    const successCount = Object.values(results.tests).filter((t: any) => t.success).length;
+    const totalCount = testTypes.length;
+    
+    results.summary = {
+      total: totalCount,
+      successful: successCount,
+      failed: totalCount - successCount,
+    };
+    
+    console.log('[TEST-WHATSAPP-ALL] Summary:', results.summary);
+    console.log('[TEST-WHATSAPP-ALL] ===========================================');
+    
+    res.json(results);
+  })
+);
+
+// Test WhatsApp image endpoint
+router.post(
+  '/test-whatsapp-image',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { phoneNumber, imageUrl, caption, filename } = req.body;
+    
+    console.log('[TEST-WHATSAPP-IMAGE] ========== Test WhatsApp Image Request ==========');
+    console.log('[TEST-WHATSAPP-IMAGE] Request Body:', {
+      phoneNumber: phoneNumber ? `${phoneNumber.substring(0, 3)}***${phoneNumber.substring(phoneNumber.length - 2)}` : 'null',
+      imageUrl: imageUrl || 'null',
+      caption: caption || 'null',
+      filename: filename || 'null',
+    });
+    
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+    
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+    
     try {
-      const { sendCustomWhatsApp } = await import('../services/whatsappService');
-      const testMessage = message || 'Test message from Moulavi ERP system';
-      await sendCustomWhatsApp(phoneNumber, testMessage);
+      const { sendWhatsAppImage } = await import('../services/whatsappService');
+      await sendWhatsAppImage(phoneNumber, imageUrl, caption, filename);
       
-      res.json({ message: 'Test WhatsApp message sent successfully' });
-    } catch (error) {
-      console.error('Test WhatsApp error:', error);
-      res.status(500).json({ error: 'Failed to send test WhatsApp message' });
+      console.log('[TEST-WHATSAPP-IMAGE] ✅ Test completed successfully');
+      res.json({ 
+        success: true,
+        message: 'WhatsApp image sent successfully',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[TEST-WHATSAPP-IMAGE] ❌ Test failed:', error?.message);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to send WhatsApp image',
+        details: error?.message || 'Unknown error',
+      });
+    }
+  })
+);
+
+// Test bulk WhatsApp messages endpoint
+router.post(
+  '/test-whatsapp-bulk',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { messages, delayBetweenMessages, stopOnError } = req.body;
+    
+    console.log('[TEST-WHATSAPP-BULK] ========== Test Bulk WhatsApp Messages ==========');
+    console.log('[TEST-WHATSAPP-BULK] Messages Count:', messages?.length || 0);
+    console.log('[TEST-WHATSAPP-BULK] Delay:', delayBetweenMessages || 1000, 'ms');
+    console.log('[TEST-WHATSAPP-BULK] Stop On Error:', stopOnError || false);
+    
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'Messages array is required and must not be empty' });
+    }
+    
+    // Validate each message
+    for (const msg of messages) {
+      if (!msg.phoneNumber || !msg.message) {
+        return res.status(400).json({ error: 'Each message must have phoneNumber and message fields' });
+      }
+    }
+    
+    try {
+      const { sendBulkWhatsAppMessages } = await import('../services/whatsappService');
+      const result = await sendBulkWhatsAppMessages(messages, {
+        delayBetweenMessages,
+        stopOnError,
+      });
+      
+      console.log('[TEST-WHATSAPP-BULK] ✅ Test completed');
+      res.json(result);
+    } catch (error: any) {
+      console.error('[TEST-WHATSAPP-BULK] ❌ Test failed:', error?.message);
+      res.status(500).json({ 
+        success: false,
+        error: 'Failed to send bulk WhatsApp messages',
+        details: error?.message || 'Unknown error',
+      });
     }
   })
 );
