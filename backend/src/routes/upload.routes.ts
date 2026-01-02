@@ -27,6 +27,7 @@ const storage = isS3Configured()
         
         // Generate S3 key
         const key = generateS3Key(bookingId, passenger_id || null, document_type || 'general', uniqueFileName);
+        console.log('[UPLOAD] Generated S3 key:', key);
         cb(null, key);
       },
       metadata: (req: any, file: Express.Multer.File, cb: any) => {
@@ -37,6 +38,9 @@ const storage = isS3Configured()
         });
       },
       contentType: multerS3.AUTO_CONTENT_TYPE,
+      // Additional configuration for DigitalOcean Spaces compatibility
+      acl: 'public-read', // Make files publicly readable (optional, adjust based on your needs)
+      serverSideEncryption: undefined, // DigitalOcean Spaces doesn't support SSE
     })
   : multer.diskStorage({
       destination: (req, file, cb) => {
@@ -54,17 +58,28 @@ const storage = isS3Configured()
 
 // File filter
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  console.log('[UPLOAD] File filter - File:', {
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size,
+    document_type: req.body?.document_type,
+  });
+  
   // Validate file type
   if (!isValidFileType(file.mimetype)) {
+    console.error('[UPLOAD] Invalid file type:', file.mimetype);
     return cb(new Error(`Invalid file type. Allowed types: ${S3_CONFIG.ALLOWED_FILE_TYPES.join(', ')}`));
   }
   
-  // Validate document type
+  // Validate document type (but allow confirmation_image even if not in DOCUMENT_TYPES for backward compatibility)
   const { document_type } = req.body;
-  if (document_type && !isValidDocumentType(document_type)) {
-    return cb(new Error(`Invalid document type. Allowed types: ${S3_CONFIG.DOCUMENT_TYPES.join(', ')}`));
+  const allowedTypes = [...S3_CONFIG.DOCUMENT_TYPES, 'confirmation_image'];
+  if (document_type && !allowedTypes.includes(document_type)) {
+    console.error('[UPLOAD] Invalid document type:', document_type);
+    return cb(new Error(`Invalid document type. Allowed types: ${allowedTypes.join(', ')}`));
   }
   
+  console.log('[UPLOAD] File validation passed');
   cb(null, true);
 };
 
@@ -76,18 +91,85 @@ const upload = multer({
   },
 });
 
+// Error handler for multer uploads
+const handleUploadError = (error: any, req: any, res: any, next: any) => {
+  console.error('[UPLOAD] ❌ Upload Error:', {
+    error: error?.message || 'Unknown error',
+    stack: error?.stack,
+    code: error?.code,
+    statusCode: error?.statusCode,
+  });
+  
+  if (error?.code === 'SignatureDoesNotMatch' || error?.message?.includes('signature')) {
+    console.error('[UPLOAD] ❌ S3 Signature Error - Possible causes:');
+    console.error('[UPLOAD]   1. Wrong AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY');
+    console.error('[UPLOAD]   2. Wrong S3_ENDPOINT configuration');
+    console.error('[UPLOAD]   3. Wrong AWS_REGION');
+    console.error('[UPLOAD]   4. Server clock is out of sync');
+    console.error('[UPLOAD]   5. S3 client configuration mismatch');
+    console.error('[UPLOAD] Current S3 Config:', {
+      hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+      bucket: S3_CONFIG.BUCKET_NAME,
+      region: process.env.AWS_REGION,
+      endpoint: process.env.S3_ENDPOINT,
+      isS3Configured: isS3Configured(),
+    });
+    return res.status(500).json({ 
+      error: 'S3 signature error. Check your S3 configuration and credentials.',
+      details: error?.message 
+    });
+  }
+  
+  if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND') {
+    console.error('[UPLOAD] ❌ S3 Connection Error - Cannot reach S3 endpoint');
+    return res.status(500).json({ 
+      error: 'Cannot connect to S3. Check your S3_ENDPOINT configuration.',
+      details: error?.message 
+    });
+  }
+  
+  // Default error handler
+  return res.status(500).json({ 
+    error: 'File upload failed',
+    details: error?.message || 'Unknown error'
+  });
+};
+
 // Upload document for a booking
 router.post(
   '/booking/:bookingId',
   authenticate,
-  upload.single('document'),
+  (req, res, next) => {
+    upload.single('document')(req, res, (err) => {
+      if (err) {
+        return handleUploadError(err, req, res, next);
+      }
+      next();
+    });
+  },
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const { bookingId } = req.params;
     const { document_type, passenger_id } = req.body;
     
+    console.log('[UPLOAD] ========== Document Upload Request ==========');
+    console.log('[UPLOAD] Booking ID:', bookingId);
+    console.log('[UPLOAD] Document Type:', document_type);
+    console.log('[UPLOAD] Passenger ID:', passenger_id || 'none');
+    console.log('[UPLOAD] S3 Configured:', isS3Configured());
+    console.log('[UPLOAD] User:', req.user?.email || 'unknown');
+    
     if (!req.file) {
+      console.error('[UPLOAD] ❌ No file uploaded');
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    
+    console.log('[UPLOAD] File received:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      location: isS3Configured() ? (req.file as any).location : req.file.path,
+    });
     
     // Verify booking exists and user has access
     const booking = await prisma.umrahVisaBooking.findUnique({
@@ -125,6 +207,10 @@ router.post(
       }
     }
     
+    // Get file path (S3 URL or local path)
+    const filePath = isS3Configured() ? (req.file as any).location : req.file.path;
+    console.log('[UPLOAD] File path:', filePath);
+    
     // Save document record
     const document = await prisma.document.create({
       data: {
@@ -132,26 +218,35 @@ router.post(
         passengerId: passenger_id || null,
         documentType: document_type || 'general',
         fileName: req.file.originalname,
-        filePath: isS3Configured() ? (req.file as any).location : req.file.path, // S3 URL or local path
+        filePath: filePath,
         fileSize: req.file.size,
         mimeType: req.file.mimetype
       }
     });
 
+    console.log('[UPLOAD] ✅ Document saved to database:', document.id);
+
     // Log document upload
-    await AuditService.logDocumentUpload(
-      document.id,
-      req.user!.id,
-      {
-        fileName: document.fileName,
-        documentType: document.documentType,
-        fileSize: document.fileSize,
-        mimeType: document.mimeType,
-        passengerId: document.passengerId,
-      },
-      req
-    );
+    try {
+      await AuditService.logDocumentUpload(
+        document.id,
+        req.user!.id,
+        {
+          fileName: document.fileName,
+          documentType: document.documentType,
+          fileSize: document.fileSize,
+          mimeType: document.mimeType,
+          passengerId: document.passengerId,
+        },
+        req
+      );
+      console.log('[UPLOAD] ✅ Audit log created');
+    } catch (auditError: any) {
+      console.error('[UPLOAD] ⚠️ Failed to create audit log:', auditError?.message);
+      // Don't fail the request if audit logging fails
+    }
     
+    console.log('[UPLOAD] ========== Upload Complete ==========');
     res.status(201).json({
       document,
       message: 'Document uploaded successfully',
@@ -599,6 +694,41 @@ router.delete(
     });
     
     res.json({ message: 'Document deleted successfully' });
+  })
+);
+
+// Diagnostic endpoint to check S3 configuration
+router.get(
+  '/diagnostics/s3-config',
+  authenticate,
+  authorize('admin'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const config = {
+      isS3Configured: isS3Configured(),
+      hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+      bucket: S3_CONFIG.BUCKET_NAME,
+      region: process.env.AWS_REGION,
+      endpoint: process.env.S3_ENDPOINT,
+      s3ClientExists: !!s3Client,
+      maxFileSize: S3_CONFIG.MAX_FILE_SIZE,
+      allowedFileTypes: S3_CONFIG.ALLOWED_FILE_TYPES,
+      allowedDocumentTypes: S3_CONFIG.DOCUMENT_TYPES,
+    };
+    
+    // Mask sensitive information
+    const safeConfig = {
+      ...config,
+      accessKeyPreview: process.env.AWS_ACCESS_KEY_ID 
+        ? `${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...` 
+        : 'NOT SET',
+    };
+    
+    res.json({
+      message: 'S3 Configuration Diagnostics',
+      config: safeConfig,
+      timestamp: new Date().toISOString(),
+    });
   })
 );
 

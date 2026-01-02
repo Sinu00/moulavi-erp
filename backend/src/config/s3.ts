@@ -76,6 +76,7 @@ export const S3_CONFIG = {
     'passport_front',
     'passport_back',
     'visa_copy',
+    'confirmation_image',
     'other'
   ]
 };

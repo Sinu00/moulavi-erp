@@ -110,7 +110,7 @@ const EMAIL_TEMPLATES = {
           </div>
           
           <div style="text-align: center;">
-            <a href="${frontendUrl}/party-auth" class="cta-button">Access Your Account</a>
+            <a href="${frontendUrl}" class="cta-button">Access Your Account</a>
           </div>
           
           <div class="divider"></div>
@@ -118,7 +118,7 @@ const EMAIL_TEMPLATES = {
           <div class="support-info">
             <p><strong>Need Help?</strong></p>
             <p>Our support team is available 24/7 to assist you with any questions or technical issues.</p>
-            <p>📧 Email: support@moulavi.in | 📞 Phone: +91-XXX-XXX-XXXX</p>
+            <p>📧 Email: info@moulavi.com | 📞 Phone: +919867650044</p>
           </div>
         </div>
         

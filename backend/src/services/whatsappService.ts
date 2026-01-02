@@ -42,7 +42,7 @@ Welcome to Moulavi ERP! Your account has been successfully created.
 
 ⚠️ *Security Notice:* Please change your password after your first login.
 
-🌐 *Login Link:* ${frontendUrl}/party-auth
+🌐 *Login Link:* ${frontendUrl}/
 
 📞 *Support:* support@moulavi.in
 📱 *Phone:* +91-XXX-XXX-XXXX
@@ -464,21 +464,24 @@ export const sendWhatsAppImage = async (
 
   const formattedNumber = formatPhoneNumber(phoneNumber);
   
+  // Build payload according to API documentation
+  // API expects: key, to, url, filename (optional), caption (optional)
   const payload: any = {
     key: WHATSAPP_CONFIG.apiKey,
     to: formattedNumber,
     url: imageUrl,
-    IsUrgent: false,
-    isGroupMsg: false,
-    IsFailMessage: false,
-    SendingMessageType: '1', // 1 for WhatsApp
   };
 
-  if (caption) payload.caption = caption;
+  // Add optional fields only if provided
   if (filename) payload.filename = filename;
+  if (caption) payload.caption = caption;
 
   console.log(`${logPrefix} API URL: ${WHATSAPP_CONFIG.imageApiUrl}`);
   console.log(`${logPrefix} Request Method: ${WHATSAPP_CONFIG.requestMethod}`);
+  console.log(`${logPrefix} Payload (masked key):`, {
+    ...payload,
+    key: `${payload.key.substring(0, 10)}...${payload.key.substring(payload.key.length - 4)} (masked)`,
+  });
 
   try {
     const requestStartTime = Date.now();
@@ -493,37 +496,76 @@ export const sendWhatsAppImage = async (
       console.log(`${logPrefix} GET URL (masked): ${urlWithParams.replace(/key=[^&]+/, 'key=***masked***')}`);
       
       response = await axios.get(urlWithParams, {
-        timeout: 15000, // 15 seconds for image uploads
-        validateStatus: (status) => status < 500,
+        timeout: 30000, // 30 seconds for image uploads
+        validateStatus: () => true, // Don't throw on any status, we'll handle it
       });
     } else {
+      console.log(`${logPrefix} Making POST request with payload...`);
       response = await axios.post(WHATSAPP_CONFIG.imageApiUrl, payload, {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 15000,
-        validateStatus: (status) => status < 500,
+        timeout: 30000, // 30 seconds for image uploads
+        validateStatus: () => true, // Don't throw on any status, we'll handle it
       });
     }
 
     const requestDuration = Date.now() - requestStartTime;
     console.log(`${logPrefix} ✓ API Request completed in ${requestDuration}ms`);
     console.log(`${logPrefix} Response Status: ${response.status} ${response.statusText}`);
+    console.log(`${logPrefix} Response Headers:`, JSON.stringify(response.headers, null, 2));
     console.log(`${logPrefix} Response Data:`, JSON.stringify(response.data, null, 2));
 
-    if (response.data.status === 'success' || response.data.ErrorCode === '000') {
+    // Check for HTTP errors first
+    if (response.status >= 500) {
+      const errorDetails = response.data ? JSON.stringify(response.data) : 'No response body';
+      console.error(`${logPrefix} ❌ HTTP ${response.status} ERROR from API`);
+      console.error(`${logPrefix} Response Body: ${errorDetails}`);
+      throw new Error(`WhatsApp API returned HTTP ${response.status}: ${errorDetails}`);
+    }
+
+    // Check if message was sent successfully
+    if (response.data && (response.data.status === 'success' || response.data.ErrorCode === '000')) {
       const totalDuration = Date.now() - startTime;
       console.log(`${logPrefix} ✅ SUCCESS: WhatsApp image sent successfully to ${formattedNumber}`);
       console.log(`${logPrefix} Total Duration: ${totalDuration}ms`);
       console.log(`${logPrefix} ========== END: Image Sent Successfully ==========`);
     } else {
-      const errorMessage = response.data.ErrorMessage || response.data.message || 'Unknown error';
+      const errorMessage = response.data?.ErrorMessage || response.data?.message || response.data?.error || 'Unknown error';
       console.error(`${logPrefix} ❌ API ERROR: ${errorMessage}`);
+      console.error(`${logPrefix} Full Response:`, JSON.stringify(response.data, null, 2));
       throw new Error(`WhatsApp API Error: ${errorMessage}`);
     }
   } catch (error: any) {
+    const totalDuration = Date.now() - startTime;
     console.error(`${logPrefix} ❌ EXCEPTION: Error sending WhatsApp image`);
-    console.error(`${logPrefix} Error: ${error?.message || 'Unknown error'}`);
+    console.error(`${logPrefix} Duration before error: ${totalDuration}ms`);
+    console.error(`${logPrefix} Error Type: ${error?.constructor?.name || 'Unknown'}`);
+    console.error(`${logPrefix} Error Message: ${error?.message || 'Unknown error'}`);
+    console.error(`${logPrefix} Error Stack:`, error?.stack || 'No stack trace available');
+    
+    if (error?.response) {
+      console.error(`${logPrefix} HTTP Status: ${error.response.status} ${error.response.statusText}`);
+      console.error(`${logPrefix} Response Data:`, JSON.stringify(error.response.data, null, 2));
+      console.error(`${logPrefix} Response Headers:`, JSON.stringify(error.response.headers, null, 2));
+    }
+    
+    if (error?.request) {
+      console.error(`${logPrefix} Request was made but no response received`);
+      console.error(`${logPrefix} Request Config:`, {
+        url: error.config?.url,
+        method: error.config?.method,
+        timeout: error.config?.timeout,
+      });
+    }
+    
+    if (error?.code) {
+      console.error(`${logPrefix} Error Code: ${error.code}`);
+    }
+    
+    console.error(`${logPrefix} Formatted Number: ${formattedNumber}`);
+    console.error(`${logPrefix} Image URL: ${imageUrl}`);
+    console.error(`${logPrefix} ========== END: Exception ==========`);
     throw new Error(`Failed to send WhatsApp image: ${error?.message || 'Unknown error'}`);
   }
 };

@@ -71,10 +71,23 @@ curl -X POST https://erp.moulavi.in/api/auth/test-whatsapp-all \
 
 ### 4. Test Image
 ```bash
+# Basic image test (required fields only)
 curl -X POST https://erp.moulavi.in/api/auth/test-whatsapp-image \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"phoneNumber": "919778355402", "imageUrl": "https://example.com/image.jpg", "caption": "Test image"}'
+  -d '{"phoneNumber": "919778355402", "imageUrl": "https://example.com/image.jpg"}'
+
+# Image with caption and filename
+curl -X POST https://erp.moulavi.in/api/auth/test-whatsapp-image \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"phoneNumber": "919778355402", "imageUrl": "https://example.com/image.jpg", "caption": "Test image caption", "filename": "test-image.jpg"}'
+
+# Using a real publicly accessible image (for testing)
+curl -X POST https://erp.moulavi.in/api/auth/test-whatsapp-image \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"phoneNumber": "919778355402", "imageUrl": "https://picsum.photos/800/600", "caption": "Random test image from Picsum"}'
 ```
 
 ### 5. Test Bulk Messages
