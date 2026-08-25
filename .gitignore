@@ -45,3 +45,7 @@ coverage
 .vercel
 .turbo
 
+# Root-level markdown docs (README kept for GitHub)
+/*.md
+!README.md
+
